@@ -1,0 +1,14 @@
+et-xmlfile==1.1.0
+Jinja2==3.1.4
+MarkupSafe==2.1.5
+numpy==2.1.0
+openpyxl==3.1.5
+pandas==2.2.2
+prettytable==3.11.0
+pyecharts==2.0.6
+python-dateutil==2.9.0.post0
+pytz==2024.1
+simplejson==3.19.3
+six==1.16.0
+tzdata==2024.1
+wcwidth==0.2.13
