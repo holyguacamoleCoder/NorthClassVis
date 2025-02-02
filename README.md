@@ -15,6 +15,8 @@ ChinaVis 2024数据可视化竞赛作品复现
 ## 项目结构
 
 项目包含以下主要文件和目录：
+
+```
 NorthClassVision/
 ├── data/
 │   ├── Data_SubmitRecord/
@@ -46,8 +48,11 @@ NorthClassVision/
 │   ├── vue.config.js
 │   └── yarn.lock
 └── README.md
+```
 
 ## 如何运行
+
+0. 参见problem.md前往官网下载数据集，放置在data文件夹下
 
 1. 克隆项目到本地：
 
