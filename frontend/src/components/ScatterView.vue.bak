@@ -25,6 +25,7 @@ export default {
   },
   async mounted() {
     this.renderParallel()
+    
   },
   computed: {
     ...mapGetters(['getClusterData', 'getSelection', 'getColors', 'getHadFilter']),
@@ -32,6 +33,8 @@ export default {
   methods: {
     ...mapActions(['fetchClusterData', 'toggleSelection']),
     async renderParallel() {
+    const startTime = performance.now()
+
       const d3 = this.$d3
       const data = []
       const midData = await Object.entries(this.getClusterData).map((d) => {
@@ -131,6 +134,8 @@ export default {
         .style('text-anchor', 'middle')
         .text(d => d)
         .style('fill', 'black')
+      const endTime = performance.now()
+      console.log(`chart rendered in ${endTime - startTime} milliseconds`)
     },
     handleLineClick(d){
       this.toggleSelection(d.stu_id)

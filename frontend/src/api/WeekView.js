@@ -13,14 +13,4 @@ export const getClusters = () => {
   })
 }
 
-// // 登录接口
-// export const loginCode = (mobile, smsCode) => {
-//   return request.post('/passport/login', {
-//     form: {
-//       isParty: false,
-//       partyData: {},
-//       mobile,
-//       smsCode
-//     }
-//   })
-// }
+

@@ -30,7 +30,7 @@ export default {
     this.hadRender = [false, false, false]
   },
   async mounted() {
-    this.getPortraitData()
+    // this.getPortraitData()
   },
   computed:{
     ...mapGetters(['getSelection','getSelectionData', 'getColors','getHadFilter']),

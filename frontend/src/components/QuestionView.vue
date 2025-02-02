@@ -81,7 +81,7 @@ export default {
     };
   },
   async mounted() {
-    this.getQuestionData()
+    // this.getQuestionData()
   },
   computed:{
     ...mapGetters(['getHadFilter']),

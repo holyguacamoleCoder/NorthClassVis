@@ -2,7 +2,7 @@
   <div class="app-container">
   <div class="header">
     <div class="title">
-      XD-stClusterVis
+      NorthClassVision
     </div>
     <div class="filter">
       <span>Class:  </span>
@@ -123,7 +123,7 @@
 </template>
 
 <script>
-import ScatterView from './components/ScatterView.vue'
+import ScatterView from './components/ParallelView.vue'
 import PortraitView from './components/PortraitView.vue'
 import QuestionView from './components/QuestionView.vue'
 import WeekView from './components/WeekView.vue'
@@ -179,7 +179,7 @@ export default {
       console.log(e.target.name)
       this.CheckoutClasses.checked = !this.CheckoutClasses.checked
       this.CheckoutAllClass = this.CheckoutClasses.every(item => item.checked)
-      console.log('change!!!')
+      // console.log('change!!!')
     },
     handleAllCheck(){
       if(this.CheckoutClasses.every(item => item.checked) || this.CheckoutClasses.every(item => !item.checked))
@@ -192,7 +192,7 @@ export default {
     async submitClasses(e){
       e.preventDefault()
       const response = await filterClasses(this.CheckoutClasses)
-      console.log(response.data.data)
+      // console.log(response.data.data)
       this.CheckoutClasses = response.data.data
       this.toggleHadFilter()
     }

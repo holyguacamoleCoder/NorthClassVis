@@ -36,7 +36,7 @@ export default {
     },
   },
   async created(){
-    this.getWeekData()
+    // this.getWeekData()
   },
   async mounted() {
   },

@@ -37,7 +37,7 @@ export default {
     },
   },
   async created(){
-    this.getTreeData()
+    // this.getTreeData()
   },
   async mounted() {
   },

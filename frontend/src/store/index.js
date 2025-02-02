@@ -37,20 +37,20 @@ export default createStore({
   actions: {
     async fetchClusterData(context) {
       const { data } = await getClusters()
-      console.log('data', data)
+      // console.log('data', data)
       const RData = {}
       for (let key in data){
         RData[key] = data[key].cluster
       }
       context.commit('setClusterData', data)
       context.commit('setJustClusterData', RData)
-      console.log('clusterData', this.state.clusterData)
-      console.log('justClusterData', this.state.justClusterData)
+      // console.log('clusterData', this.state.clusterData)
+      // console.log('justClusterData', this.state.justClusterData)
     },
     toggleSelection(context, student_id){
       context.commit('setSelectedStudents', student_id)
       context.commit('setStudentData')
-      console.log('selectStudentData', this.state.selectedStudentData)
+      // console.log('selectStudentData', this.state.selectedStudentData)
     },
     toggleHadFilter(context){
       context.commit('setHadFilter')
