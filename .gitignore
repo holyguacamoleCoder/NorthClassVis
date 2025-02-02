@@ -1,5 +1,8 @@
 # 取消对巨量数据的提交
-data/*
+data/*.csv
+data/Data_SubmitRecord/*.csv
+data/*.docx
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
