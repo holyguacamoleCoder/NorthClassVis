@@ -12,3 +12,5 @@ simplejson==3.19.3
 six==1.16.0
 tzdata==2024.1
 wcwidth==0.2.13
+Flask==3.1.0
+Flask-Cors==5.0.0

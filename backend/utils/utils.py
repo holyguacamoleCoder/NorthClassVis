@@ -103,7 +103,7 @@ def get_titles_data_by_knowledge(merged_data, knowledge, limit=None):
     return titles_data
 
 
-# --------------三散点图视图部分------------
+# --------------平行线图视图部分------------
 # 处理非数字值
 def process_non_numeric_values(df):
     # 将非数字值转换为NaN
@@ -206,10 +206,6 @@ def cluster_analysis(students_data, stu=None, every=None):
         else:
             raise ValueError(f"Invalid data format for student {student_id}: {values}")
    
-    # features = list(students_data.values())
-    # for student_id, values in students_data.items():
-    #     features.append(list(values.values()))
-
     features_array = np.array(features)
 
     # 设定聚类的数量，这里假设为3个聚类
