@@ -1,11 +1,13 @@
 from flask import Blueprint, request, jsonify
-import utils as us
+from utils import utils as us
+from utils import fs as fs
+
 # ----- 总配置部分--------
 config = {
     # 创建蓝图对象
     'api_bp' : Blueprint('api', __name__),
     # 配置总处理文件类型
-    'all_class_df': us.load_data(us.classFilename),
+    'all_class_df': fs.load_data(fs.classFilename),
     "classList": []
 }
 # ---- 初始化 --------- 
@@ -34,10 +36,10 @@ def merge_classes():
     for class_i in classes:
         # print('class_i', class_i)
         if class_i['id'] > 15 or class_i['id'] < 1:
-            return jsonify({'error': f'Class {class_i['id']} does not exist'}), 400
+            return jsonify({"error": f"Class {class_i['id']} does not exist"}), 400
     
     # 获取对应的DataFrame并合并
-    contact_df = us.contact_data(classes)
+    contact_df = fs.contact_data(classes)
     
     # 将合并后的DataFrame转换为JSON格式
     config['all_class_df'] = contact_df
@@ -117,7 +119,7 @@ def get_tree_data():
 
 # ----------------问题视图部分------------------
 def merged_process_data():
-    return us.process_non_numeric_values(us.merge_data(config['all_class_df'], us.titleFilename))
+    return us.process_non_numeric_values(fs.merge_data(config['all_class_df'], fs.titleFilename))
 @api_bp.route('/api/timeline/<title_id>')
 def get_timeline_data(title_id):
     timeline_data = us.process_timeline_data(merged_process_data(), title_id)
@@ -174,8 +176,8 @@ def cluster_analysis():
     stu = request.args.get('stu')
     every = request.args.get('every')
 
-    all_submit_records = us.calculate_features(merged_process_data())
-    final_scores = us.calc_final_scores(all_submit_records, ['student_ID', 'knowledge'])
+    all_submit_records = merged_process_data()
+    final_scores = us.calc_final_scores(us.parallel_calculate_features(all_submit_records), ['student_ID', 'knowledge'])
     target_data = final_scores.to_dict(orient='index')
 
     result = us.cluster_analysis(target_data, stu = stu, every = every)

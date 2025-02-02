@@ -1,45 +1,11 @@
 import pandas as pd
-import os
 import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import MinMaxScaler
-
-# 获取当前目录
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# 获取数据目录
-data_dir = os.path.join(current_dir, '../data/')
-
-# 获取数据文件
-class_dir = os.path.join(data_dir, 'Data_SubmitRecord/')
-classFilename = os.path.join(class_dir, 'SubmitRecord-Class1.csv') # 提交记录表格
-titleFilename = os.path.join(data_dir, 'Data_TitleInfo.csv')       # 题目信息表格
-studentFilename = os.path.join(data_dir, 'Data_StudentInfo.csv')   # 学生信息表格
-
-# 加载数据
-def load_data(filename):
-    try:
-        df = pd.read_csv(filename)
-        return df
-    except Exception as e:
-        print(f"Error loading data: {e}")
-        return None
-
-# 拼接文件为新df
-def contact_data(classList):
-    return pd.concat([load_data(os.path.join(data_dir,'SubmitRecord-' + class_i['text'] + '.csv')) for class_i in classList if class_i['checked']], axis=0)
-
-# 合并数据题目和提交记录
-# filename2: 题目信息文件
-def merge_data(f1, f2):
-    if isinstance(f1, str):
-        f1 = load_data(f1) 
-    if isinstance(f2, str):
-        f2 = load_data(f2) 
-    merged_data = pd.merge(f1, f2[['title_ID', 'knowledge']], on='title_ID', how='left')
-    return merged_data
+from concurrent.futures import ProcessPoolExecutor
+import math
 
 # ------------学生视图部分----------------
-
 # 将数据转换为树状图数据结构
 def transform_data(df):
     # # 分组并聚合数据
@@ -155,12 +121,11 @@ def process_non_numeric_values(df):
 def calculate_features(df):
     # 计算答题得分加成
     df['score_bonus'] = df['score']
-    # grouped = df.groupby(['student_ID', 'knowledge'])
     # 时间复杂度加成（假设timeconsume越小越好）
-    df['tc_bonus'] = df.groupby(['student_ID', 'knowledge'])['timeconsume'].transform(lambda x: 1 / (x + 1))
+    df['tc_bonus'] = 1 / df.groupby(['student_ID', 'knowledge'])['timeconsume'].transform(lambda x: (x + 1))
 
     # 空间复杂度加成（假设memory越小越好）
-    df['mem_bonus'] = df.groupby(['student_ID', 'knowledge'])['memory'].transform(lambda x: 1 / (x + 1))
+    df['mem_bonus'] = 1 / df.groupby(['student_ID', 'knowledge'])['memory'].transform(lambda x: (x + 1))
 
     # 错误类型扣减（假设完全正确得分为1，否则为0）
     correct_state = 'Absolutely_Correct'  # 假设完全正确的状态名称为“完全正确”
@@ -174,6 +139,16 @@ def calculate_features(df):
 
     return df
 
+
+def parallel_calculate_features(df, num_workers=4):
+    chunk_size = math.ceil(len(df) / num_workers)
+    chunks = [df.iloc[i:i + chunk_size] for i in range(0, len(df), chunk_size)]
+
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        results = list(executor.map(calculate_features, chunks))
+    
+    return pd.concat(results).sort_index()
+
 # 计算每个学生各个知识点总分
 def calc_final_scores(after_features_df, groupApply):
     # 按学生ID和知识点分组，并计算每个学生的总分
@@ -186,7 +161,7 @@ def calc_final_scores(after_features_df, groupApply):
         'rank_bonus': 'sum'
     })
     grouped['MS'] = grouped.sum(axis=1)  # 计算总分
-    # print(grouped)
+
     # 将多层索引转换为单层索引，并添加知识点列
     grouped.reset_index(inplace=True)
 
@@ -196,8 +171,6 @@ def calc_final_scores(after_features_df, groupApply):
     final_scores = grouped.pivot_table(index=index, columns=columns, values='MS')
     # 如果某些学生没有做某些知识点的题目，那么在该知识点上分数为0
     final_scores.fillna(0, inplace=True)
-    # print("final_scores:")
-    # print(final_scores)
 
     # 对数变换
     log_transformed_scores = np.log1p(final_scores)
@@ -208,11 +181,11 @@ def calc_final_scores(after_features_df, groupApply):
                                               index=log_transformed_scores.index,
                                               columns=log_transformed_scores.columns)
 
-    # 按知识点进行局部归一化
-    normalized_scores = final_scores.copy()
-    for col in final_scores.columns:
-        scaler = MinMaxScaler()
-        normalized_scores[col] = scaler.fit_transform(final_scores[[col]])
+    # # 按知识点进行局部归一化
+    # normalized_scores = final_scores.copy()
+    # for col in final_scores.columns:
+    #     scaler = MinMaxScaler()
+    #     normalized_scores[col] = scaler.fit_transform(final_scores[[col]])
 
     # result = {
     #     "log_quantile": quantile_normalized_scores.to_dict(orient='index'),
@@ -224,10 +197,18 @@ def calc_final_scores(after_features_df, groupApply):
 
 # 聚类分析
 def cluster_analysis(students_data, stu=None, every=None):
-   # 提取特征向量   # 提取特征向量
+   # 提取特征向量
     features = []
     for student_id, values in students_data.items():
-        features.append(list(values.values()))
+        if isinstance(values, dict):
+            feature_vector = list(values.values())
+            features.append(feature_vector)
+        else:
+            raise ValueError(f"Invalid data format for student {student_id}: {values}")
+   
+    # features = list(students_data.values())
+    # for student_id, values in students_data.items():
+    #     features.append(list(values.values()))
 
     features_array = np.array(features)
 
@@ -235,19 +216,14 @@ def cluster_analysis(students_data, stu=None, every=None):
     n_clusters = 3
 
     # 创建KMeans实例
-    kmeans = KMeans(n_clusters=n_clusters)
+    kmeans = KMeans(n_clusters=n_clusters, max_iter=100, random_state=42)
 
     # 训练模型
     kmeans.fit(features_array)
 
     # 获取聚类中心
     cluster_centers = kmeans.cluster_centers_
-    cluster_centers_info = []
-    for i, center in enumerate(cluster_centers):
-        cluster_centers_info.append({
-            "cluster": i,
-            "center": center
-        })
+
     # 输出聚类中心
     # print("Cluster Centers:")
     # print(cluster_centers)
@@ -270,31 +246,28 @@ def cluster_analysis(students_data, stu=None, every=None):
         cluster_centers = kmeans.cluster_centers_
         cluster_center_students = []
 
-        students_data = pd.DataFrame(students_data).T
+        students_data_df = pd.DataFrame(students_data).T
 
         for center in cluster_centers:
             # 找到距离每个聚类中心最近的学生
-            closest_student = students_data.apply(lambda row: np.linalg.norm(row - center), axis=1).idxmin()
+            closest_student = students_data_df.apply(lambda row: np.linalg.norm(row - center), axis=1).idxmin()
             cluster_center_students.append(closest_student)
 
         return cluster_center_students
     
     result = {}
-    for i in range(len(cluster_centers)):
-        center_score = cluster_centers_info[i]['center']
-        center_cluster = cluster_centers_info[i]['cluster']
+   
+    for i, center in enumerate(cluster_centers):
         result[str(i)] = {
-        "cluster": center_cluster,
-        "knowledge":{
-        "b3C9s": center_score[0],
-        "g7R2j": center_score[1],
-        "k4W1c": center_score[2],
-        "m3D1v": center_score[3],
-        "r8S3g": center_score[4],
-        "s8Y2f": center_score[5],
-        "t5V9e": center_score[6],
-        "y9W5d": center_score[7],
-        }
+            "cluster": i,
+            """
+             next(iter(students_data)) 获取 students_data 字典中的第一个学生的 ID。
+             students_data[next(iter(students_data))] 获取该学生的知识点分数字典。
+             .keys() 返回该学生的所有知识点名称。
+             zip(students_data[next(iter(students_data))].keys(), center) 将知识点名称与聚类中心的特征向量元素配对。
+             dict(...) 将这些配对转换为字典，其中键是知识点名称，值是聚类中心在该知识点上的分数。
+            """
+            "knowledge": dict(zip(students_data[next(iter(students_data))].keys(), center))
         }
     return result
 
