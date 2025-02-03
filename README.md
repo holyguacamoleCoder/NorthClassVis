@@ -6,7 +6,8 @@ ChinaVis 2024数据可视化竞赛作品复现
 
 本项目是2024年数据可视化竞赛的参赛作品，旨在基于可视化作品上学习**提升前端渲染效率**与**后端计算效率**的方法。项目使用了flask、Vue(包含Vuex)等技术，以及D3.js可视化库。
 
-优化方法目前正在学习, 学习记录见optimization_journey.md
+优化方法目前正在学习, 学习记录见**optimization_journey.md**
+各位也可以借助LLM进行询问，自主学习
 
 1. 数据分块渲染（参考go语言以及d3的增量渲染）
 2. 数据并行计算（py的concurrent库）
@@ -45,14 +46,15 @@ NorthClassVision/
 │   ├── babel.config.js
 │   ├── package.json
 │   ├── README.md
-│   ├── vue.config.js
-│   └── yarn.lock
+│   └── vue.config.js
+├── problem.md
+├── optimization_journey.md
 └── README.md
 ```
 
 ## 如何运行
 
-0. 参见problem.md前往官网下载数据集，放置在data文件夹下
+0. 参见**problem.md**前往官网下载数据集，放置在data文件夹下
 
 1. 克隆项目到本地：
 
@@ -90,7 +92,7 @@ npm install
 
 ```bash
 cd ../frontend
-yarn serve
+npm run serve
 ```
 
 7. 打开浏览器，访问 `http://localhost:8080` 查看可视化效果。

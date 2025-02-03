@@ -36,6 +36,7 @@ export default createStore({
   },
   actions: {
     async fetchClusterData(context) {
+      const startTime = performance.now(); // 记录开始时间
       const { data } = await getClusters()
       // console.log('data', data)
       const RData = {}
@@ -46,6 +47,8 @@ export default createStore({
       context.commit('setJustClusterData', RData)
       // console.log('clusterData', this.state.clusterData)
       // console.log('justClusterData', this.state.justClusterData)
+      const endTime = performance.now(); // 记录结束时间
+      console.log(`Trans time: ${endTime - startTime} milliseconds`)
     },
     toggleSelection(context, student_id){
       context.commit('setSelectedStudents', student_id)

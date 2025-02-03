@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
-from utils import utils as us
-from utils import fs as fs
+from tools import utils as us
+from tools import fs as fs
+from tools import ParallelView as pv
 
 # ----- 总配置部分--------
 config = {
@@ -10,11 +11,15 @@ config = {
     'all_class_df': fs.load_data(fs.classFilename),
     "classList": []
 }
+
 # ---- 初始化 --------- 
 api_bp = config['api_bp']
 for i in range(1, 16):
     config['classList'].append({"checked": False, "text": f"Class{i}", 'id': i})
 config['classList'][0]['checked'] = True
+
+
+# ----------筛选视图部分------------
 @api_bp.route('/api/filter', methods=['GET'])
 def filter_info():
     return jsonify(config['classList'])
@@ -119,7 +124,7 @@ def get_tree_data():
 
 # ----------------问题视图部分------------------
 def merged_process_data():
-    return us.process_non_numeric_values(fs.merge_data(config['all_class_df'], fs.titleFilename))
+    return fs.process_non_numeric_values(fs.merge_data(config['all_class_df'], fs.titleFilename))
 @api_bp.route('/api/timeline/<title_id>')
 def get_timeline_data(title_id):
     timeline_data = us.process_timeline_data(merged_process_data(), title_id)
@@ -177,10 +182,10 @@ def cluster_analysis():
     every = request.args.get('every')
 
     all_submit_records = merged_process_data()
-    final_scores = us.calc_final_scores(us.parallel_calculate_features(all_submit_records), ['student_ID', 'knowledge'])
+    final_scores = pv.calc_final_scores(pv.parallel_calculate_features(all_submit_records), ['student_ID', 'knowledge'])
     target_data = final_scores.to_dict(orient='index')
 
-    result = us.cluster_analysis(target_data, stu = stu, every = every)
+    result = pv.cluster_analysis(target_data, stu = stu, every = every)
     # print(result)
     return jsonify(result)
 
@@ -193,8 +198,8 @@ def week_analysis():
     start_date = df['time'].min()
     # start_date = us.pd.to_datetime('2023-9-10')
     df['week'] = df['time'].apply(lambda x: us.calculate_week_of_year(x, start_date=start_date))
-    all_submit_records = us.calculate_features(df)
-    final_scores = us.calc_final_scores(all_submit_records, ['student_ID','week','knowledge'])
+    all_submit_records = pv.calculate_features(df)
+    final_scores = pv.calc_final_scores(all_submit_records, ['student_ID','week','knowledge'])
     result = final_scores.to_dict(orient='index')
     result = us.transform_data_for_visualization(result)
     # print(result)

@@ -35,3 +35,16 @@ def merge_data(f1, f2):
         f2 = load_data(f2) 
     merged_data = pd.merge(f1, f2[['title_ID', 'knowledge']], on='title_ID', how='left')
     return merged_data
+
+# 处理非数字值
+def process_non_numeric_values(df):
+    # 将非数字值转换为NaN
+    df['timeconsume'] = pd.to_numeric(df['timeconsume'], errors='coerce')
+    df['memory'] = pd.to_numeric(df['memory'], errors='coerce')
+    
+    # 使用组内平均值填充NaN
+    df['timeconsume'] = df.groupby(['student_ID', 'knowledge'])['timeconsume'].transform(lambda x: x.fillna(x.mean()))
+    df['memory'] = df.groupby(['student_ID', 'knowledge'])['memory'].transform(lambda x: x.fillna(x.mean()))
+
+    return df
+
