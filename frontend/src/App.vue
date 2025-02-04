@@ -88,7 +88,7 @@
       <div class="top">
         <!-- A. Scatter View -->
         <div class="scatter-view" v-if="clusterData">
-          <ScatterView />
+          <ParallelView />
         </div>
         
         <!-- B. Portrait View -->
@@ -123,7 +123,7 @@
 </template>
 
 <script>
-import ScatterView from './components/ParallelView.vue'
+import ParallelView from './components/ParallelView.vue'
 import PortraitView from './components/PortraitView.vue'
 import QuestionView from './components/QuestionView.vue'
 import WeekView from './components/WeekView.vue'
@@ -133,7 +133,7 @@ import Dropdown from 'v-dropdown'
 import { filterClasses, getFilter } from './api/App'
 export default {
   components: {
-    ScatterView,
+    ParallelView,
     PortraitView,
     QuestionView,
     WeekView,

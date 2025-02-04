@@ -12,11 +12,11 @@ def transform_data(df):
     root = {'name': 'Root', 'children': []}
     # print('df[student_ID]',df['student_ID'])
     students = df['student_ID'].unique()
-    print(students[0])
+    # print(students[0])
     for student in students:
         student_data = df[df['student_ID'] == student]
-        
-        student_node = {'name': str(student), 'children': []}
+        # print(student_data)
+        student_node = {'name': str(student), 'class': student_data['class'].iloc[0], 'children': []}
         
         titles = student_data['title_ID'].unique()
         

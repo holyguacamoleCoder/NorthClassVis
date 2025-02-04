@@ -36,7 +36,7 @@ export default {
     }
   },
   async mounted() {
-    this.initChart()
+    // this.initChart()
   },
   computed: {
     ...mapGetters(['getClusterData', 'getSelection', 'getColors', 'getHadFilter']),
