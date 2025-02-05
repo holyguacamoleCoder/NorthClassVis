@@ -1,12 +1,15 @@
 <template>
-  <div class="scrollBarWrap" id="student-view" data-simplebar>
+  <div class="scrollBarWrap" id="student-view" data-simplebar ref="scrollContainer">
     <div class="title">
       <span>Student View</span>
-      <input class="limit-input" type="number" v-model="limitLength" @change="updateLimit" />
-      <div class="filter">Limit: </div>
+      <select class="filter-input" v-model="selectedMajor" @change="applyFilter">
+        <option value="">All</option>
+        <option v-for="major in uniqueMajors" :key="major">{{ major }}</option>
+      </select>
+      <div class="filter">Major:</div>
     </div>
-    <Simplebar style="height: 1170px">
-      <div id="visualizationS"></div>
+    <Simplebar style="height: 1170px" @scroll="handleScroll">
+      <div id="visualizationS" ref="visualizationS"></div>
     </Simplebar>
   </div>
 </template>
@@ -26,9 +29,14 @@ export default {
     return {
       treeData: [], // 树形数据
       currentCluster: null, // 当前集群
-      limitLength: 10, // 显示的学生数量限制
+      selectedMajor: '', // 选中的专业
       factLength: null, // 实际的学生数量
       PanelsHeight: [], // 面板高度
+      visibleIndices: new Set(), // 可见的学生索引集合
+      expandedIndices: new Set(), // 展开的学生索引集合
+      loading: false, // 加载状态
+      batchSize: 20, // 每次加载的数量
+      uniqueMajors: [] // 唯一的专业列表
     }
   },
   computed: {
@@ -36,16 +44,26 @@ export default {
     JustClusterData() {
       return this.$store.state.justClusterData // 从 Vuex 获取集群数据
     },
+    filteredTreeData() {
+      if (!this.selectedMajor) return this.treeData
+      return this.treeData.filter(student => student.major === this.selectedMajor)
+    }
   },
   async created() {
-    await this.getTreeData() // 初始化时获取学生数据并渲染
+    // await this.getTreeData() // 初始化时获取学生数据
+    // this.loadInitialBatch() // 加载初始批次的数据
+  },
+  mounted() {
+    // this.handleScroll() // 初始处理滚动事件
   },
   methods: {
     async getTreeData() {
       const { data: { children } } = await getStudents() // 获取学生树形数据
       console.log('studentData', children)
       this.treeData = children
-      this.renderEveryStudents() // 渲染所有学生
+      this.factLength = children.length // 设置实际的学生数量
+      this.PanelsHeight = new Array(this.factLength).fill(0) // 初始化学生面板高度数组
+      this.uniqueMajors = [...new Set(children.map(student => student.major))] // 获取唯一的专业列表
     },
 
     renderQuestions(svg, questions, th) {
@@ -55,8 +73,8 @@ export default {
       const lineLength = 120        // 连接线长度
       const radius = 3              // 节点半径
       const studentTitleHeight = 30 // 学生标题高度
-      const studentTipHeight = 40 // 学生提示高度
-      let xOffset = 0 // 纵向偏移量
+      const studentTipHeight = 40   // 学生提示高度
+      let xOffset = 0               // 纵向偏移量
 
       const treeParam = { 
         width: 40,   // 横向长度
@@ -91,7 +109,7 @@ export default {
           .attr('rx', 2)
           .attr('ry', 2)
 
-        const maxTimes = d3.max(tree.descendants(), dd =>dd.data.times)
+        const maxTimes = d3.max(tree.descendants(), dd => dd.data.times)
         g.selectAll('circle').data(tree.descendants()).join('circle') // 绘制节点
           .attr('cx', d => d.y + d.data.times * lineLength / (maxTimes * 1.2))
           .attr('cy', d => d.x)
@@ -99,7 +117,7 @@ export default {
           .attr('fill', currentColor)
 
         g.selectAll('text').data(tree.descendants()).join('text') // 绘制文本,d.children区分知识点和问题节点
-          .attr('x', d => d.y + (d.children ? -radius - 5  : radius + 5))
+          .attr('x', d => d.y + (d.children ? -radius - 5 : radius + 5))
           .attr('y', d => d.x + radius / 2 - (d.children ? 0 : radius * 3 / 2))
           .text(d => d.data.name)
           .attr('font-size', '10px')
@@ -123,7 +141,7 @@ export default {
         
         const root = d3.hierarchy(q) // 创建层次结构
         const treeLayout = d3.tree()
-        .nodeSize([treeParam.height, treeParam.width]) // 定义树形布局
+          .nodeSize([treeParam.height, treeParam.width]) // 定义树形布局
         const tree = treeLayout(root)
         
         // 计算当前树的尺寸
@@ -134,7 +152,7 @@ export default {
 
 
         const qg = svg.append('g') // 创建一个新的组
-        .attr('transform', `translate(${margin.left}, ${xOffset - minX + studentTitleHeight + studentTitleHeight})`)
+          .attr('transform', `translate(${margin.left}, ${xOffset - minX + studentTitleHeight + studentTitleHeight})`)
         
         renderQuestion(qg, tree) // 渲染问题
         // 更新水平偏移量
@@ -143,13 +161,15 @@ export default {
       this.PanelsHeight[th] = xOffset + margin.top + studentTitleHeight + studentTipHeight
     },
 
-    renderEveryStudents() {
+    loadStudentPanel(index) {
+      if (this.visibleIndices.has(index)) return // 如果已经加载过，则跳过
+
       const d3 = this.$d3
-      // const titleHeight = 20 // 标题高度
       const width = 390 // SVG 宽度
-      const height = 100 // SVG 高度
       const studentTitleHeight = 30 // 学生标题高度
-      const labelPadding = 5 // 标签高度
+      const labelPadding = 5 // 标签内边距
+      const labelMargin = 20 // 标签外边距
+      const labelContent = ['name', 'class', 'major'] // 标签内容
       const margin = { top: 20, right: 20, bottom: 10, left: 20 } // 边距
       const padding = { top: 0, right: 10, bottom: 10, left: 5 } // 内边距
       const studentTipHeight = 40 // 学生提示高度
@@ -157,119 +177,116 @@ export default {
       const tipContent = ['Knowledge', 'State', 'Score'] // 提示内容
 
       const svg = d3.select('#visualizationS') // 选择 SVG 元素
-        .attr('width', width)
-        .attr('height', height)
-
-      svg.selectAll('*').remove() // 清除之前的 SVG 元素
 
       const g = svg.append('g') // 创建一个新的组
       
-      this.factLength = this.treeData.length // 设置实际的学生数量
-      this.PanelsHeight = new Array(this.factLength).fill(0) // 初始化学生面板高度数组
-      this.treeData.forEach((s, i) => {
-        if (i >= this.limitLength) return // 如果超过限制，跳过
-        
-        this.currentCluster = this.JustClusterData[s.name] // 设置当前集群
-        const studentPanelHeight = studentTitleHeight + studentTipHeight + margin.bottom // 计算学生面板高度
-        const varUpdateFunc = this.updatePanelHeight
-        const studentPanel = g.append('svg') // 创建学生面板
-          .attr('transform', `translate(${margin.left}, ${0})`)
-          .attr('class', 'student-panel')
-          .attr('width', width - margin.left - margin.right)
-          .attr('height', studentPanelHeight)
-          .attr('y', (d, ii) => ii * studentPanelHeight + studentTitleHeight)
-          .style('box-shadow', '0 0 10px rgba(0, 0, 0, 0.1)')
-          .on("mouseover", function() {
-            // 鼠标移入时，高度变为 xxpx（带过渡动画）
-            varUpdateFunc(d3.select(this), i)
-          })
-          .on("mouseout", function() {
-            // 鼠标移出时，恢复为 30px（带过渡动画）
-            d3.select(this)
-              .transition()
-              .duration(700)
-              .attr("height", studentPanelHeight)
-          })
-        const sg = studentPanel.append('g') // 创建一个新的组
-          .attr('transform', `translate(${margin.left}, ${studentTitleHeight})`)
+      const s = this.filteredTreeData[index]
+      
+      this.currentCluster = this.JustClusterData[s.name] // 设置当前集群
+      const studentPanelHeight = studentTitleHeight + studentTipHeight + margin.bottom // 计算学生面板高度
+      const varToggleFunc = this.togglePanelHeight
+      const studentPanel = g.append('svg') // 创建学生面板
+        .attr('transform', `translate(${margin.left}, ${0})`)  
+        .attr('class', 'student-panel')
+        .attr('width', width - margin.left - margin.right)
+        .attr('height', studentPanelHeight)
+        .style('box-shadow', '0 0 10px rgba(0, 0, 0, 0.1)')
+        .on("click", function() {
+          // 点击时，切换面板的高度
+          varToggleFunc(d3.select(this), index)
+        })
 
-          let textNameElement = sg.append('text') // 添加学生标签
-          .attr('x', padding.left)
+      const sg = studentPanel.append('g') // 创建一个新的组
+        .attr('transform', `translate(${margin.left}, ${studentTitleHeight})`)
+
+      let nowBoxStartPosition = 0
+      for(let k = 0; k < labelContent.length; k++) {
+        let textElement = sg.append('text') // 添加学生标签
+          .attr('x', padding.left + nowBoxStartPosition)
           .attr('y', padding.top)
-          .text('S-' + s.name)
+          .text(s[labelContent[k]])
           .attr('font-size', '12px')
           .attr('font-weight', '600')
           .attr('text-anchor', 'start')
-          let textClassElement = sg.append('text') // 添加major标签
-          .attr('x', padding.left + tipBlockWidth*2)
-          .attr('y', padding.top)
-          .text(s.class)
+        let Bbox = textElement.node().getBBox()
+        nowBoxStartPosition += (Bbox.width  + labelMargin + labelPadding * 2) // 更新下一个标签的起始位置
+        console.log('nowBoxStartPosition', nowBoxStartPosition)
+        // 添加背景矩形
+        sg.insert('rect', ':first-child') // 在第一个子元素之前插入，确保它位于文本下方
+          .attr('x', Bbox.x - labelPadding) // 留出一些额外的空间
+          .attr('y', Bbox.y - labelPadding)
+          .attr('rx', (Bbox.height + labelPadding * 2) / 2) // 圆角半径
+          .attr('ry', (Bbox.height + labelPadding * 2) / 2)
+          .attr('width', Bbox.width + labelPadding * 2) // 考虑额外空间
+          .attr('height', Bbox.height + labelPadding * 2)
+          .attr('fill', '#f0f0f0') // 背景颜色
+      }
+
+      for(let t = 0; t < tipContent.length; t++){
+        sg.append('text') // 添加tip标签
+          .attr('x', padding.left + tipBlockWidth * t)
+          .attr('y', padding.top + studentTitleHeight)
+          .text(tipContent[t])
           .attr('font-size', '12px')
-          .attr('font-weight', '600')
+          .attr('font-weight', '300')
           .attr('text-anchor', 'start')
+      }
 
-        // 获取文本元素的尺寸
-        let nameBbox = textNameElement.node().getBBox()
-        let classBbox = textClassElement.node().getBBox()
-        // 添加背景矩形
-        sg.insert('rect', ':first-child') // 在第一个子元素之前插入，确保它位于文本下方
-          .attr('x', nameBbox.x - labelPadding) // 留出一些额外的空间
-          .attr('y', nameBbox.y - labelPadding)
-          .attr('rx', (nameBbox.height + labelPadding * 2) / 2) // 圆角半径
-          .attr('ry', (nameBbox.height + labelPadding * 2) / 2)
-          .attr('width', nameBbox.width + labelPadding * 2) // 考虑额外空间
-          .attr('height', nameBbox.height + labelPadding * 2)
-          .attr('fill', '#f0f0f0') // 背景颜色
-        // 添加背景矩形
-        sg.insert('rect', ':first-child') // 在第一个子元素之前插入，确保它位于文本下方
-          .attr('x', classBbox.x - labelPadding) // 留出一些额外的空间
-          .attr('y', classBbox.y - labelPadding)
-          .attr('rx', (classBbox.height + labelPadding * 2) / 2) // 圆角半径
-          .attr('ry', (classBbox.height + labelPadding * 2) / 2)
-          .attr('width', classBbox.width + labelPadding * 2) // 考虑额外空间
-          .attr('height', classBbox.height + labelPadding * 2)
-          .attr('fill', '#f0f0f0') // 背景颜色
+      const Questions = s.children // 获取学生的问题
+      this.renderQuestions(sg, Questions, index) // 渲染问题
 
-        // 注意: 如果你希望背景矩形和文本保持一致的位置和变换，确保它们都应用相同的transform属性。
-
-          for(let t = 0; t < 3; t++){
-            sg.append('text') // 添加tip标签
-            .attr('x', padding.left + tipBlockWidth * t)
-            .attr('y', padding.top + studentTitleHeight)
-            .text(tipContent[t])
-            .attr('font-size', '12px')
-            .attr('font-weight', '300')
-            .attr('text-anchor', 'start')
-          }
-
-
-        const Questions = s.children // 获取学生的问题
-        console.log('i', i)
-        this.renderQuestions(sg, Questions, i) // 渲染问题
-      })
+      this.visibleIndices.add(index) // 标记为已加载
     },
 
-    updateLimit() {
-      if (this.limitLength > this.factLength) {
-        this.limitLength = this.factLength // 如果超过实际数量，设置为实际数量
-        return
+    loadInitialBatch() {
+      for (let i = 0; i < Math.min(this.batchSize, this.filteredTreeData.length); i++) {
+        this.loadStudentPanel(i)
       }
-      if (this.limitLength < 1) {
-        this.limitLength = 1 // 如果小于1，设置为1
-        return
-      }
-      this.renderEveryStudents() // 更新限制后重新渲染
     },
-    updatePanelHeight(element, index) {
+
+    handleScroll() {
+      const container = this.$refs.scrollContainer.querySelector('.simplebar-content-wrapper')
+      const scrollPosition = container.scrollTop
+      const containerHeight = container.clientHeight
+      // const totalHeight = container.scrollHeight
+
+      const panelHeight = 80 // 假设每个面板的高度为80px，可以根据实际情况调整
+
+      const startIdx = Math.floor(scrollPosition / panelHeight)
+      const endIdx = Math.ceil((scrollPosition + containerHeight) / panelHeight)
+
+      for (let i = startIdx; i <= endIdx && i < this.filteredTreeData.length; i++) {
+        this.loadStudentPanel(i)
+      }
+    },
+
+    togglePanelHeight(element, index) {
+      const targetHeight = this.expandedIndices.has(index) ? 80 : this.PanelsHeight[index]
       element
-      .transition()
-      .duration(300)  // 动画时长 300ms
-      .attr("height", this.PanelsHeight[index])
+        .transition()
+        .duration(300)  // 动画时长 300ms
+        .attr("height", targetHeight)
+      
+      if (this.expandedIndices.has(index)) {
+        this.expandedIndices.delete(index)
+      } else {
+        this.expandedIndices.add(index)
+      }
+    },
+
+    applyFilter() {
+      this.visibleIndices.clear() // 清空可见索引集合并重新加载
+      this.expandedIndices.clear() // 清空展开索引集合并重新加载
+      this.$refs.visualizationS.innerHTML = '' // 清空现有内容
+      this.loadInitialBatch() // 重新加载初始批次的数据
     }
   },
   watch: {
     getHadFilter() {
-      this.renderEveryStudents()
+      this.visibleIndices.clear() // 清空可见索引集合并重新加载
+      this.expandedIndices.clear() // 清空展开索引集合并重新加载
+      this.$refs.visualizationS.innerHTML = '' // 清空现有内容
+      this.loadInitialBatch() // 重新加载初始批次的数据
     }
   }
 }
@@ -292,25 +309,25 @@ export default {
     .filter {
       float: right;
       margin-right: 5px;
+      font-size: 17px;
+      font-weight: 400;
     }
-    .limit-input {
+    .filter-input {
       float: right;
-      width: 30px;
-      height: 22px;
-      text-align: center;
-      line-height: 12px;
+      width: 100px;
+      height: 26px;
       margin-right: 10px;
-      padding-left: 17px;
-      border: 0;
-      font-weight: bold;
-      border-bottom: 1px solid #000;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 2px;
+      font-size: 14px;
     }
   }
   .student-panel {
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     cursor: pointer;
     /*超出页面增加滚动效果*/
-    overflow: scroll;
+    overflow-y: scroll;
   }
 }
 /deep/ .simplebar-vertical {

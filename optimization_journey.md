@@ -44,6 +44,8 @@ Postman工具会显示请求的总时间
 
 ## 1.1 前端优化
 
+将前端接受到的数据分块，每块数据单独渲染，最后合并，减少渲染时间
+
 ## 1.2 后端优化
 
 对应路由：`@api_bp.route('/api/cluster', methods=['get'])`
@@ -96,3 +98,27 @@ Postman工具会显示请求的总时间
 > Function parallel_calculate_features took **4.00** seconds to execute.
 > Function calc_final_scores took 0.03 seconds to execute.
 > Function cluster_analysis took 0.41 seconds to execute.
+
+
+# 2. StudentView视图优化
+
+## 2.1 前端优化
+
+滚动按需加载可见的条目
+
+1. **引入虚拟滚动**:
+   - 使用 `@scroll="handleScroll"` 监听滚动事件。
+   - 在 `handleScroll` 方法中计算当前可见的学生索引，并调用 `loadStudentPanel` 方法加载这些索引对应的学生面板。
+2. **按需加载学生面板**:
+   - 引入 `visibleIndices` 集合，用于记录哪些学生面板已经被加载。
+   - `loadStudentPanel` 方法负责渲染单个学生面板。
+   - `loadInitialBatch` 方法在初始化时加载前几个学生面板。
+3. **更新 `renderEveryStudents` 方法**:
+   - 移除原有的 `renderEveryStudents` 方法，因为现在我们按需加载学生面板。
+4. **处理过滤变化**:
+   - 在 `watch` 中监听 `getHadFilter` 变化，清空 `visibleIndices` 并重新加载初始批次的数据。
+5. **更新限制**:
+   - 在 `updateLimit` 方法中，清空 `visibleIndices` 并重新加载初始批次的数据。
+
+
+## 2.2 后端优化

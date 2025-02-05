@@ -1,52 +1,5 @@
 import pandas as pd
 
-# ------------学生视图部分----------------
-# 将数据转换为树状图数据结构
-def transform_data(df):
-    # # 分组并聚合数据
-    # grouped = df.groupby(['student_ID', 'title_ID', 'state'])['score'].sum().reset_index()
-    # grouped_u = df.groupby(['student_ID', 'title_ID', 'state'])['score'].count().reset_index()
-    # grouped['times'] = grouped_u['score']
-    
-    # 构建树状图数据结构
-    root = {'name': 'Root', 'children': []}
-    # print('df[student_ID]',df['student_ID'])
-    students = df['student_ID'].unique()
-    # print(students[0])
-    for student in students:
-        student_data = df[df['student_ID'] == student]
-        # print(student_data)
-        student_node = {'name': str(student), 'class': student_data['class'].iloc[0], 'children': []}
-        
-        titles = student_data['title_ID'].unique()
-        
-        for title in titles:
-            title_data = student_data[student_data['title_ID'] == title]
-            
-            title_node = {'name': str(title), 'children': []}
-            
-            states = title_data['state'].unique()
-            # if(title == 'Question_3MwAFlmNO8EKrpY5zjUd' and student == '01d8aa21ef476b66c573'):
-            #     print(title_data)
-            #     print(states)
-            for state in states:
-                state_data = title_data[title_data['state'] == state]
-                state_node = {
-                        'name': state,
-                        'times': len(state_data),
-                        'value': int(state_data['score'].max()),
-                        }
-                
-                title_node['children'].append(state_node)
-            
-            if len(title_node['children']) > 0:
-                student_node['children'].append(title_node)
-        
-        if len(student_node['children']) > 0:
-            root['children'].append(student_node)
-    
-    return root
-
 # -------------问题视图部分------------------------
 
 # 题目-时间轴数据处理
@@ -71,9 +24,11 @@ def process_distribution_data(merged_data, title_id):
 
 
 # 获取特定知识点下的所有题目数据
-def get_titles_data_by_knowledge(merged_data, knowledge, limit=None):
+# def get_titles_data_by_knowledge(merged_data, knowledge, limit=None):
+def get_all_titles_data(merged_data, limit=None):
     # 获取特定知识点下的所有题目
-    titles = merged_data[merged_data['knowledge'] == knowledge][['title_ID', 'knowledge']].drop_duplicates()
+    # titles = merged_data[merged_data['knowledge'] == knowledge][['title_ID', 'knowledge']].drop_duplicates()
+    titles = merged_data[['title_ID', 'knowledge']].drop_duplicates()
     
     # 如果有限制数量，则只取前limit个题目
     if limit is not None:

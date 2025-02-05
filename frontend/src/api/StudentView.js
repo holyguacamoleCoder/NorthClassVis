@@ -4,7 +4,7 @@ import request from '@/utils/request'
 export const getStudents = () => {
   return request.get('/tree_data',{
     params: {
-      limit: 10
+      // limit: 10
     }
   })
 }

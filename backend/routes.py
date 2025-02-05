@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from tools import utils as us
 from tools import fs as fs
 from tools import ParallelView as pv
+from tools import StudentView as sv
 
 # ----- 总配置部分--------
 config = {
@@ -109,7 +110,8 @@ def get_tree_data():
         return jsonify({'error': 'Failed to load data.'}), 500
 
     # 转换数据
-    tree_data = us.transform_data(df)
+    student_info = fs.load_data(fs.studentFilename)
+    tree_data = sv.transform_data(df, student_info)
     
     if limit:
         try:
@@ -155,11 +157,12 @@ def get_question():
         titles_data = us.get_titles_data_by_knowledge(merged_process_data(), knowledge, limit)
         return jsonify(titles_data)
     else:
-        # 如果没有指定知识点或题目ID，则返回所有题目的数据
-        unique_knowledges = merged_process_data()['knowledge'].unique()
-        all_titles_data = {}
-        for knowledge in unique_knowledges:
-            all_titles_data[knowledge] = us.get_titles_data_by_knowledge(merged_process_data(), knowledge, limit)
+        # # 如果没有指定知识点或题目ID，则返回所有题目的数据
+        # unique_knowledges = merged_process_data()['knowledge'].unique()
+        # all_titles_data = {}
+        # for knowledge in unique_knowledges:
+        #     all_titles_data[knowledge] = us.get_titles_data_by_knowledge(merged_process_data(), knowledge, limit)
+        all_titles_data = us.get_all_titles_data(merged_process_data(), limit)
         return jsonify(all_titles_data)
     
 
