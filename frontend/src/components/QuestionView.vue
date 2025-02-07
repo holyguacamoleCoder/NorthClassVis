@@ -163,7 +163,7 @@ export default {
           .attr('font-size', '15px')
           .attr('font-weight', '500')
           .attr('text-anchor', 'start')
-        let Bbox = textElement.node().getBBox()
+        let Bbox = textElement.node() ? textElement.node().getBBox() : {x : 0, y: 0, width: 0, height: 0}
         nowBoxStartPosition += (Bbox.width  + labelMargin + labelPadding * 2) // 更新下一个标签的起始位置
         // console.log('nowBoxStartPosition', nowBoxStartPosition)
         // 添加背景矩形
@@ -254,8 +254,8 @@ export default {
             tooltip.style('visibility', 'visible')
               .html(`<p>日期:${dd.date}</p>
                     <p>提交次数:${dd.submission_count}</p>
-                    <p>平均分数:${dd.average_score.toFixed(2)}</p>
                     `)
+                    // <p>平均分数:${dd.average_score.toFixed(2)}</p>
               .style('top', `${event.pageY - 28}px`)
               .style('left', `${event.pageX + 10}px`)
           })
@@ -353,6 +353,127 @@ export default {
 
           currentWidth += xScale(dist.percentage)
         })
+      })//绘制分数图像分布
+      // 绘制棒棒糖图
+       // 绘制棒棒糖图
+      const candyStickHeight = 50
+      questionPanel.each(function(d) {
+        const svg = d3.select(this)
+          .attr('width', innerWidth)
+          .attr('height', candyStickHeight + margin.top * 2)
+
+        // 为每个棒棒糖绘制组
+        const candyG = svg.append('g')
+          .attr('transform', `translate(${width * 4 / 5}, ${margin.top + candyStickHeight - padding * 0.5 - 2})`)
+
+        // 定义难度比例尺
+        const difficultyScale = d3.scaleThreshold()
+          .domain([10, 25, 50, 80]) // 分成四个层级：低、中低、中高、高
+          .range(['Expert', 'Hard', 'Medium', 'Easy'])
+        // 定义难度高度比例尺
+        const stickScale = d3.scaleLinear()
+          .domain([50, 0])
+          .range([0, candyStickHeight])
+        // 定义半径比例尺
+        const avgScoreCircleRadius = 25
+        const deltaRadius = 5
+        const sumSubmitCircleRadius = avgScoreCircleRadius + deltaRadius
+        const avgScoreScale = d3.scaleLinear()
+          .domain([0, 2])
+          .range([1, avgScoreCircleRadius])
+        const sumSubmitScale = d3.scaleLinear()
+          .domain([d3.min(filteredData, d => d.sum_submit), d3.max(filteredData, d => d.sum_submit)])
+          .range([avgScoreCircleRadius, sumSubmitCircleRadius])
+        
+        // 计算难度值
+        const difficultyValue = (d.avg_score * 100 / d.sum_submit) * 100
+        const stickHeight = stickScale(difficultyValue)
+        console.log(stickHeight)
+
+        // 创建线性渐变
+        const defs = svg.append('defs')
+        const linearGradient = defs.append('linearGradient')
+          .attr('id', 'gradient-stick')
+          .attr('x1', '0%')
+          .attr('y1', '0%')
+          .attr('x2', '0%')
+          .attr('y2', '100%')
+        linearGradient.append('stop')
+          .attr('offset', '0%')
+          .attr('stop-color', '#ffcccb')
+          .attr('stop-opacity', 0.8)
+        linearGradient.append('stop')
+          .attr('offset', '100%')
+          .attr('stop-color', '#ff6347')
+          .attr('stop-opacity', 0.8)
+
+        // 添加棒子
+        candyG.append('rect')
+          .attr('class', 'candy-stick')
+          .attr('x', -5) // 棒子宽度的一半
+          .attr('y', candyStickHeight - stickHeight - sumSubmitCircleRadius)
+          .attr('width', 10) // 棒子宽度
+          .attr('height', stickHeight + sumSubmitCircleRadius)
+          .attr('fill', 'url(#gradient-stick)')
+
+        // 创建tooltip
+        const tooltip = d3.select('body').append('div')
+          .attr('class', 'tooltip')
+          .style('position', 'absolute')
+          .style('visibility', 'hidden') 
+          .style('background-color', 'white')
+          .style('border', '1px solid black')
+          .style('padding', '5px')
+
+        // 外圈表示总提交次数
+        const outerColor = '#EF9393'
+        // const outerColor = '#DF2727'
+        candyG.append('circle')
+          .attr('cx', 0) // 固定位置
+          .attr('cy', candyStickHeight - stickHeight - sumSubmitCircleRadius)
+          .attr('r', sumSubmitScale(d.sum_submit))
+          .attr('fill', outerColor)
+          .attr('opacity', 0.5)
+          // .attr('stroke', '#000')
+          .attr('stroke-width', 2)
+          .on('mouseover', function(event) {
+            d3.select(this).attr('fill', outerColor)
+            tooltip.style('visibility', 'visible')
+              .html(`<p>Total Submissions: ${d.sum_submit}</p>
+              <p>Difficulty Level: ${difficultyScale(difficultyValue)}</p>
+              `)
+              .style('top', `${event.pageY - 28}px`)
+              .style('left', `${event.pageX + 10}px`)
+          })
+          .on('mouseout', function() {
+            d3.select(this).attr('fill', outerColor)
+            tooltip.style('visibility', 'hidden')
+          })
+
+          // 内圈表示平均分数
+          // const innerColor = '#D62728'
+          const innerColor = '#AD0000'
+          candyG.append('circle')
+          .attr('cx', 0) // 固定位置
+          .attr('cy', candyStickHeight - stickHeight - avgScoreCircleRadius - deltaRadius)
+          .attr('r', avgScoreScale(d.avg_score))
+          .attr('fill', innerColor)
+          .attr('opacity', 0.5)
+          // .attr('stroke', '#000')
+          .attr('stroke-width', 2)
+          .on('mouseover', function(event) {
+            d3.select(this).attr('fill', '#ff6347')
+            tooltip.style('visibility', 'visible')
+            .html(`<p>Average Score: ${d.avg_score.toFixed(2)}</p>
+              <p>Difficulty Level: ${difficultyScale(difficultyValue)}</p>
+              `)
+              .style('top', `${event.pageY - 28}px`)
+              .style('left', `${event.pageX + 10}px`)
+          })
+          .on('mouseout', function() {
+            d3.select(this).attr('fill', innerColor)
+            tooltip.style('visibility', 'hidden')
+          })
       })
     },
     handleKnowledgeCheck() {
@@ -422,7 +543,7 @@ export default {
 .highlight {
   color: #3b82f6;
 }
-.question-panel {
-  height: 200px !important; /* Ensure that height is not overridden */
+.candy-stick {
+  fill: url(#gradient-stick);
 }
 </style>

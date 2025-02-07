@@ -3,6 +3,7 @@ from tools import utils as us
 from tools import fs as fs
 from tools import ParallelView as pv
 from tools import StudentView as sv
+from tools import QuestionView as qv
 
 # ----- 总配置部分--------
 config = {
@@ -129,12 +130,12 @@ def merged_process_data():
     return fs.process_non_numeric_values(fs.merge_data(config['all_class_df'], fs.titleFilename))
 @api_bp.route('/api/timeline/<title_id>')
 def get_timeline_data(title_id):
-    timeline_data = us.process_timeline_data(merged_process_data(), title_id)
+    timeline_data = qv.process_timeline_data(merged_process_data(), title_id)
     return jsonify(timeline_data)
 
 @api_bp.route('/api/distribution/<title_id>')
 def get_distribution_data(title_id):
-    distribution_data = us.process_distribution_data(merged_process_data(), title_id)
+    distribution_data = qv.process_distribution_data(merged_process_data(), title_id)
     return jsonify(distribution_data)
 
 @api_bp.route('/api/questions', methods=['GET'])
@@ -148,8 +149,8 @@ def get_question():
         title_data = {
             'title_id': title_id,
             'knowledge': merged_process_data().loc[merged_process_data()['title_ID'] == title_id, 'knowledge'].iloc[0],
-            'timeline': us.process_timeline_data(merged_process_data(), title_id),
-            'distribution': us.process_distribution_data(merged_process_data(), title_id)
+            'timeline': qv.process_timeline_data(merged_process_data(), title_id),
+            'distribution': qv.process_distribution_data(merged_process_data(), title_id)
         }
         return jsonify([title_data])
     elif knowledge is not None:
@@ -158,22 +159,18 @@ def get_question():
         return jsonify(titles_data)
     else:
         # # 如果没有指定知识点或题目ID，则返回所有题目的数据
-        # unique_knowledges = merged_process_data()['knowledge'].unique()
-        # all_titles_data = {}
-        # for knowledge in unique_knowledges:
-        #     all_titles_data[knowledge] = us.get_titles_data_by_knowledge(merged_process_data(), knowledge, limit)
-        all_titles_data = us.get_all_titles_data(merged_process_data(), limit)
+        all_titles_data = qv.get_all_titles_data(merged_process_data(), limit)
         return jsonify(all_titles_data)
     
 
 @api_bp.route('/api/calculate_scores', methods=['GET'])
 def calculate_scores():
     # 计算所有学生的特征
-    all_submit_records = us.calculate_features(merged_process_data())
+    all_submit_records = pv.calculate_features(merged_process_data())
     # print(all_submit_records['tc_bonus'])
 
     # 计算每个学生的总分
-    final_scores = us.calc_final_scores(all_submit_records, ['student_ID', 'knowledge'])
+    final_scores = pv.calc_final_scores(all_submit_records, ['student_ID', 'knowledge'])
     result = final_scores.to_dict(orient='index')
     
     return jsonify(result)
