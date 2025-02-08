@@ -4,6 +4,7 @@ from tools import fs as fs
 from tools import ParallelView as pv
 from tools import StudentView as sv
 from tools import QuestionView as qv
+from tools import WeekView as wv
 
 # ----- 总配置部分--------
 config = {
@@ -197,11 +198,11 @@ def week_analysis():
     df = merged_process_data()
     start_date = df['time'].min()
     # start_date = us.pd.to_datetime('2023-9-10')
-    df['week'] = df['time'].apply(lambda x: us.calculate_week_of_year(x, start_date=start_date))
+    df['week'] = df['time'].apply(lambda x: wv.calculate_week_of_year(x, start_date=start_date))
     all_submit_records = pv.calculate_features(df)
     final_scores = pv.calc_final_scores(all_submit_records, ['student_ID','week','knowledge'])
     result = final_scores.to_dict(orient='index')
-    result = us.transform_data_for_visualization(result)
+    result = wv.transform_data_for_visualization(result)
     # print(result)
     return jsonify(result)
 

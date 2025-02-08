@@ -2,6 +2,9 @@
   <div id="question-view" style="padding: 10px;">
     <div class="title">
       <span>Question View</span>
+      <!-- 困难度排序按钮 -->
+      <div class="filter difficulty" @click="toggleSortOrder">Difficulty Order:{{ this.sortAscending ? " ↑" : " ↓" }}</div>
+      <!-- 下拉菜单筛选知识点 -->
       <Dropdown>
         <!-- trigger element -->
         <template #trigger>
@@ -11,11 +14,11 @@
         </template>
         <!-- contents display in dropdown -->
         <form id="checkboxs" name="myForm">
-          <div class="selectK" v-for="(item, index) in uniqueKnowledges" :key="index" style="border-radius: 5px; padding: 5px">
+          <div class="selectK" v-for="(item, index) in uniqueKnowledge" :key="index" style="border-radius: 5px; padding: 5px">
             <input 
               type="checkbox"
               :name="item"
-              v-model="selectedKnowledges[item]"
+              v-model="selectedKnowledge[item]"
               @change="handleKnowledgeCheck"
             />
             <label
@@ -35,8 +38,8 @@
               name="all"
               type="checkbox"
               class="knowledge-list"
-              v-model="selectAllKnowledges"
-              @change="handleSelectAllKnowledges"
+              v-model="selectAllKnowledge"
+              @change="handleSelectAllKnowledge"
             />
             <label 
               for="all"
@@ -77,19 +80,20 @@ export default {
   data() {
     return {
       QuestionData: [],
-      uniqueKnowledges: [],
-      selectedKnowledges: {},
-      selectAllKnowledges: true
+      uniqueKnowledge: [],
+      selectedKnowledge: {},
+      selectAllKnowledge: true,
+      sortAscending: true // 默认按升序排序
     };
   },
   async mounted() {
-    this.getQuestionData()
+    // this.getQuestionData()
   },
   computed: {
     ...mapGetters(['getHadFilter']),
     displayButton() {
-      if (this.selectAllKnowledges) return 'All'
-      const selectedCount = Object.values(this.selectedKnowledges).filter(Boolean).length
+      if (this.selectAllKnowledge) return 'All'
+      const selectedCount = Object.values(this.selectedKnowledge).filter(Boolean).length
       if (selectedCount > 0) return 'Part'
       else return 'None'
     }
@@ -99,15 +103,15 @@ export default {
       // 获取问题数据
       const { data } = await getQuestions()
       this.QuestionData = data // Flatten the nested structure
-      console.log('Qdata:', data)
+      // console.log('Qdata:', data)
 
       // 获取唯一的 knowledge 类别
-      this.uniqueKnowledges = [...new Set(this.QuestionData.map(q => q.knowledge))]
+      this.uniqueKnowledge = [...new Set(this.QuestionData.map(q => q.knowledge))]
       
-      // 初始化 selectedKnowledges 对象
-      this.selectedKnowledges = {}
-      this.uniqueKnowledges.forEach(knowledge => {
-        this.selectedKnowledges[knowledge] = true
+      // 初始化 selectedKnowledge 对象
+      this.selectedKnowledge = {}
+      this.uniqueKnowledge.forEach(knowledge => {
+        this.selectedKnowledge[knowledge] = true
       })
 
       this.renderQuestion()
@@ -123,9 +127,22 @@ export default {
       const distributionHeight = 20
       const QuestionTitleHeight = 28
       const QuestionPanelHeight = QuestionTitleHeight + timelineHeight + distributionHeight + padding * 5
-      const filteredData = this.QuestionData.filter(q => this.selectedKnowledges[q.knowledge])
-      console.log('Filtered Data:', filteredData)
-
+      const filteredData = this.QuestionData.filter(q => this.selectedKnowledge[q.knowledge])
+      // console.log('Filtered Data:', filteredData)
+      // 困难度排序
+      if (this.sortAscending) {
+        filteredData.sort((a, b) => {
+          const diffA = (a.avg_score / a.sum_submit) 
+          const diffB = (b.avg_score / b.sum_submit)
+          return diffA - diffB
+        })
+      } else {
+        filteredData.sort((a, b) => {
+          const diffA = (a.avg_score / a.sum_submit)
+          const diffB = (b.avg_score / b.sum_submit)
+          return diffB - diffA
+        })
+      }      
       // 获取可视化目标容器
       const main = d3.select('#visualizationQ')
 
@@ -338,7 +355,6 @@ export default {
             .attr('rx', 5)
             .attr('ry', 5)
             .on('mouseover', function(event) {
-              console.log('mouseover')
               d3.select(this).attr('opacity', 0.9)
               tooltip_d.style('visibility', 'visible')
                 .html(`<p>Score: ${dist.score}</p>
@@ -354,8 +370,8 @@ export default {
           currentWidth += xScale(dist.percentage)
         })
       })//绘制分数图像分布
+
       // 绘制棒棒糖图
-       // 绘制棒棒糖图
       const candyStickHeight = 50
       questionPanel.each(function(d) {
         const svg = d3.select(this)
@@ -368,7 +384,7 @@ export default {
 
         // 定义难度比例尺
         const difficultyScale = d3.scaleThreshold()
-          .domain([10, 25, 50, 80]) // 分成四个层级：低、中低、中高、高
+          .domain([10, 25, 45, 60]) // 分成四个层级：低、中低、中高、高
           .range(['Expert', 'Hard', 'Medium', 'Easy'])
         // 定义难度高度比例尺
         const stickScale = d3.scaleLinear()
@@ -388,7 +404,7 @@ export default {
         // 计算难度值
         const difficultyValue = (d.avg_score * 100 / d.sum_submit) * 100
         const stickHeight = stickScale(difficultyValue)
-        console.log(stickHeight)
+        // console.log(stickHeight)
 
         // 创建线性渐变
         const defs = svg.append('defs')
@@ -477,16 +493,23 @@ export default {
       })
     },
     handleKnowledgeCheck() {
-      this.selectAllKnowledges = Object.values(this.selectedKnowledges).every(Boolean)
+      this.selectAllKnowledge = Object.values(this.selectedKnowledge).every(Boolean)
       const d3 = this.$d3
       d3.select('#visualizationQ').selectAll('*').remove()
       // 重新渲染图表
       this.renderQuestion()
     },
-    handleSelectAllKnowledges() {
-      Object.keys(this.selectedKnowledges).forEach(key => {
-        this.selectedKnowledges[key] = this.selectAllKnowledges
+    handleSelectAllKnowledge() {
+      Object.keys(this.selectedKnowledge).forEach(key => {
+        this.selectedKnowledge[key] = this.selectAllKnowledge
       })
+      const d3 = this.$d3
+      d3.select('#visualizationQ').selectAll('*').remove()
+      // 重新渲染图表
+      this.renderQuestion()
+    },
+    toggleSortOrder() {
+      this.sortAscending = !this.sortAscending
       const d3 = this.$d3
       d3.select('#visualizationQ').selectAll('*').remove()
       // 重新渲染图表
@@ -512,9 +535,9 @@ export default {
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
   .title {
     border-bottom: 1px solid #ccc;
-    padding-bottom: 7px;
+    padding-bottom: 4px;
     span {
-      font-size: 17px;
+      font-size: 20px;
       font-weight: bold;
       padding-bottom: 10px;
       margin-bottom: 20px;
@@ -522,11 +545,14 @@ export default {
     }
     .filter {
       float: right;
+      cursor: pointer;
       font-weight: bold;
-      font-size: 17px;
+      font-size: 18px;
       padding-right: 10px;
     }
-    
+    .difficulty{
+      margin-left: 20px;
+    }
     .v-dropdown-trigger {
       float: right;
       button {

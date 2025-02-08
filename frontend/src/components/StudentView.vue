@@ -59,7 +59,7 @@ export default {
   methods: {
     async getTreeData() {
       const { data: { children } } = await getStudents() // 获取学生树形数据
-      console.log('studentData', children)
+      // console.log('studentData', children)
       this.treeData = children
       this.factLength = children.length // 设置实际的学生数量
       this.PanelsHeight = new Array(this.factLength).fill(0) // 初始化学生面板高度数组
@@ -126,7 +126,7 @@ export default {
         g.selectAll('.score-line').data(tree.descendants()).join('rect') // 绘制分数线条
           .attr('class', 'score-line')
           .attr('x', d => d.y + radius + lineLength)
-          .attr('y', d => d.x - radius / 2)
+          .attr('y', d => d.x - radius)
           .attr('width', d => (d.data.value ? d.data.value : 0) * lineLength / 5)
           .attr('height', 5)
           .attr('fill', currentColor)
@@ -264,7 +264,7 @@ export default {
       const targetHeight = this.expandedIndices.has(index) ? 80 : this.PanelsHeight[index]
       element
         .transition()
-        .duration(300)  // 动画时长 300ms
+        .duration(400)  // 动画时长 300ms
         .attr("height", targetHeight)
       
       if (this.expandedIndices.has(index)) {
@@ -321,6 +321,9 @@ export default {
       border-radius: 4px;
       padding: 2px;
       font-size: 14px;
+    }
+    .filter{
+      font-weight: bold;
     }
   }
   .student-panel {
