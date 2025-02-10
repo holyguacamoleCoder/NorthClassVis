@@ -4,18 +4,14 @@ ChinaVis 2024数据可视化竞赛作品复现
 
 ## 项目简介
 
-本项目是2024年数据可视化竞赛的参赛作品非1:1复现(仅有大致原作成品参考，无原型图、设计稿等)，旨在基于可视化作品学习**D3.js框架**、**提升前端渲染效率**与**提升后端计算效率**的相关知识。项目主要使用flask、Vue2(包含Vuex)等技术, 还涉及简单的pytest用法。
+本项目是2024年数据可视化竞赛的参赛作品非1:1复现(仅有大致原作成品参考，无原型图、设计稿等)，旨在基于可视化作品学习**D3.js框架**、**前端渲染**与**后端计算**的相关知识。项目主要使用flask、Vue2(包含Vuex)等技术, 还涉及简单的pytest用法。
 
-优化方法目前正在学习, 学习记录见**optimization_journey.md**
+优化方法目前正在学习, 学习记录、学习资源见**notes**文件夹
 各位也可以借助LLM进行询问，自主学习
-
-1. 数据分块渲染（参考go语言以及d3的增量渲染）
-2. 数据并行计算（py的concurrent库）
-3. ...
 
 ## 项目结构
 
-项目包含以下主要文件和目录：
+项目包含以下核心文件和目录：
 
 ```
 NorthClassVision/
@@ -47,8 +43,11 @@ NorthClassVision/
 │   ├── package.json
 │   ├── README.md
 │   └── vue.config.js
+├── notes/
+│   ├── study_recourse.md
+│   ├── D3_study.md
+│   ├── optimization_journey.md
 ├── problem.md
-├── optimization_journey.md
 └── README.md
 ```
 
@@ -96,3 +95,8 @@ npm run serve
 ```
 
 7. 打开浏览器，访问 `http://localhost:8080` 查看可视化效果。
+
+## 样式预览
+
+
+

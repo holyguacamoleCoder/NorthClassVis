@@ -15,3 +15,11 @@ NorthClass是一家知名的高等教育培训机构，开设了超过100门课�
 提供数据：详细信息请见赛道,下载数据后放在/data文件夹。
 
 ChinaVis 2024数据可视化竞赛网页：<https://www.chinavis.org/2024/challenge.html>
+
+
+
+以下为原获奖作品系统概览图
+
+![image](src/problem/image.png)
+
+
