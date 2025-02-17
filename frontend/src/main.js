@@ -4,8 +4,6 @@ import store from './store'
 import * as echarts from 'echarts'
 import * as d3 from 'd3'
 
-
-
 const app = createApp(App)
 app.use(store)
 app.mount('#app')

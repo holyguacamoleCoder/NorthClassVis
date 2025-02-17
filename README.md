@@ -15,21 +15,21 @@ ChinaVis 2024数据可视化竞赛作品复现
 
 ```
 NorthClassVision/
-├── data/
+├── data/ # 数据集文件夹
 │   ├── Data_SubmitRecord/
 │   ├── Data_StudentInfo.csv
 │   ├── Data_TitleInfo.csv
 │   └── first_dataDes.docx
-├── backend/
-│   ├── test/
+├── backend/  # 后端代码
+│   ├── test/ # 测试文件
 │   │   ├── time_measure.py
 │   │   └──mock_data.py
-│   ├── utils/
+│   ├── utils/ # 工具函数
 │   │   ├── fs.py
 │   │   └── utils.py
-│   ├── routes.py
+│   ├── routes.py # flask路由配置
 │   └── app.py
-├── frontend/
+├── frontend/ # 前端代码
 │   ├── public/
 │   ├── src/
 │   │   ├── assets/
@@ -43,11 +43,11 @@ NorthClassVision/
 │   ├── package.json
 │   ├── README.md
 │   └── vue.config.js
-├── notes/
+├── notes/ # 学习笔记
 │   ├── study_recourse.md
 │   ├── D3_study.md
 │   ├── optimization_journey.md
-├── problem.md
+├── problem.md # 竞赛内容，含官方数据集下载链接
 └── README.md
 ```
 

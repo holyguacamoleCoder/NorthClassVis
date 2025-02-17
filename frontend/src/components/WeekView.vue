@@ -8,7 +8,7 @@
       </select>
       <div class="limit">kind:</div>
     </div>
-    <Simplebar style="height: 580px;">
+    <Simplebar style="height: 580px; width: 98%">
       <div id="visualizationW"></div>
     </Simplebar>
   </div>
@@ -42,7 +42,7 @@ export default {
     }
   },
   async created() {
-    await this.getWeekData()
+    // await this.getWeekData()
   },
   methods: {
     async getWeekData() {
@@ -54,7 +54,7 @@ export default {
     renderWeekData() {
       const d3 = this.$d3
       const height = 600
-      const width = 890
+      const width = 1000
       const margin = { top: 20, bottom: 20, left: 20 ,right: 20 }
       const stu_icon = 40
       const weekLabelHeight = 20 // 周标签高度
@@ -312,8 +312,14 @@ export default {
       padding-right: 10px;
     }
   }
+  .simplebar-content-wrapper {
+    /*添加阴影*/
+    box-shadow: 10px 10px 10px rgba(0, 0, 0, 0.1);
+    border-radius: 5px;
+  }
 }
 </style>
+
 
 
 

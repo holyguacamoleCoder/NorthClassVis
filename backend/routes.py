@@ -1,5 +1,4 @@
 from flask import Blueprint, request, jsonify
-from tools import utils as us
 from tools import fs as fs
 from tools import ParallelView as pv
 from tools import StudentView as sv
@@ -205,4 +204,3 @@ def week_analysis():
     result = wv.transform_data_for_visualization(result)
     # print(result)
     return jsonify(result)
-

@@ -212,11 +212,12 @@ export default {
   padding: 0;
   box-sizing: border-box;
 }
+@total_width : 2300px;
 .app-container {
-  width: 2100px;
+  width: @total_width;
   background-color: #ccc;
 .header{
-  width: 2100px;
+  width: @total_width;
   height: 50px;
   background-color: #2a2a2a;
   .title{
@@ -253,11 +254,11 @@ export default {
   }
 }
 .body {
-  width: 2100px;
+  width: @total_width;
   height: 1230px;
   display: flex;
   .main{
-    width: 1700px;
+    width: 1850px;
     height: inherit;
     display: flex;
     flex-direction: column;
@@ -271,7 +272,7 @@ export default {
         height: inherit;
       }
       .portrait-view{
-        width: 1300px;
+        width: 1450px;
         height: 600px;
       }
     }
@@ -285,13 +286,13 @@ export default {
       }
       .week-view{
         margin-left: 5px;
-        width: 1015px;
+        width: 1165px;
         height: 600px;
       }
     }
   }
   .panel{
-    width: 400px;
+    width: 450px;
     height: inherit;
   }
 }

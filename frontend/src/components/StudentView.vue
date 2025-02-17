@@ -165,7 +165,7 @@ export default {
       if (this.visibleIndices.has(index)) return // 如果已经加载过，则跳过
 
       const d3 = this.$d3
-      const width = 390 // SVG 宽度
+      const width = 440 // SVG 宽度
       const studentTitleHeight = 30 // 学生标题高度
       const labelPadding = 5 // 标签内边距
       const labelMargin = 20 // 标签外边距
@@ -250,7 +250,7 @@ export default {
       const containerHeight = container.clientHeight
       // const totalHeight = container.scrollHeight
 
-      const panelHeight = 80 // 假设每个面板的高度为80px，可以根据实际情况调整
+      const panelHeight = 100 // 假设每个面板的高度为80px，可以根据实际情况调整
 
       const startIdx = Math.floor(scrollPosition / panelHeight)
       const endIdx = Math.ceil((scrollPosition + containerHeight) / panelHeight)
@@ -294,7 +294,7 @@ export default {
 
 <style scoped lang="less">
 #student-view {
-  width: 395px;
+  width: 99%;
   height: 1220px;
   border-radius: 5px;
   background-color: #fff;

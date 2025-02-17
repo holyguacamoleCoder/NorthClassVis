@@ -31,7 +31,7 @@ def calculate_features(df):
 
 
 
-def parallel_calculate_features(df, num_workers=6):
+def parallel_calculate_features(df, num_workers=3):
     chunk_size = math.ceil(len(df) / num_workers)
     chunks = [df.iloc[i:i + chunk_size] for i in range(0, len(df), chunk_size)]
 
@@ -135,13 +135,13 @@ def cluster_analysis(students_data, stu=None, every=None):
     for i, center in enumerate(cluster_centers):
         result[str(i)] = {
             "cluster": i,
-            """
-             next(iter(students_data)) 获取 students_data 字典中的第一个学生的 ID。
-             students_data[next(iter(students_data))] 获取该学生的知识点分数字典。
-             .keys() 返回该学生的所有知识点名称。
-             zip(students_data[next(iter(students_data))].keys(), center) 将知识点名称与聚类中心的特征向量元素配对。
-             dict(...) 将这些配对转换为字典，其中键是知识点名称，值是聚类中心在该知识点上的分数。
-            """
+            # """
+            #  next(iter(students_data)) 获取 students_data 字典中的第一个学生的 ID。
+            #  students_data[next(iter(students_data))] 获取该学生的知识点分数字典。
+            #  .keys() 返回该学生的所有知识点名称。
+            #  zip(students_data[next(iter(students_data))].keys(), center) 将知识点名称与聚类中心的特征向量元素配对。
+            #  dict(...) 将这些配对转换为字典，其中键是知识点名称，值是聚类中心在该知识点上的分数。
+            # """
             "knowledge": dict(zip(students_data[next(iter(students_data))].keys(), center))
         }
     return result
