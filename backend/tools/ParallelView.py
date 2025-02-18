@@ -8,30 +8,54 @@ import math
 # --------------平行线图视图部分------------
 #计算各个特征字段
 def calculate_features(df):
+    # print('calculate_features')
     # 计算答题得分加成
     df['score_bonus'] = df['score']
+
+    # 提取 groupby 对象
+    grouped = df.groupby(['student_ID', 'knowledge'])
+
     # 时间复杂度加成（假设timeconsume越小越好）
-    df['tc_bonus'] = 1 / df.groupby(['student_ID', 'knowledge'])['timeconsume'].transform(lambda x: (x + 1))
-    df['tc_bonus'] = 1 / df.groupby(['student_ID', 'knowledge'])['timeconsume'].transform(lambda x: (x + 1))
+    df['tc_bonus'] = 1 / (grouped['timeconsume'].transform('mean') + 1)
 
     # 空间复杂度加成（假设memory越小越好）
-    df['mem_bonus'] = 1 / df.groupby(['student_ID', 'knowledge'])['memory'].transform(lambda x: (x + 1))
+    df['mem_bonus'] = 1 / (grouped['memory'].transform('mean') + 1)
 
     # 错误类型扣减（假设完全正确得分为1，否则为0）
-    correct_state = 'Absolutely_Correct'  # 假设完全正确的状态名称为“完全正确”
-    df['error_type_penalty'] = df['state'].apply(lambda x: 1 if x == correct_state else 0)
+    correct_state = 'Absolutely_Correct'
+    df['error_type_penalty'] = df['state'].eq(correct_state).astype(int)
 
     # 尝试次数扣减（尝试次数越少越好）
-    df['test_num_penalty'] = df.groupby(['student_ID', 'knowledge'])['title_ID'].cumcount() + 1
+    df['test_num_penalty'] = grouped['title_ID'].cumcount() + 1
 
     # 排名加成（根据最终得分和提交次序）
     df['rank_bonus'] = df.groupby(['student_ID', 'knowledge', 'title_ID'])['time'].rank(method='dense', ascending=True)
 
     return df
+# def calculate_features(df):
+#     # 计算答题得分加成
+#     df['score_bonus'] = df['score']
+#     # 时间复杂度加成（假设timeconsume越小越好）
+#     df['tc_bonus'] = 1 / df.groupby(['student_ID', 'knowledge'])['timeconsume'].transform(lambda x: (x + 1))
+
+#     # 空间复杂度加成（假设memory越小越好）
+#     df['mem_bonus'] = 1 / df.groupby(['student_ID', 'knowledge'])['memory'].transform(lambda x: (x + 1))
+
+#     # 错误类型扣减（假设完全正确得分为1，否则为0）
+#     correct_state = 'Absolutely_Correct'  # 假设完全正确的状态名称为“完全正确”
+#     df['error_type_penalty'] = df['state'].apply(lambda x: 1 if x == correct_state else 0)
+
+#     # 尝试次数扣减（尝试次数越少越好）
+#     df['test_num_penalty'] = df.groupby(['student_ID', 'knowledge'])['title_ID'].cumcount() + 1
+
+#     # 排名加成（根据最终得分和提交次序）
+#     df['rank_bonus'] = df.groupby(['student_ID', 'knowledge', 'title_ID'])['time'].rank(method='dense', ascending=True)
+
+#     return df
 
 
 
-def parallel_calculate_features(df, num_workers=3):
+def parallel_calculate_features(df, num_workers=1):
     chunk_size = math.ceil(len(df) / num_workers)
     chunks = [df.iloc[i:i + chunk_size] for i in range(0, len(df), chunk_size)]
 

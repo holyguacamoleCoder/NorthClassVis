@@ -204,17 +204,14 @@ export default {
 
       lines.exit().remove()
     },
-    handleLineClick(d) {
-      this.toggleSelection(d.stu_id)
-    },
   },
   watch: {
-    getSelection: {
-      handler() {
-        this.updateLines()
-      },
-      deep: true
-    },
+    // getSelection: {
+    //   handler() {
+    //     this.updateLines()
+    //   },
+    //   deep: true
+    // },
     async getHadFilter() {
       console.log('had filter change!!PPPP')
       this.svg.selectAll('*').remove()

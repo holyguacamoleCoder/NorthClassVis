@@ -155,7 +155,7 @@ def get_question():
         return jsonify([title_data])
     elif knowledge is not None:
         # 如果指定了知识点，则返回该知识点下所有题目的数据
-        titles_data = us.get_titles_data_by_knowledge(merged_process_data(), knowledge, limit)
+        titles_data = pv.get_titles_data_by_knowledge(merged_process_data(), knowledge, limit)
         return jsonify(titles_data)
     else:
         # # 如果没有指定知识点或题目ID，则返回所有题目的数据
