@@ -50,11 +50,11 @@ export default {
     }
   },
   async created() {
-    // await this.getTreeData() // 初始化时获取学生数据
-    // this.loadInitialBatch() // 加载初始批次的数据
+    await this.getTreeData() // 初始化时获取学生数据
+    this.loadInitialBatch() // 加载初始批次的数据
   },
   mounted() {
-    // this.handleScroll() // 初始处理滚动事件
+    this.handleScroll() // 初始处理滚动事件
   },
   methods: {
     async getTreeData() {

@@ -33,13 +33,13 @@ export default {
   async mounted() {
     await this.getPortraitData()
     // 使用模拟数据
-    // let count = 0
-    // for(let key in this.JustClusterData){
-    //   if(this.JustClusterData[key] === count && count < 3){
-    //     this.toggleSelection(key)
-    //     count++
-    //   }
-    // }
+    let count = 0
+    for(let key in this.JustClusterData){
+      if(this.JustClusterData[key] === count && count < 3){
+        this.toggleSelection(key)
+        count++
+      }
+    }
   },
   computed: {
     ...mapGetters(['getSelection', 'getSelectionData', 'getColors', 'getHadFilter']),
@@ -62,8 +62,8 @@ export default {
       // console.log('getPortraitData')
       const { data } = await getClusters()
       this.PortraitData = data
-      // this.renderPortraitData()
-      // this.renderLabelBar()
+      this.renderPortraitData()
+      this.renderLabelBar()
       this.renderLabelRadar()
     },
     renderPortraitData() {
@@ -277,6 +277,12 @@ export default {
       
       const levels = 2
       const opcityCircles = 0.01
+      const features = Object.keys(this.PortraitData[0].knowledge)
+
+      const angleX = d3.scaleBand()
+          .domain(features)
+          .range([0, 2 * Math.PI])
+          .align(0)
       
       // 圆圈虚线
       labelG.selectAll('.level-radar')
@@ -289,8 +295,20 @@ export default {
         .style('fill-opacity', opcityCircles)
         .style('filter', 'url(#glow)')
         .style('stroke-dasharray', '9, 9')
+      // 直虚线
+      labelG.append('line')
+        .attr('class', 'radar-line')
+        .data(features)
+        .attr('x1', 0)
+        .attr('y1', 0)
+        .attr('x2', d => labelRadius * Math.sin(angleX(d)))
+        .attr('y2', d => labelRadius * Math.cos(angleX(d)))
+        .attr('class', 'line')
+        .style('stroke', '#CDCDCD')
+        .style('stroke-width', '1px')
+
       labelG.selectAll('.label-radar')
-        .data(knowledge)
+        .data(features)
         .join('g')
         .append('text')
         .attr('transform', d => `translate(${labelArc.centroid({ r1: labelRadius, r2: labelRadius * 1.2, index: knowledge.indexOf(d) })})`)

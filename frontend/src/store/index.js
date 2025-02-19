@@ -1,5 +1,5 @@
 import { createStore } from 'vuex'
-import { getClusters } from '@/api/WeekView'
+import { getClusters } from '@/api/PortraitView'
 
 export default createStore({
   state: {

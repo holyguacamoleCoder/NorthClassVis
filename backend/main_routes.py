@@ -4,8 +4,11 @@ from tools import ParallelView as pv
 from tools import StudentView as sv
 from tools import QuestionView as qv
 from tools import WeekView as wv
+from routes.cluster_routes import ClusterRoutes
+from routes.student_routes import StudentRoutes
 
 # ----- 总配置部分--------
+# ----- 单例模式 ------
 config = {
     # 创建蓝图对象
     'api_bp' : Blueprint('api', __name__),
@@ -60,71 +63,6 @@ def merge_classes():
     
     return jsonify(response)
 
-
-# ------------学生视图部分-----------
-@api_bp.route('/api/submissions', methods=['GET'])
-def get_submissions():
-    df = config['all_class_df']
-    if df is None:
-        return jsonify({"error": "Failed to load submissions data."}), 500
-
-    # 获取查询参数
-    student_id = request.args.get('studentID')
-    title_id = request.args.get('titleID')
-    limit = request.args.get('limit')
-
-    # 过滤数据
-    filtered_records = df.copy()
-    if student_id:
-        try:
-            student_id = int(student_id)
-            filtered_records = filtered_records[filtered_records['student_ID'] == student_id]
-        except ValueError:
-            return jsonify({"error": "Invalid studentID parameter."}), 400
-    if title_id:
-        try:
-            title_id = int(title_id)
-            filtered_records = filtered_records[filtered_records['title_ID'] == title_id]
-        except ValueError:
-            return jsonify({"error": "Invalid titleID parameter."}), 400
-
-    # 如果指定了 limit 参数，则返回指定数量的记录
-    if limit:
-        try:
-            limit = int(limit)
-            filtered_records = filtered_records.head(limit)
-        except ValueError:
-            return jsonify({"error": "Invalid limit parameter."}), 400
-
-    # 将DataFrame转换为字典列表
-    records_list = filtered_records.to_dict(orient='records')
-
-    # 返回JSON响应
-    return jsonify(records_list)
-
-@api_bp.route('/api/tree_data', methods=['GET'])
-def get_tree_data():
-    df = config['all_class_df']
-    limit = request.args.get('limit')
-
-    if df is None:
-        return jsonify({'error': 'Failed to load data.'}), 500
-
-    # 转换数据
-    student_info = fs.load_data(fs.studentFilename)
-    tree_data = sv.transform_data(df, student_info)
-    
-    if limit:
-        try:
-            limit = int(limit)
-            # 限制根节点下的子节点数量
-            tree_data['children'] = tree_data['children'][:limit]
-        except ValueError:
-            return jsonify({"error": "Invalid limit parameter."}), 400
-
-
-    return jsonify(tree_data)
-
 # ----------------问题视图部分------------------
 def merged_process_data():
     return fs.process_non_numeric_values(fs.merge_data(config['all_class_df'], fs.titleFilename))
@@ -162,33 +100,18 @@ def get_question():
         all_titles_data = qv.get_all_titles_data(merged_process_data(), limit)
         return jsonify(all_titles_data)
     
-
+# ----------------画像视图部分 雷达图--------------------
 @api_bp.route('/api/calculate_scores', methods=['GET'])
 def calculate_scores():
     # 计算所有学生的特征
     all_submit_records = pv.calculate_features(merged_process_data())
     # print(all_submit_records['tc_bonus'])
 
-    # 计算每个学生的总分
-    final_scores = pv.calc_final_scores(all_submit_records, ['student_ID', 'knowledge'])
+    # 计算每个学生的总分，不区分知识点
+    final_scores = pv.calc_final_scores(all_submit_records, ['student_ID'])
     result = final_scores.to_dict(orient='index')
     
     return jsonify(result)
-
-# ----------------聚类分析部分------------------
-@api_bp.route('/api/cluster', methods=['get'])
-def cluster_analysis():
-    stu = request.args.get('stu')
-    every = request.args.get('every')
-
-    all_submit_records = merged_process_data()
-    final_scores = pv.calc_final_scores(pv.parallel_calculate_features(all_submit_records), ['student_ID', 'knowledge'])
-    target_data = final_scores.to_dict(orient='index')
-
-    result = pv.cluster_analysis(target_data, stu = stu, every = every)
-    # print(result)
-    return jsonify(result)
-
 
 
 # ----------------周图部分------------------
@@ -204,3 +127,11 @@ def week_analysis():
     result = wv.transform_data_for_visualization(result)
     # print(result)
     return jsonify(result)
+
+# 注册 student 蓝图
+student_routes = StudentRoutes(config['all_class_df'])
+api_bp.register_blueprint(student_routes.student_bp, url_prefix='/api')
+
+# 注册 cluster 蓝图
+cluster_routes = ClusterRoutes(merged_process_data)
+api_bp.register_blueprint(cluster_routes.cluster_bp, url_prefix='/api')

@@ -17,7 +17,7 @@
 import { mapActions, mapGetters } from 'vuex'
 
 export default {
-  name: 'ScatterView',
+  name: 'ParallelView',
   data() {
     return {
       lines: null,
@@ -58,8 +58,6 @@ export default {
           .attr("height", height)
       this.g = this.svg.append("g")
           .attr("transform", `translate(${margin.left},${margin.top})`)
-
-     
 
       // 获取维度
       if (Object.keys(this.getClusterData).length === 0) {
