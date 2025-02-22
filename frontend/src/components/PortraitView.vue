@@ -15,6 +15,7 @@
 
 <script>
 import { mapGetters, mapActions } from 'vuex'
+// import mockData from '@/mock/mockData.json'
 import { getClusters } from '@/api/PortraitView'
 
 export default {
@@ -28,18 +29,19 @@ export default {
     }
   },
   created() {
-    this.hadRender = [false, false, false]  
+    this.hadRender = [false, false, false]
+    // this.PortraitData = mockData
   },
   async mounted() {
     await this.getPortraitData()
     // 使用模拟数据
-    let count = 0
-    for(let key in this.JustClusterData){
-      if(this.JustClusterData[key] === count && count < 3){
-        this.toggleSelection(key)
-        count++
-      }
-    }
+    // let count = 0
+    // for(let key in this.JustClusterData){
+    //   if(this.JustClusterData[key] === count && count < 3){
+    //     this.toggleSelection(key)
+    //     count++
+    //   }
+    // }
   },
   computed: {
     ...mapGetters(['getSelection', 'getSelectionData', 'getColors', 'getHadFilter']),
@@ -62,23 +64,45 @@ export default {
       // console.log('getPortraitData')
       const { data } = await getClusters()
       this.PortraitData = data
+      
       this.renderPortraitData()
       this.renderLabelBar()
       this.renderLabelRadar()
     },
-    renderPortraitData() {
+    async renderPortraitData() {
       const d3 = this.$d3
-      let useData = []
-      for (let i = 0; i < 3; i++) {
-        useData.push(this.PortraitData[i])
-      }    
+      let useData = Object.values(this.PortraitData)
       useData.forEach((clusterData, i) => {
+        const data = clusterData
         const kind = clusterData.cluster
-        const data = Object.entries(clusterData.knowledge).map(d => ({
+        const knowledge_dimension = Object.keys(data.knowledge)
+        const knowledge_data = Object.entries(data.knowledge).map(d => ({
           knowledge: d[0],
           value: d[1],
           index: d[1],
         }))
+        // let radar_dimension = Object.keys(data.radar)
+        // let radar_data = Object.entries(data.radar).map(d => ({
+        //   features: d[0],
+        //   value: d[1],
+        //   index: d[1],
+        // }))
+        const radar_dimension = [
+          'Error-Free Bonus', 
+          'Test-Free Bonus',
+          'Score',
+          'Explore', 
+          'Mem Bonus', 
+          'TC Bonus', 
+          'Rank',
+          'Enthusiasm', 
+        ]
+        const radar_data = radar_dimension.map(feature => ({
+          features: feature,
+          value: data.radar[feature],
+          index: data.radar[feature],
+        }))
+        
         const height = 360
         const width = 360
         const radius = Math.min(height, width) / 2
@@ -94,9 +118,10 @@ export default {
         const g = svg.append('g')
           .attr('transform', `translate(${center.X}, ${center.Y})`)
         this.ourGroup[i] = g
-      
-        const angleX = d3.scaleBand()
-          .domain(data.map(d => d.knowledge))
+        
+        
+        const angleCircularBar = d3.scaleBand()
+          .domain(knowledge_dimension)
           .range([0, 2 * Math.PI])
           .align(0)
       
@@ -107,8 +132,8 @@ export default {
         this.arc = d3.arc()
           .innerRadius(innerRadius)
           .outerRadius(d => radiusY(d.value))
-          .startAngle(d => angleX(d.knowledge))
-          .endAngle(d => angleX(d.knowledge) + angleX.bandwidth())
+          .startAngle(d => angleCircularBar(d.knowledge))
+          .endAngle(d => angleCircularBar(d.knowledge) + angleCircularBar.bandwidth())
           .padAngle(0.01)
           .padRadius(innerRadius)
       
@@ -129,37 +154,41 @@ export default {
           .style('filter', 'url(#glow)')
           .style('stroke-dasharray', '4, 4')
       
-        const knowledge = Object.keys(this.PortraitData[0].knowledge)
+        // const knowledge = Object.keys(this.PortraitData[0].knowledge)
         const axis = axisGrid.selectAll('.axis')
-          .data(knowledge)
+          .data(knowledge_dimension)
           .join('g')
           .attr('class', 'axis')
         // 直虚线
         axis.append('line')
           .attr('x1', 0)
           .attr('y1', 0)
-          .attr('x2', d => radiusY(1) * Math.sin(angleX(d)))
-          .attr('y2', d => -radiusY(1) * Math.cos(angleX(d)))
+          .attr('x2', d => radiusY(1) * Math.sin(angleCircularBar(d)))
+          .attr('y2', d => -radiusY(1) * Math.cos(angleCircularBar(d)))
           .attr('class', 'line')
           .style('stroke', '#CDCDCD')
           .style('stroke-width', '1px')
           .style('stroke-dasharray', '4, 3')
       
-        axis.append('text')
-      
+        // 绘制聚类柱状图
         g.selectAll('path')
-          .data(data)
+          .data(knowledge_data)
           .join('path')
           .attr('fill', `${this.getColors[kind]}`)
           .attr('d', this.arc)
 
         // 绘制内圈雷达图
+        const angleRadar = d3.scaleBand()
+          .domain(radar_dimension)
+          .range([0, 2 * Math.PI])
+          .align(0)
         const radiusR = d3.scaleLinear()
           .domain([0, 1])
           .range([0, innerRadius])
         const radarLine = d3.lineRadial()
           .radius(d => radiusR(d.value))
-          .angle(d => angleX(d.knowledge))
+          .angle(d => angleRadar(d.features))
+
         // 创建渐变
         const gradientId = `gradient-${kind}`
         svg.append('defs')
@@ -179,7 +208,8 @@ export default {
           .attr('stop-color', d => d.color)
           .attr('stop-opacity', d => d.opcityCircles)
         // 确保雷达图路径闭合
-        const closedData = [...data, data[0]]
+        
+        const closedData = [...radar_data, radar_data[0]]
         g.append('path')
           .datum(closedData)
           .attr('fill',  `url(#${gradientId})`)
@@ -191,16 +221,19 @@ export default {
     },
     renderLabelBar() {
      const d3 = this.$d3
-     const height = 165
-     const width = height
+     const height = 200
+     const width = 270
      const boxHeight = 50
-     const labelRadius = Math.min(height, width) / 3
-     const labelCenter = { X: width / 2, Y: height / 2 }
+     const labelRadius = 55
+     const labelCenter = { 
+       X: width / 2,
+       Y: height / 2
+      }
      const svg = d3.select('#label-bar')
        .html('') // Clear previous content
        .append('svg')
-       .attr('width', height)
-       .attr('height', width)
+       .attr('width', width)
+       .attr('height', height)
        .attr('transform', `translate(${5},${boxHeight - height / 2})`)
      const labelG = svg.append('g')
        .attr('class', 'label-bar')
@@ -216,9 +249,10 @@ export default {
        .attr('transform', (d, i) => `translate(0, ${(i - 1) * 12})`)
        .text(d => d)
     
-     const knowledge = Object.keys(this.PortraitData[0].knowledge)
-     const knowledgeNum = knowledge.length
-     const labelData = knowledge.map((_, i) => ({ r1: labelRadius * 0.8, r2: labelRadius, index: i }))
+     const knowledge_dimension = Object.keys(Object.values(this.PortraitData)[0].knowledge)
+
+     const knowledgeNum = knowledge_dimension.length
+     const labelData = knowledge_dimension.map((_, i) => ({ r1: labelRadius * 0.8, r2: labelRadius, index: i }))
     
      const labelArc = d3.arc()
        .innerRadius(d => d.r1)
@@ -236,51 +270,52 @@ export default {
        .attr('d', labelArc)
     
      labelG.selectAll('.label-bar')
-       .data(knowledge)
+       .data(knowledge_dimension)
        .join('g')
        .append('text')
-       .attr('transform', d => `translate(${labelArc.centroid({ r1: labelRadius, r2: labelRadius * 1.2, index: knowledge.indexOf(d) })})`)
-       .attr('text-anchor', (d, i) => i > 3 ? 'end' : 'start')
-       .attr('font-size', '0.7em')
+       .attr('transform', d => `translate(${labelArc.centroid({ r1: labelRadius, r2: labelRadius * 1.2, index: knowledge_dimension.indexOf(d) })})`)
+       .attr('text-anchor', (d, i) => i >= knowledgeNum / 2 ? 'end' : 'start')
+       .attr('font-size', '0.6em')
        .text(d => d)
      },
     renderLabelRadar() {
       const d3 = this.$d3
-      const height = 165
-      const width = height
+      const height = 200
+      const width = 270
       const boxHeight = 50
-      const labelRadius = Math.min(height, width) / 3
-      const labelCenter = { X: width / 2, Y: height / 2 }
+      const labelRadius = 55
+      const labelCenter = { 
+        X: width / 2,
+        Y: height / 2 
+      }
       const svg = d3.select('#label-radar')
         .html('') // Clear previous content
         .append('svg')
-        .attr('width', height)
-        .attr('height', width)
+        .attr('width', width)
+        .attr('height', height)
         .attr('transform', `translate(${5},${boxHeight - height / 2})`)
       const labelG = svg.append('g')
         .attr('class', 'label-radar')
         .attr('transform', `translate(${labelCenter.X}, ${labelCenter.Y})`)
       
       
-      const knowledge = Object.keys(this.PortraitData[0].knowledge)
-      const knowledgeNum = knowledge.length
-      // const labelData = knowledge.map((_, i) => ({ r1: labelRadius * 0.8, r2: labelRadius, index: i }))
-      
-      const labelArc = d3.arc()
-        .innerRadius(d => d.r1)
-        .outerRadius(d => d.r2)
-        .startAngle(d => d.index * 2 * Math.PI / knowledgeNum)
-        .endAngle(d => (1 + d.index) * 2 * Math.PI / knowledgeNum)
-        .padAngle(0.04)
-        .padRadius(labelRadius * 0.8)
-      
-      
+      // let features_dimension = Object.keys(Object.values(this.PortraitData)[0].radar)
+      // 调整渲染顺序
+      const features_dimension = [
+          'Error-Free Bonus', 
+          'Test-Free Bonus',
+          'Score',
+          'Explore', 
+          'Mem Bonus', 
+          'TC Bonus', 
+          'Rank',
+          'Enthusiasm', 
+        ]
       const levels = 2
       const opcityCircles = 0.01
-      const features = Object.keys(this.PortraitData[0].knowledge)
 
       const angleX = d3.scaleBand()
-          .domain(features)
+          .domain(features_dimension)
           .range([0, 2 * Math.PI])
           .align(0)
       
@@ -296,25 +331,36 @@ export default {
         .style('filter', 'url(#glow)')
         .style('stroke-dasharray', '9, 9')
       // 直虚线
-      labelG.append('line')
+      const axis = labelG.selectAll('.axis-radar')
+        .data(features_dimension)
+        .join('g')
+
+      axis.append('line')
         .attr('class', 'radar-line')
-        .data(features)
         .attr('x1', 0)
         .attr('y1', 0)
-        .attr('x2', d => labelRadius * Math.sin(angleX(d)))
-        .attr('y2', d => labelRadius * Math.cos(angleX(d)))
-        .attr('class', 'line')
-        .style('stroke', '#CDCDCD')
+        .attr('x2', d => labelRadius * Math.cos(angleX(d)))
+        .attr('y2', d => - labelRadius * Math.sin(angleX(d)))
+        .style('stroke', '#000')
         .style('stroke-width', '1px')
-
-      labelG.selectAll('.label-radar')
-        .data(features)
+        
+        labelG.selectAll('.label-radar')
+        .data(features_dimension)
         .join('g')
         .append('text')
-        .attr('transform', d => `translate(${labelArc.centroid({ r1: labelRadius, r2: labelRadius * 1.2, index: knowledge.indexOf(d) })})`)
-        .attr('text-anchor', (d, i) => i > 3 ? 'end' : 'start')
-        .attr('font-size', '0.7em')
-        .text(d => d)
+        .attr('transform', d => {
+          const x = labelRadius * Math.sin(angleX(d))
+          const y =  - labelRadius * Math.cos(angleX(d))
+          return `translate(${x}, ${y})`
+        })
+        .attr('text-anchor', (d, i) => {
+          const angle = (i / features_dimension.length) * 2 * Math.PI
+          if (angle === 0 || angle ===  Math.PI) return 'middle'
+          if (angle < Math.PI || angle > 2 * Math.PI) return 'start'
+          else return 'end'
+        })
+        .attr('font-size', '0.6em')
+        .text((d) => d )
     },
     renderSelectData() {
       if (this.filteredSelectionData.length === 0) return
@@ -399,30 +445,27 @@ export default {
     }
   }
   @labelsHeight: 500px;
-  @labelWidth: 50px;
+  @labelWidth: 90px;
   .labels {
     height: @labelsHeight;
     width: @labelWidth;
     z-index: 5;
-    top: 50px;
-    right: 140px;
+    top: 100px;
+    right: 165px;
     position: absolute;
     margin: 10px 0;
-    background-color: blue;
+    //background-color: blue;
     @labelHeight: @labelsHeight / 2;
-    .label-bar {
+    #label-bar {
       height: @labelHeight;
       width: @labelWidth;
-      border: 1px solid #ccc;
-      background-color: red;
+      //background-color: red;
     }
 
-    .label-radar {
-      margin-top: 150px;
+    #label-radar {
       height: @labelHeight;
       width: @labelWidth;
-      border: 1px solid #ccc;
-      background-color: green;
+      //background-color: green;
     }
   }
 }

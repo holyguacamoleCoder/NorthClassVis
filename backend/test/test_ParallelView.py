@@ -7,8 +7,8 @@ import os
 current_dir = os.path.dirname(os.path.abspath(__file__)) # 获取当前文件的目录
 backend_dir = os.path.dirname(current_dir)      # 获取 backend 目录的路径
 sys.path.append(backend_dir)                      # 将 tools 目录添加到 sys.path
-from tools.ParallelView import *
-from tools.fs import *
+from backend.tools.features import *
+from backend.tools.fileSystem import *
 
 class TestParallelView:
     def test_calc_matrix():

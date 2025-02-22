@@ -4,28 +4,21 @@ from sklearn.preprocessing import MinMaxScaler
 import pandas as pd
 
 class ClusterAnalysis:
-    
-    # def __init__(self, students_data, n_clusters=3):
-    #     self.students_data = students_data
-    #     self.n_clusters = n_clusters
-    #     self.features_array = self.extract_features(students_data)
-    #     self.kmeans = self.create_kmeans_model(self.features_array, n_clusters)
-
     _instance = None
 
     def __new__(cls, students_data=None, n_clusters=3):
-        if not cls._instance or students_data != cls._instance.students_data:
+        if not cls._instance or students_data != cls._instance.raw_data:
             cls._instance = super(ClusterAnalysis, cls).__new__(cls)
-            cls._instance.students_data = students_data
+            cls._instance.raw_data = students_data
             cls._instance.n_clusters = n_clusters
-            cls._instance.features_array = cls._instance.extract_features(students_data)
+            cls._instance.features_array = cls._instance.extract_features(cls._instance.raw_data)
             cls._instance.kmeans = cls._instance.create_kmeans_model(cls._instance.features_array, n_clusters)
         return cls._instance
 
-    def extract_features(self, students_data):
+    def extract_features(self, raw_data):
         # 提取特征向量
         features = []
-        for student_id, values in students_data.items():
+        for student_id, values in raw_data.items():
             if isinstance(values, dict):
                 feature_vector = list(values.values())
                 features.append(feature_vector)
@@ -44,24 +37,27 @@ class ClusterAnalysis:
         # 输出每个学生的聚类分配
         predictions = self.kmeans.predict(self.features_array)
         result = {}
-        for student_id, prediction in zip(self.students_data.keys(), predictions):
+        for student_id, prediction in zip(self.raw_data.keys(), predictions):
             result[student_id] = {
-                "knowledge": self.students_data[student_id],
+                "knowledge": self.raw_data[student_id],
                 "cluster": int(prediction)
             }
         return result
 
-    def get_cluster_center_students(self):
-        # 获取每个聚类中心的学生对象
+    def get_cluster_center_students_ID(self):
+        # 获取每个聚类中心最近的学生ID
         cluster_centers = self.kmeans.cluster_centers_
         cluster_center_students = []
 
-        students_data_df = pd.DataFrame(self.students_data).T
+        raw_data_df = pd.DataFrame(self.raw_data).T
 
-        for center in cluster_centers:
+        for center_index, center in enumerate(cluster_centers):
             # 找到距离每个聚类中心最近的学生
-            closest_student = students_data_df.apply(lambda row: np.linalg.norm(row - center), axis=1).idxmin()
-            cluster_center_students.append(closest_student)
+            closest_student = raw_data_df.apply(lambda row: np.linalg.norm(row - center), axis=1).idxmin()
+            cluster_center_students.append({
+                'student_ID': closest_student,
+                'cluster': center_index
+            })
 
         return cluster_center_students
 
@@ -72,7 +68,7 @@ class ClusterAnalysis:
         for i, center in enumerate(cluster_centers):
             result[str(i)] = {
                 "cluster": i,
-                "knowledge": dict(zip(self.students_data[next(iter(self.students_data))].keys(), center))
+                "knowledge": dict(zip(self.raw_data[next(iter(self.raw_data))].keys(), center))
             }
         return result
 

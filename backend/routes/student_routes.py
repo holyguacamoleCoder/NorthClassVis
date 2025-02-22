@@ -1,6 +1,5 @@
-# backend/student_routes.py
 from flask import Blueprint, request, jsonify
-from tools import fs as fs
+from tools import fileSystem as fileSystem
 from tools import StudentView as sv
 
 class StudentRoutes:
@@ -60,7 +59,7 @@ class StudentRoutes:
             return jsonify({'error': 'Failed to load data.'}), 500
 
         # 转换数据
-        student_info = fs.load_data(fs.studentFilename)
+        student_info = fileSystem.load_data(fileSystem.studentFilename)
         tree_data = sv.transform_data(df, student_info)
         
         if limit:
@@ -72,3 +71,6 @@ class StudentRoutes:
                 return jsonify({"error": "Invalid limit parameter."}), 400
 
         return jsonify(tree_data)
+    
+    def update_all_class_df(self, new_all_class_df):
+        self.all_class_df = new_all_class_df

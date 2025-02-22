@@ -1,6 +1,6 @@
 from flask import Flask
 from flask_cors import CORS
-from main_routes import api_bp
+from routes.main_routes import api_bp
 
 app = Flask(__name__)
 # 使用 Flask-Cors 自动处理 CORS 头部

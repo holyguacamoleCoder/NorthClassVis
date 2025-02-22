@@ -1,5 +1,5 @@
 import { createStore } from 'vuex'
-import { getClusters } from '@/api/PortraitView'
+import { getClusterEveryone } from '@/api/ParallelView.js'
 
 export default createStore({
   state: {
@@ -37,7 +37,7 @@ export default createStore({
   actions: {
     async fetchClusterData(context) {
       const startTime = performance.now(); // 记录开始时间
-      const { data } = await getClusters()
+      const { data } = await getClusterEveryone()
       // console.log('data', data)
       const RData = {}
       for (let key in data){

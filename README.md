@@ -4,10 +4,9 @@ ChinaVis 2024数据可视化竞赛作品复现
 
 ## 项目简介
 
-本项目是2024年数据可视化竞赛的参赛作品非1:1复现(仅有大致原作成品参考，无原型图、设计稿等)，旨在基于可视化作品学习**D3.js框架**、**前端渲染**与**后端计算**的相关知识。项目主要使用flask、Vue2(包含Vuex)等技术, 还涉及简单的pytest用法。
+本项目是2024年数据可视化竞赛的参赛作品非1:1复现(仅有大致原作成品参考，无原型图、设计稿等)，旨在基于可视化作品学习**D3.js框架**、**前端渲染**与**后端计算**的相关知识，同时学习到一些简单的软件设计方法。项目主要使用flask、Vue2(包含Vuex)等技术, 还涉及简单的pytest用法。
 
-优化方法目前正在学习, 学习记录、学习资源见**notes**文件夹
-各位也可以借助LLM进行询问，自主学习
+笔者目前正在学习, 学习记录、学习资源见**notes**文件夹
 
 ## 项目结构
 
@@ -24,10 +23,9 @@ NorthClassVision/
 │   ├── test/ # 测试文件
 │   │   ├── time_measure.py
 │   │   └──mock_data.py
-│   ├── utils/ # 工具函数
-│   │   ├── fs.py
-│   │   └── utils.py
-│   ├── routes.py # flask路由配置
+│   ├── routes/ # 路由实现
+│   ├── tools/ # 工具函数实现
+│   ├── main_routes.py # flask路由综合配置
 │   └── app.py
 ├── frontend/ # 前端代码
 │   ├── public/
@@ -46,7 +44,7 @@ NorthClassVision/
 ├── notes/ # 学习笔记
 │   ├── study_recourse.md
 │   ├── D3_study.md
-│   ├── optimization_journey.md
+│   └── optimization_journey.md
 ├── problem.md # 竞赛内容，含官方数据集下载链接
 └── README.md
 ```

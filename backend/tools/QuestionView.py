@@ -1,6 +1,5 @@
 import pandas as pd
 # -------------问题视图部分------------------------
-
 # 题目-时间轴数据处理
 def process_timeline_data(merged_data, title_id):
     timeline_data = merged_data[merged_data['title_ID'] == title_id].copy()
