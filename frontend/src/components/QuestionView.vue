@@ -12,48 +12,50 @@
             {{ displayButton }}
           </button>
         </template>
-        <!-- contents display in dropdown -->
-        <form id="checkboxs" name="myForm">
-          <div class="selectK" v-for="(item, index) in uniqueKnowledge" :key="index" style="border-radius: 5px; padding: 5px">
-            <input 
+        <DropdownContent>
+          <!-- contents display in dropdown -->
+          <form id="checkboxs" name="myForm">
+            <div class="selectK" v-for="(item, index) in uniqueKnowledge" :key="index" style="border-radius: 5px; padding: 5px">
+              <input 
               type="checkbox"
               :name="item"
               v-model="selectedKnowledge[item]"
               @change="handleKnowledgeCheck"
-            />
-            <label
+              />
+              <label
               style="list-style: none;
-                     width: 80px;
-                     border-bottom: 1px solid #ccc;
-                     margin-top: 5px;
-                     padding-bottom: 8px;
-                     text-align: center;"
-            >
+              width: 80px;
+              border-bottom: 1px solid #ccc;
+              margin-top: 5px;
+              padding-bottom: 8px;
+              text-align: center;"
+              >
               {{ item }}
             </label>
           </div>
           
           <div class="all" style="border-radius: 5px; padding: 5px">
             <input 
-              name="all"
-              type="checkbox"
-              class="knowledge-list"
-              v-model="selectAllKnowledge"
-              @change="handleSelectAllKnowledge"
+            name="all"
+            type="checkbox"
+            class="knowledge-list"
+            v-model="selectAllKnowledge"
+            @change="handleSelectAllKnowledge"
             />
             <label 
-              for="all"
-              style="list-style: none;
-                     width: 80px;
-                     border-bottom: 1px solid #ccc;
-                     margin-top: 5px;
-                     padding-bottom: 8px;
-                     text-align: center;"
+            for="all"
+            style="list-style: none;
+            width: 80px;
+            border-bottom: 1px solid #ccc;
+            margin-top: 5px;
+            padding-bottom: 8px;
+            text-align: center;"
             >
-              All
-            </label>
-          </div>
-        </form>
+            All
+          </label>
+        </div>
+          </form>
+        </DropdownContent>
       </Dropdown>
       <div class="filter">Knowledge:</div>
     </div>
@@ -69,13 +71,14 @@ import { getQuestions } from '@/api/QuestionView'
 import { mapGetters } from 'vuex'
 import Simplebar from 'simplebar-vue'
 import 'simplebar-vue/dist/simplebar.min.css'
-import Dropdown from 'v-dropdown'
+import { Dropdown, DropdownContent } from 'v-dropdown'
 
 export default {
   name: 'QuestionView',
   components: {
     Simplebar,
-    Dropdown
+    Dropdown,
+    DropdownContent,
   },
   data() {
     return {
@@ -553,7 +556,7 @@ export default {
     .difficulty{
       margin-left: 20px;
     }
-    .v-dropdown-trigger {
+    .dd-trigger {
       float: right;
       button {
         border: 0;
@@ -571,5 +574,8 @@ export default {
 }
 .candy-stick {
   fill: url(#gradient-stick);
+}
+button.dd-default-trigger.dd-rounded--medium{
+  padding: 0;
 }
 </style>

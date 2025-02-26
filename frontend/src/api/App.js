@@ -1,11 +1,11 @@
 import request from '@/utils/request'
-
-export const filterClasses = (checkoutClasses) => {
+import throttle from '@/utils/throttle'
+export const filterClasses = throttle((checkoutClasses) => {
   return request.post('/filter_classes', {
     classes: checkoutClasses
   })
-}
+})
 
-export const getFilter = () => {
+export const getFilter = throttle(() => {
   return request.get('/filter')
-}
+})

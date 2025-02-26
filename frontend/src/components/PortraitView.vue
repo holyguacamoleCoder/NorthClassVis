@@ -9,6 +9,7 @@
     <div class="labels">
       <div id="label-bar"></div>
       <div id="label-radar"></div>
+      <div id="label-legend"></div>
     </div>
   </div>
 </template>
@@ -16,7 +17,7 @@
 <script>
 import { mapGetters, mapActions } from 'vuex'
 // import mockData from '@/mock/mockData.json'
-import { getClusters } from '@/api/PortraitView'
+import { getClusterStudents } from '@/api/PortraitView'
 
 export default {
   name: 'PortraitView',
@@ -26,6 +27,16 @@ export default {
       ourGroup: [],
       arc: null,
       hadRender: [false, false, false],
+      radar_dimension: [
+          'Error-Free Bonus', 
+          'Test-Free Bonus',
+          'Score',
+          'Explore', 
+          'Mem Bonus', 
+          'TC Bonus', 
+          'Rank',
+          'Enthusiasm', 
+        ] //便于控制指标渲染顺序
     }
   },
   created() {
@@ -34,21 +45,10 @@ export default {
   },
   async mounted() {
     await this.getPortraitData()
-    // 使用模拟数据
-    // let count = 0
-    // for(let key in this.JustClusterData){
-    //   if(this.JustClusterData[key] === count && count < 3){
-    //     this.toggleSelection(key)
-    //     count++
-    //   }
-    // }
+  
   },
   computed: {
     ...mapGetters(['getSelection', 'getSelectionData', 'getColors', 'getHadFilter']),
-    //暂时用于提供测试数据
-    JustClusterData(){
-      return this.$store.state.justClusterData
-    },
     filteredSelectionData() {
       if (this.getSelectionData.length < 3) return []
       let useData = []
@@ -62,12 +62,14 @@ export default {
     ...mapActions(['toggleSelection']),
     async getPortraitData() {
       // console.log('getPortraitData')
-      const { data } = await getClusters()
+      const { data } = await getClusterStudents()
+      console.log('PortraitData', data)
       this.PortraitData = data
       
-      this.renderPortraitData()
+      // this.renderPortraitData()
       this.renderLabelBar()
       this.renderLabelRadar()
+      this.renderLegend()
     },
     async renderPortraitData() {
       const d3 = this.$d3
@@ -87,16 +89,7 @@ export default {
         //   value: d[1],
         //   index: d[1],
         // }))
-        const radar_dimension = [
-          'Error-Free Bonus', 
-          'Test-Free Bonus',
-          'Score',
-          'Explore', 
-          'Mem Bonus', 
-          'TC Bonus', 
-          'Rank',
-          'Enthusiasm', 
-        ]
+        const radar_dimension = this.radar_dimension
         const radar_data = radar_dimension.map(feature => ({
           features: feature,
           value: data.radar[feature],
@@ -301,16 +294,7 @@ export default {
       
       // let features_dimension = Object.keys(Object.values(this.PortraitData)[0].radar)
       // 调整渲染顺序
-      const features_dimension = [
-          'Error-Free Bonus', 
-          'Test-Free Bonus',
-          'Score',
-          'Explore', 
-          'Mem Bonus', 
-          'TC Bonus', 
-          'Rank',
-          'Enthusiasm', 
-        ]
+      const features_dimension = this.radar_dimension
       const levels = 2
       const opcityCircles = 0.01
 
@@ -361,6 +345,43 @@ export default {
         })
         .attr('font-size', '0.6em')
         .text((d) => d )
+    },
+    renderLegend() {
+      const d3 = this.$d3
+      const height = 100
+      const width = 200
+      const boxHeight = 50
+      const svg = d3.select('#label-legend')
+        .html('') // Clear previous content
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height)
+        .attr('transform', `translate(${60},${boxHeight - height / 2})`)
+      
+      // Create legend items
+      const legendItems = [
+        { text: 'features for cluster', lineStyle: 'solid' },
+        { text: 'features', lineStyle: 'dashed' }
+      ]
+
+      legendItems.forEach((item, index) => {
+        const y = index * 20 + 10
+        svg.append('line')
+          .attr('x1', 0)
+          .attr('y1', y)
+          .attr('x2', 80)
+          .attr('y2', y)
+          .style('stroke', 'black')
+          .style('stroke-width', 1)
+          .style('stroke-dasharray', item.lineStyle === 'dashed' ? '4, 4' : '')
+        
+        svg.append('text')
+          .attr('x', 90)
+          .attr('y', y + 5)
+          .text(item.text)
+          .style('font-size', '0.6em')
+          .style('text-anchor', 'start')
+      })
     },
     renderSelectData() {
       if (this.filteredSelectionData.length === 0) return
@@ -453,9 +474,9 @@ export default {
     top: 100px;
     right: 165px;
     position: absolute;
-    margin: 10px 0;
+    margin: 30px 0;
     //background-color: blue;
-    @labelHeight: @labelsHeight / 2;
+    @labelHeight: calc(@labelsHeight / 3);
     #label-bar {
       height: @labelHeight;
       width: @labelWidth;

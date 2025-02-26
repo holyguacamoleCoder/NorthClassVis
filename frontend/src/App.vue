@@ -14,6 +14,7 @@
           </button>
         </template>
         <!-- contents display in dropdown -->
+        <DropdownContent>
           <form id="checkboxs" name="myForm">
            <div class="" v-for="(item,index) in CheckoutClasses" :key="index"  
               style="border-radius: 5px; padding: 5px; width:180px;">
@@ -76,7 +77,7 @@
                 "
             >Confirm filter</button>
           </form>
-          
+        </DropdownContent>  
           
       </Dropdown>
     </div>
@@ -129,7 +130,7 @@ import QuestionView from './components/QuestionView.vue'
 import WeekView from './components/WeekView.vue'
 import StudentView from './components/StudentView.vue'
 import { mapActions, mapGetters } from 'vuex'
-import Dropdown from 'v-dropdown'
+import { Dropdown, DropdownContent } from 'v-dropdown'
 import { filterClasses, getFilter } from './api/App'
 export default {
   components: {
@@ -138,7 +139,8 @@ export default {
     QuestionView,
     WeekView,
     StudentView,
-    Dropdown
+    Dropdown,
+    DropdownContent
   },
   data() {
     return {
@@ -238,7 +240,7 @@ export default {
     outline: none;
     color: #fff;
     font-size: 20px;
-    .v-dropdown-trigger{
+    .dd-trigger{
       float: right;
       button{
         border: 0;
