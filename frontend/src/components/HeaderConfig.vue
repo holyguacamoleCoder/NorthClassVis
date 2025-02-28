@@ -1,8 +1,10 @@
 <template>
 <div class="header-container">
   <div class="left-label">
+    <div class="icon-radar">
+      <IconBlock/>
+    </div>
     <div class="title">NorthClassVision</div>
-    <div class="icon-radar">icon</div>
   </div>
   
   <div class="right-label">
@@ -92,9 +94,9 @@
         <div class="text-content">All</div>
       </div>
     </div>
-    <div class="config-button">
-      icon
-    </div>
+    <div class="config-button"></div>
+    <div class="cluster-button">CLUSTER</div>
+    <ConfigPanel/>
   </div>
 
 </div>
@@ -102,10 +104,14 @@
 </template>
 
 <script>
+import IconBlock from '@/components/IconBlock.vue'
+import ConfigPanel from './ConfigPanel.vue'
 import { Dropdown, DropdownContent } from 'v-dropdown'
 export default {
   name: 'HeaderConfig',
   components: {
+    IconBlock,
+    ConfigPanel,
     Dropdown,
     DropdownContent
   },
@@ -113,8 +119,10 @@ export default {
     return {
     }
   },
-
+  created(){
+  },
   methods: {
+   
   }
 };
 </script>
@@ -139,7 +147,7 @@ export default {
       color: #fff;
       font-size: 20px;
       font-weight: 700;
-      margin-left: 20px;
+      margin-left: 4px;
       line-height: 50px;
     }
     .icon-radar{
@@ -176,9 +184,17 @@ export default {
     .config-button{
       margin-left: 20px;
       background-color: #fff;
+      background: no-repeat center/60% url('~@/assets/images/settings.png') #fff;
       border-radius: 100%;
-      height: 42px;
-      width: 42px;
+      height: 40px;
+      width: 40px;
+    }
+    .cluster-button{
+      margin-left: 40px;
+      padding: 4px 10px;
+      font-weight: bold;
+      border-radius: 5px;
+      background-color: #fff;
     }
     .filter{
       float: right;

@@ -16,8 +16,8 @@
 
 <script>
 import { mapGetters, mapActions } from 'vuex'
-// import mockData from '@/mock/mockData.json'
 import { getClusterStudents } from '@/api/PortraitView'
+// import mockData from '@/mock/mockData.json'
 
 export default {
   name: 'PortraitView',
@@ -44,7 +44,7 @@ export default {
     // this.PortraitData = mockData
   },
   async mounted() {
-    // await this.getPortraitData()
+    await this.getPortraitData()
   
   },
   computed: {
@@ -63,7 +63,6 @@ export default {
     async getPortraitData() {
       // console.log('getPortraitData')
       const { data } = await getClusterStudents()
-      console.log('PortraitData', data)
       this.PortraitData = data
       
       // this.renderPortraitData()
