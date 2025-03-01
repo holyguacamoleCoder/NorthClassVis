@@ -1,8 +1,9 @@
+# D3_study
+>
 > 本篇md用于解释作品中所出现图的d3渲染思路
-
 > chart/graph/plot/diagram 没有明显的意义区分
 
-# General
+## General
 
 使用d3作图的基本思路：
 
@@ -16,18 +17,15 @@
 8. 对所有内容进行微调
 9. 有些元素你希望渐变等特殊效果，可以使用css，甚至d3定义svg-defs
 
-
 > 以上只是思路，细节代码可以从你的需求出发。
 >
 > 你可以以此为导向，在d3官方文档查到你想要的api，甚至可以直接询问LLM
 >
 > 特殊效果如css、svg可以查询MDN或询问LLM
 
+## ParallelView/ScatterView
 
-
-# ParallelView/ScatterView
-
-## parallel graph
+### parallel graph
 
 **思路确定：**
 
@@ -37,67 +35,40 @@
 
 在本视图中，共有8个属性---------因此需要渲染8个“y轴”，“x轴”需要定义（为了确定每个Y轴的放置位置）但是无需渲染
 
+### scatter graph - PCA
 
-
-## scatter graph - PCA
-
- 
-
-
-
-# PortraitView
+## PortraitView
 
 ![image-20250222165644840](src/D3_study/image-20250222165644840.png)
 
-## relative axis and labels
+### relative axis and labels
 
+### circular barplot
 
+### radar/spider plot
 
-## circular barplot
+## StudentView
 
+### view pannel
 
+### tree diragram
 
-## radar/spider plot
+## QuestionView
 
-
-
-
-
-# StudentView
-
-## view pannel
-
-
-
-## tree diragram
-
-
-
-# QuestionView
-
-## ~~view pannel~~
+### ~~view pannel~~
 
 与StudentView的view pannel思路别无二致，不再赘述
 
-## area chart
+### area chart
 
+### horizontal stacked bar
 
+### candy chart
 
-## horizontal stacked bar
+## WeekView
 
-
-
-## candy chart
-
-
-
-
-
-# WeekView
-
-## ~~circular barplot~~
+### ~~circular barplot~~
 
 同PortraitView中的，此处关键在于确定每个barplot的圆心位置
 
-## week axis
-
+### week axis
