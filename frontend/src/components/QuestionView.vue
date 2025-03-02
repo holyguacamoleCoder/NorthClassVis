@@ -531,11 +531,6 @@ export default {
 <style scoped lang="less">
 
 #question-view {
-  height: 620px;
-  background-color: #fff;
-  padding: 20px;
-  border-radius: 5px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
   .title {
     border-bottom: 1px solid #ccc;
     padding-bottom: 4px;

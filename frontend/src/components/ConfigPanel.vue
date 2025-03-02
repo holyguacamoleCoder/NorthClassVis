@@ -54,7 +54,7 @@
       </div>
 
       <div class="config-panel-main">
-        <button class="confirm-button" @click="submitMajors">Confirm</button>
+        <button class="confirm-button" @click="confirmAndClose">Confirm</button>
       </div>
     </div>
   </div>
@@ -98,28 +98,28 @@ export default {
       else return 'None'
     },
     handleCheck(event) {
-      const isChecked = event.target.checked;
+      const isChecked = event.target.checked
       if (!isChecked) {
-        this.CheckoutAllClass = false;
+        this.CheckoutAllClass = false
       }
     },
     handleAllCheck(event) {
       const isChecked = event.target.checked;
       this.CheckoutClasses.forEach(item => {
         item.checked = isChecked;
-      });
+      })
     },
     handleMajorCheck(event) {
-      const isChecked = event.target.checked;
+      const isChecked = event.target.checked
       if (!isChecked) {
-        this.CheckoutAllMajor = false;
+        this.CheckoutAllMajor = false
       }
     },
     handleAllMajorCheck(event) {
       const isChecked = event.target.checked;
       this.CheckoutMajors.forEach(item => {
-        item.checked = isChecked;
-      });
+        item.checked = isChecked
+      })
     },
     submitClasses() {
       const selectedClasses = this.CheckoutClasses.filter(item => item.checked).map(item => item.text);
@@ -130,6 +130,11 @@ export default {
       const selectedMajors = this.CheckoutMajors.filter(item => item.checked).map(item => item.text);
       console.log('Selected Majors:', selectedMajors);
       // 这里可以添加发送请求到后端的代码
+    },
+    confirmAndClose() {
+      const classesText = this.displayDropDownText(this.CheckoutAllClass, this.CheckoutClasses)
+      const majorsText = this.displayDropDownText(this.CheckoutAllMajor, this.CheckoutMajors)
+      this.$emit('close', classesText, majorsText)
     }
   }
 };
@@ -141,18 +146,17 @@ export default {
   padding: 0;
   box-sizing: border-box;
 }
-@config-panel-width: 500px;
+@config-panel-width: 600px;
 @config-panel-height: 500px;
 .config-container{
   z-index: 100;
   position: relative;
   height: @config-panel-height;
   width: @config-panel-width;
-  top: 520px;
-  left: 700px;
   border: 1px solid #ccc;
-  border-radius: 8px;
+  border-radius: 10px;
   background-color: #fff;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* 添加阴影 */
   .config-panel-title{
     height: 50px;
     .config-panel-title-icon{
@@ -208,23 +212,26 @@ export default {
     }
   }
 }
-.checkboxs{
-  .checkbox-list
-  ,.checkbox-for-all{
+.checkboxs {
+  .checkbox-list,
+  .checkbox-for-all {
     border-radius: 5px;
     padding: 5px;
-    width:180px;
-    .checkbox-input{
-      width: 20px; height: 20px;
+    width: 180px;
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    .checkbox-input {
+      width: 20px;
+      height: 20px;
     }
-    .checkbox-label{
+    .checkbox-label {
       list-style: none;
-      border-bottom: 1px solid #ccc;
-      margin-top: 5px;
+      margin-top: 0;
       display: inline-block;
       width: 150px;
-      padding-bottom: 8px;
-      font-size: 25px;
+      margin: 10px 0;
+      font-size: 20px;
       text-align: center;
     }
   }

@@ -275,12 +275,6 @@ export default {
 
 <style scoped lang="less">
 #week-view {
-  width: 100%;
-  height: 620px;
-  border-radius: 5px;
-  padding-top: 2px;
-  background-color: #fff;
-
   .title {
     height: 20px;
     margin-top: 10px;

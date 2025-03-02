@@ -123,59 +123,86 @@ export default {
 </script>
 
 <style scoped lang="less">
+@spacing: 4px;
+@total-width : 2300px + @spacing * 2;
+@total-height : 1250px + @spacing * 3;
+@panel-color: #fff;
+@background-color: #ccc;
+@border-radius: 5px;
 *{
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  gap: @spacing;
 }
-@total_width : 2300px;
 .app-container {
-  width: @total_width;
-  background-color: #ccc;
-  border-radius: 5px;
-.body {
-  width: @total_width;
-  height: 1230px;
+  width: @total-width;
+  height: @total-height;
+  background-color: @background-color;
+  padding: 0 @spacing;
   display: flex;
-  .main{
-    width: 1850px;
-    height: inherit;
-    display: flex;
-    flex-direction: column;
-    .top{
-      width: inherit;
-      height: 600px;
-      display: flex;
-      .scatter-view{
-        width: 400px;
-        height: 600px;
-        height: inherit;
-      }
-      .portrait-view{
-        width: 1450px;
-        height: 600px;
-      }
-    }
-    .bottom{
-      width: inherit;
-      height: 620px;
-      display: flex;
-      .question-view{
-        width: 675px;
-        height: 600px;
-      }
-      .week-view{
-        margin-left: 5px;
-        width: 1165px;
-        height: 600px;
-      }
-    }
-  }
-  .panel{
-    width: 450px;
-    height: inherit;
-  }
+  flex-direction: column;
+  align-items: center;
+  border-radius: 5px;
 }
 
-} //app-container
+@header-height: 50px;
+.header{
+  width: @total-width;
+  height: @header-height;
+}
+
+.body {
+  width: @total-width;
+  display: flex;
+}
+
+@main-width: 1850px;
+.main{
+  width: @main-width;
+  display: flex;
+  flex-direction: column;
+  
+  .top
+  ,.bottom{
+    width: inherit;
+    height: 600px;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+  }
+  
+}
+
+.view(){
+  background-color: @panel-color;
+  border-radius: @border-radius;
+}
+.scatter-view{
+  .view();
+  width: 400px;
+  height: 600px;
+}
+.portrait-view{
+  .view();
+  width: 1450px;
+  height: 600px;
+}
+.question-view{
+  .view();
+  width: 675px;
+  height: 600px;
+}
+.week-view{
+  .view();
+  width: 1175px;
+  height: 600px;
+}
+@panel-height: @total-height - @header-height - @spacing * 2;
+.panel{
+  .view();
+  width: 450px;
+  height: @panel-height;
+}
+
 </style>

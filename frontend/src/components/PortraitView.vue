@@ -1,6 +1,8 @@
 <template>
   <div id="portrait-view" style="display: flex; justify-content: space-around;">
-    <h3>Portrait View</h3>
+    <div class="title">
+      <span>Portrait View</span>
+    </div>
     <div class="vis-panel">
       <div id="visualization0"></div>
       <div id="visualization1"></div>
@@ -44,7 +46,7 @@ export default {
     // this.PortraitData = mockData
   },
   async mounted() {
-    await this.getPortraitData()
+    // await this.getPortraitData()
   
   },
   computed: {
@@ -432,20 +434,18 @@ export default {
 
 <style scoped lang="less">
 #portrait-view {
-  width: 1440px;
-  height: 585px;
-  margin-left: 6px;
   position: relative;
-  border-radius: 5px;
-  background-color: #fff;
-
-  h3 {
-    height: 20px;
-    width: inherit;
-    font-size: 20px;
-    padding: 0 10px 10px;
-    margin: 10px 5px;
-    border-bottom: 1px solid #ccc;
+  .title{
+    border-bottom: 1px solid #ccc; 
+    width: 100%;
+    padding-left: 20px;
+    padding-top: 10px;
+    padding-bottom: 5px;
+    margin-bottom: 5px;
+    span{
+      font-size: 20px;
+      font-weight: bold;
+    }
   }
   @visPanelWidth: 1210px;
   .vis-panel {

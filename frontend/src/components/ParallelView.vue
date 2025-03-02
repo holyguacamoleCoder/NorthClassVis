@@ -222,10 +222,6 @@ export default {
 
 <style scoped lang="less">
 #scatter-chart {
-  width: 100%;
-  height: 585px;
-  border-radius: 5px;
-  background-color: #fff;
   .title{
     border-bottom: 1px solid #ccc; 
     width: 100%;

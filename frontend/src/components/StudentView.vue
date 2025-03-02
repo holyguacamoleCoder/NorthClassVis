@@ -294,10 +294,7 @@ export default {
 
 <style scoped lang="less">
 #student-view {
-  width: 99%;
-  height: 1220px;
-  border-radius: 5px;
-  background-color: #fff;
+  
   .title {
     font-size: 20px;
     font-weight: bold;

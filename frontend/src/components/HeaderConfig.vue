@@ -9,20 +9,25 @@
   
   <div class="right-label">
     <div class="display-options">
-      <div class="option-major">
-        <span>Major:</span>
-        <div class="text-content">All</div>
-      </div>
       <div class="option-class">
         <span>Class:</span>
-        <div class="text-content">All</div>
+        <div class="text-content">{{ selectedClasses }}</div>
+      </div>
+      <div class="option-major">
+        <span>Major:</span>
+        <div class="text-content">{{ selectedMajors }}</div>
       </div>
     </div>
-    <div class="config-button"></div>
+    <div class="config-button" @click="toggleConfigPanel"></div>
     <div class="cluster-button">CLUSTER</div>
   </div>
   
-  <ConfigPanel/>
+  <ConfigPanel 
+    v-if="isConfigPanelVisible"
+    @close="hideConfigPanel"
+    :selectedClasses="selectedClasses"
+    :selectedMajors="selectedMajors"
+  />
 
 </div>
 
@@ -39,12 +44,22 @@ export default {
   },
   data() {
     return {
+      isConfigPanelVisible: false,
+      selectedClasses: 'None',
+      selectedMajors: 'None',
     }
   },
   created(){
   },
   methods: {
-   
+   toggleConfigPanel(){
+      this.isConfigPanelVisible = !this.isConfigPanelVisible;
+    },
+    hideConfigPanel(classesText, majorsText){
+      this.isConfigPanelVisible = false;
+      this.selectedClasses = classesText
+      this.selectedMajors = majorsText
+    }
   }
 };
 </script>
@@ -58,7 +73,6 @@ export default {
 @total_width : 2300px;
 .header-container{
   position: relative;
-  width: @total_width;
   height: 50px;
   background-color: #2a2a2a;
   border-radius: 5px 5px 0 0;
@@ -79,7 +93,7 @@ export default {
   .right-label{
     position: absolute;
     top: 50%;
-    right: 0;
+    right: 3px;
     transform: translateY(-50%);
     padding: 0 20px 0 0;
     display: flex;
@@ -104,6 +118,7 @@ export default {
       }
     }
     .config-button{
+      position: relative;
       margin-left: 20px;
       background-color: #fff;
       background: no-repeat center/60% url('~@/assets/images/settings.png') #fff;
@@ -118,30 +133,13 @@ export default {
       border-radius: 5px;
       background-color: #fff;
     }
-    .filter{
-      float: right;
-      margin-right: 20px;
-      margin-top: 10px;
-      width: 180px;
-      height: 30px;
-      border: none;
-      outline: none;
-      color: #fff;
-      font-size: 20px;
-      .dd-trigger{
-        float: right;
-        button{
-          border: 0;
-          width:100px;
-          font-size: 18px;
-          margin-top: 5px;
-          margin-right: 5px;
-          border-radius: 5px;
-          border-bottom: 1px solid #fff;
-          padding: 0;
-        }   
-      }
-    }
   }
+}
+
+.config-container {
+  position: absolute; /* 绝对定位 */
+  top: 53px; /* 距离 config-button 底部的距离 */
+  right: -70px; /* 距离 config-button 左侧的距离 */
+  z-index: 100; /* 确保 ConfigPanel 在其他元素之上 */
 }
 </style>
