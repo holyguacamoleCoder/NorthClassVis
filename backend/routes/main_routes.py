@@ -1,6 +1,7 @@
 from flask import request, jsonify
 from tools import fileSystem as fs
 from routes.config import Config
+from routes.pca_routes import PCARoutes
 from routes.cluster_routes import ClusterRoutes
 from routes.student_routes import StudentRoutes
 from routes.question_routes import QuestionRoutes
@@ -43,10 +44,12 @@ class ConfigRoutes:
         self.config.merged_process_data = self.config.merge_process_data()
 
         # 更新所有相关类的 merged_process_data
+        pca_routes.update_merged_process_data(self.config.merged_process_data)
         cluster_routes.update_merged_process_data(self.config.merged_process_data)
         student_routes.update_all_class_df(self.config.merged_process_data)
         question_routes.update_merged_process_data(self.config.all_class_df)
         week_routes.update_merged_process_data(self.config.merged_process_data)
+
 
         # 返回处理后的结果
         response = {
@@ -70,6 +73,10 @@ config_routes.api_bp.register_blueprint(student_routes.student_bp, url_prefix='/
 # 注册 cluster 蓝图
 cluster_routes = ClusterRoutes(config.merged_process_data)
 config_routes.api_bp.register_blueprint(cluster_routes.cluster_bp, url_prefix='/api')
+
+# 注册PCA路由
+pca_routes = PCARoutes(config.merged_process_data)
+config_routes.api_bp.register_blueprint(pca_routes.pca_bp, url_prefix='/api')
 
 # 注册 question 蓝图
 question_routes = QuestionRoutes(config.merged_process_data)

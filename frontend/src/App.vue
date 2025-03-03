@@ -6,7 +6,8 @@
       <div class="top">
         <!-- A. Scatter View -->
         <div class="scatter-view" v-if="clusterData">
-          <ParallelView />
+          <ParallelView v-if="false"/>
+          <ScatterView />
         </div>
         
         <!-- B. Portrait View -->
@@ -41,6 +42,7 @@
 <script>
 import HeaderConfig from './components/HeaderConfig.vue'
 import ParallelView from './components/ParallelView.vue'
+import ScatterView from './components/ScatterView.vue'
 import PortraitView from './components/PortraitView.vue'
 import QuestionView from './components/QuestionView.vue'
 import WeekView from './components/WeekView.vue'
@@ -51,6 +53,7 @@ export default {
   components: {
     HeaderConfig,
     ParallelView,
+    ScatterView,
     PortraitView,
     QuestionView,
     WeekView,

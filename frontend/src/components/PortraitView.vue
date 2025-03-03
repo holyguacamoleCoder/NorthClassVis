@@ -46,7 +46,7 @@ export default {
     // this.PortraitData = mockData
   },
   async mounted() {
-    // await this.getPortraitData()
+    await this.getPortraitData()
   
   },
   computed: {

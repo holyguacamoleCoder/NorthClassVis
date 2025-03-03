@@ -8,7 +8,7 @@
       </select>
       <div class="limit">kind:</div>
     </div>
-    <Simplebar style="height: 580px; width: 98%">
+    <Simplebar style="height: 560px; width: 98%">
       <div id="visualizationW"></div>
     </Simplebar>
   </div>
