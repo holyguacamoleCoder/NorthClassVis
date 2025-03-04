@@ -1,17 +1,13 @@
 import pandas as pd
 
 class PCAAnalysis:
-    def __init__(self, preliminary_feature_calculator, final_feature_calculator):
-        self.preliminary_feature_calculator = preliminary_feature_calculator
+    def __init__(self, final_feature_calculator):
         self.final_feature_calculator = final_feature_calculator
         self.raw_pca_data = self.get_raw_pca_data()
 
     def get_raw_pca_data(self):
-        # 计算radar plot所需指标数据
-        final_result_radar = self.final_feature_calculator.calc_final_features()
-        target_data_radar = final_result_radar
+        return self.final_feature_calculator
 
-        return target_data_radar
 
     def get_transformed_data(self):
         # 进行PCA分析
@@ -23,7 +19,7 @@ class PCAAnalysis:
         transformed_data = pca.fit_transform(self.raw_pca_data)
 
         # 将结果转换为DataFrame
-        transformed_df = pd.DataFrame(transformed_data, index=self.raw_pca_data.index, columns=['PC1', 'PC2'])
+        transformed_df = pd.DataFrame(transformed_data, index=self.raw_pca_data.index, columns=['x', 'y'])
 
         return transformed_df
     

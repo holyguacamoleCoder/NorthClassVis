@@ -4,9 +4,8 @@ from tools.config import Config
 from tools.features import PreliminaryFeatureCalculator, FinalFeatureCalculator
 from tools.pca_analysis import PCAAnalysis
 from tools.cluster_analysis import ClusterAnalysis
-
-from routes.pca_routes import PCARoutes
-from routes.cluster_routes import ClusterRoutes
+from routes.scatter_routes import ScatterRoutes
+from routes.portrait_routes import PortraitRoutes
 from routes.student_routes import StudentRoutes
 from routes.question_routes import QuestionRoutes
 from routes.week_routes import WeekRoutes
@@ -67,43 +66,44 @@ class ConfigRoutes:
 
 # 创建 Config 实例
 config = Config()
-# 创建 PreliminaryFeatureCalculator 和 FinalFeatureCalculator 实例
+
+# 创建 PreliminaryFeatureCalculator 和 FinalFeatureCalculator 计算连接件
 preliminary_feature_calculator = PreliminaryFeatureCalculator(config.get_merged_process_data())
-final_feature_calculator_bonus = FinalFeatureCalculator(preliminary_feature_calculator.get_features(), ['student_ID'])
-final_feature_calculator_knowledge = FinalFeatureCalculator(preliminary_feature_calculator.get_features(), ['student_ID', 'knowledge'])
+feature_bonus = FinalFeatureCalculator(preliminary_feature_calculator.get_features(), ['student_ID']).get_result()
+feature_knowledge = FinalFeatureCalculator(preliminary_feature_calculator.get_features(), ['student_ID', 'knowledge']).get_result()
 
 # 创建 PCAAnalysis 实例
-pca_analysis = PCAAnalysis(
-    preliminary_feature_calculator=preliminary_feature_calculator,
-    final_feature_calculator=final_feature_calculator_bonus)
+pca_analysis = PCAAnalysis(feature_bonus)
 
 # 创建 CLusterAnalysis 实例
-cluster_analysis = ClusterAnalysis(pca_analysis.get_transformed_data().to_dict(orient='index'))
+cluster_analysis = ClusterAnalysis(
+    students_data=pca_analysis.get_transformed_data().to_dict(orient='index'))
 
-# 创建 ConfigRoutes 实例
+# 创建 Routes 实例
 config_routes = ConfigRoutes(config)
 
-# 注册 cluster 蓝图
-cluster_routes = ClusterRoutes(config, cluster_analysis)
-config_routes.api_bp.register_blueprint(cluster_routes.cluster_bp, url_prefix='/api')
+pca_routes = ScatterRoutes(
+    config=config, 
+    pca_analysis=pca_analysis, 
+    cluster_analysis=cluster_analysis)
 
-# 注册PCA路由
-pca_routes = PCARoutes(config, 
-                       pca_analysis=pca_analysis, 
-                       cluster_analysis=cluster_analysis)
-config_routes.api_bp.register_blueprint(pca_routes.pca_bp, url_prefix='/api')
+cluster_routes = PortraitRoutes(
+    config=config, 
+    cluster_analysis=cluster_analysis,
+    feature_bonus=feature_bonus,
+    feature_knowledge=feature_knowledge)
 
-# 注册 student 蓝图
 student_routes = StudentRoutes(config)
-config_routes.api_bp.register_blueprint(student_routes.student_bp, url_prefix='/api')
-
-# 注册 question 蓝图
 question_routes = QuestionRoutes(config)
-config_routes.api_bp.register_blueprint(question_routes.question_bp, url_prefix='/api')
-
-# 注册 week 蓝图
 week_routes = WeekRoutes(config)
+
+# 注册 Blueprint 蓝图
+config_routes.api_bp.register_blueprint(cluster_routes.cluster_bp, url_prefix='/api')
+config_routes.api_bp.register_blueprint(pca_routes.pca_bp, url_prefix='/api')
+config_routes.api_bp.register_blueprint(student_routes.student_bp, url_prefix='/api')
+config_routes.api_bp.register_blueprint(question_routes.question_bp, url_prefix='/api')
 config_routes.api_bp.register_blueprint(week_routes.week_bp, url_prefix='/api')
 
+# 暴露 api_bp 变量
 api_bp = config.get_api_bp()
 

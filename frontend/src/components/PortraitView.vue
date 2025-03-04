@@ -67,7 +67,7 @@ export default {
       const { data } = await getClusterStudents()
       this.PortraitData = data
       
-      // this.renderPortraitData()
+      this.renderPortraitData()
       this.renderLabelBar()
       this.renderLabelRadar()
       this.renderLegend()
@@ -84,17 +84,12 @@ export default {
           value: d[1],
           index: d[1],
         }))
-        // let radar_dimension = Object.keys(data.radar)
-        // let radar_data = Object.entries(data.radar).map(d => ({
-        //   features: d[0],
-        //   value: d[1],
-        //   index: d[1],
-        // }))
+        
         const radar_dimension = this.radar_dimension
         const radar_data = radar_dimension.map(feature => ({
           features: feature,
-          value: data.radar[feature],
-          index: data.radar[feature],
+          value: data.bonus[feature],
+          index: data.bonus[feature],
         }))
         
         const height = 360

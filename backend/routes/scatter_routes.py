@@ -1,7 +1,6 @@
 from flask import Blueprint, jsonify
-from tools.cluster_analysis import ClusterAnalysis
 
-class PCARoutes:
+class ScatterRoutes:
     def __init__(self, config, pca_analysis, cluster_analysis):
         self.config = config
         self.pca_analysis = pca_analysis
@@ -11,10 +10,6 @@ class PCARoutes:
 
     def register_routes(self):
         self.pca_bp.add_url_rule('/pca/scatter', view_func=self.pca_cluster, methods=['GET'])
-
-    def update_merged_process_data(self):
-        self.pca_analysis.merged_process_data = self.config.get_merged_process_data()
-        self.pca_analysis.raw_pca_data = self.pca_analysis.get_raw_pca_data()  # 重新计算 raw_pca_data
 
     def pca_cluster(self):
         # 获取PCA变换后的数据

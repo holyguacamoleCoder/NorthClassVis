@@ -1,9 +1,11 @@
 from flask import Blueprint, jsonify
 
-class ClusterRoutes:
-    def __init__(self, config, cluster_analysis):
+class PortraitRoutes:
+    def __init__(self, config, cluster_analysis, feature_bonus, feature_knowledge):
         self.config = config
         self.cluster_analysis = cluster_analysis
+        self.feature_bonus = feature_bonus
+        self.feature_knowledge = feature_knowledge
         self.cluster_bp = Blueprint('cluster', __name__)
         self.register_routes()
 
@@ -25,9 +27,12 @@ class ClusterRoutes:
         for student_info in target_stu_info:
             student_ID = student_info['student_ID']
             cluster_index = student_info['cluster']
+            # 获取df对应行并转为对应字典
+            knowledge = self.feature_knowledge.loc[student_ID].to_dict()
+            bonus = self.feature_bonus.loc[student_ID].to_dict()
             result[student_ID] = {
                 'cluster': cluster_index,
-                'knowledge': self.cluster_analysis.raw_data.get(student_ID, None),
-                'radar': self.cluster_analysis.raw_data.get(student_ID, None)
+                'knowledge': knowledge,
+                'bonus': bonus
             }
         return jsonify(result)

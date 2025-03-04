@@ -117,6 +117,7 @@ class FinalFeatureCalculator:
         #  ['student_ID', 'week', 'knowledge']:按照学生、周和知识点分组，用于week view
         self.df = df.copy()
         self.group_apply = group_apply
+        self.result = self.calc_final_features()
 
     def calc_final_features(self):
         
@@ -159,7 +160,6 @@ class FinalFeatureCalculator:
         quantile_normalized_scores = pd.DataFrame(quantile_scaler.fit_transform(log_transformed_scores),
                                                   index=log_transformed_scores.index,
                                                   columns=log_transformed_scores.columns)
-
         # 字段名称映射
         labelMap = {
             "enthusiasm_bonus": "Enthusiasm",
@@ -173,3 +173,5 @@ class FinalFeatureCalculator:
         }
         quantile_normalized_scores.rename(columns=labelMap, inplace=True)
         return quantile_normalized_scores
+    def get_result(self):
+        return self.result
