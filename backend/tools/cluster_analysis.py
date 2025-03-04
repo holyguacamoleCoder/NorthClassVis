@@ -1,19 +1,13 @@
 import numpy as np
 from sklearn.cluster import KMeans
-from sklearn.preprocessing import MinMaxScaler
 import pandas as pd
 
 class ClusterAnalysis:
-    _instance = None
-
-    def __new__(cls, students_data=None, n_clusters=3):
-        if not cls._instance or students_data != cls._instance.raw_data:
-            cls._instance = super(ClusterAnalysis, cls).__new__(cls)
-            cls._instance.raw_data = students_data
-            cls._instance.n_clusters = n_clusters
-            cls._instance.features_array = cls._instance.extract_features(cls._instance.raw_data)
-            cls._instance.kmeans = cls._instance.create_kmeans_model(cls._instance.features_array, n_clusters)
-        return cls._instance
+    def __init__(self, students_data, n_clusters=3):
+        self.raw_data = students_data
+        self.n_clusters = n_clusters
+        self.features_array = self.extract_features(self.raw_data)
+        self.kmeans = self.create_kmeans_model(self.features_array, n_clusters)
 
     def extract_features(self, raw_data):
         # 提取特征向量
@@ -71,20 +65,6 @@ class ClusterAnalysis:
                 "knowledge": dict(zip(self.raw_data[next(iter(self.raw_data))].keys(), center))
             }
         return result
-
-    def analyze(self, stu=None, every=None):
-        if every is not None:
-            return self.get_student_clusters()
-
-        if stu is not None:
-            return self.get_cluster_center_students()
-
-        return self.get_cluster_centers()
-    
-    @classmethod
-    def reset_instance(cls, data=None, n_clusters=3):
-        cls._instance = None
-        return cls(data, n_clusters)
 
 if __name__ == "__main__":
   # 示例用法

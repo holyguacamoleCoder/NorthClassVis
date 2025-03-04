@@ -4,7 +4,7 @@
     <div class="icon-radar">
       <IconBlock/>
     </div>
-    <div class="title">NorthClassVision</div>
+    <div class="title">NorthClassVis</div>
   </div>
   
   <div class="right-label">

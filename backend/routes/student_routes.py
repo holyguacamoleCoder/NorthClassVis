@@ -3,8 +3,9 @@ from tools import fileSystem as fileSystem
 from tools import StudentView as sv
 
 class StudentRoutes:
-    def __init__(self, all_class_df):
-        self.all_class_df = all_class_df
+    def __init__(self, config):
+        self.config = config
+        self.all_class_df = self.config.get_all_class_df()
         self.student_bp = Blueprint('student', __name__)
         self.register_routes()
 
@@ -72,5 +73,5 @@ class StudentRoutes:
 
         return jsonify(tree_data)
     
-    def update_all_class_df(self, new_all_class_df):
-        self.all_class_df = new_all_class_df
+    def update_all_class_df(self):
+        self.all_class_df = self.config.get_all_class_df()

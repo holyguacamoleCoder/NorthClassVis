@@ -1,45 +1,31 @@
-import numpy as np
 import pandas as pd
-from sklearn.decomposition import PCA
 
 class PCAAnalysis:
-    _instance = None
+    def __init__(self, preliminary_feature_calculator, final_feature_calculator):
+        self.preliminary_feature_calculator = preliminary_feature_calculator
+        self.final_feature_calculator = final_feature_calculator
+        self.raw_pca_data = self.get_raw_pca_data()
 
-    def __new__(cls, features_df=None):
-        if not cls._instance or not features_df.equals(cls._instance.raw_data):
-            cls._instance = super(PCAAnalysis, cls).__new__(cls)
-            cls._instance.raw_data = features_df
-            cls._instance.student_ids = features_df.get('student_ID', None)
-            if cls._instance.student_ids is not None:
-                cls._instance.features_only_df = features_df.drop(columns=['student_ID'])
-            else:
-                cls._instance.features_only_df = features_df
-            cls._instance.pca_model = cls._instance.create_pca_model(cls._instance.features_only_df)
-            cls._instance.transformed_data = cls._instance.transform_features(cls._instance.features_only_df, cls._instance.pca_model)
-            if cls._instance.student_ids is not None:
-                cls._instance.transformed_data['student_ID'] = cls._instance.student_ids.values
-        return cls._instance
+    def get_raw_pca_data(self):
+        # 计算radar plot所需指标数据
+        final_result_radar = self.final_feature_calculator.calc_final_features()
+        target_data_radar = final_result_radar
 
-    def create_pca_model(self, features_df):
-        # 创建PCA实例
-        pca = PCA(n_components=2)
-        # 训练模型
-        pca.fit(features_df)
-        return pca
-
-    def transform_features(self, features_df, pca_model):
-        # 使用PCA模型转换特征
-        transformed_features = pca_model.transform(features_df)
-        return pd.DataFrame(transformed_features, columns=['x', 'y'])
+        return target_data_radar
 
     def get_transformed_data(self):
-        # 输出转换后的特征
-        return self.transformed_data
+        # 进行PCA分析
+        # 这里假设有一个PCA实现，例如使用scikit-learn
+        from sklearn.decomposition import PCA
 
-    @classmethod
-    def reset_instance(cls, data=None):
-        cls._instance = None
-        return cls(data)
+        # 假设 raw_pca_data 是一个DataFrame
+        pca = PCA(n_components=2)  # 例如，降维到2维
+        transformed_data = pca.fit_transform(self.raw_pca_data)
+
+        # 将结果转换为DataFrame
+        transformed_df = pd.DataFrame(transformed_data, index=self.raw_pca_data.index, columns=['PC1', 'PC2'])
+
+        return transformed_df
     
 if __name__ == "__main__":
   # 示例用法

@@ -23,8 +23,8 @@ def load_data(filename):
         return None
 
 # 拼接文件为新df
-def contact_data(classList):
-    return pd.concat([load_data(os.path.join(class_dir,'SubmitRecord-' + class_i['text'] + '.csv')) for class_i in classList if class_i['checked']], axis=0)
+def contact_data(classDir, classList):
+    return pd.concat([load_data(os.path.join(classDir,'SubmitRecord-' + class_i['text'] + '.csv')) for class_i in classList if class_i['checked']], axis=0)
 
 # 合并数据题目和提交记录
 # filename2: 题目信息文件

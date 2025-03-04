@@ -1,7 +1,5 @@
 import time
 from mock_data import *
-import test_ParallelView.TestParallelView as TestParallelView
-
 
 def measure_performance(func, *args, **kwargs):
     start_time = time.time()
@@ -12,9 +10,5 @@ def measure_performance(func, *args, **kwargs):
     return result
 
 
-
-def main():
-    TestParallelView.test_parallel_view(num_students=1000, num_titles=45, num_knowledges=8)
-
 if __name__ == "__main__":
-    main()
+    print("Generating mock data...")

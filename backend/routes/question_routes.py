@@ -2,8 +2,9 @@ from flask import Blueprint, request, jsonify
 from tools import QuestionView as qv
 
 class QuestionRoutes:
-    def __init__(self, merged_process_data):
-        self.merged_process_data = merged_process_data
+    def __init__(self, config):
+        self.config = config
+        self.merged_process_data = self.config.get_merged_process_data()
         self.question_bp = Blueprint('question', __name__)
         self.register_routes()
 
@@ -43,5 +44,5 @@ class QuestionRoutes:
             all_titles_data = qv.get_all_titles_data(self.merged_process_data, limit)
             return jsonify(all_titles_data)
         
-    def update_merged_process_data(self, new_merged_process_data):
-        self.merged_process_data = new_merged_process_data
+    def update_merged_process_data(self):
+        self.merged_process_data = self.config.get_merged_process_data()
