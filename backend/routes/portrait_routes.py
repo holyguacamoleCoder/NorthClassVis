@@ -6,13 +6,13 @@ class PortraitRoutes:
         self.cluster_analysis = cluster_analysis
         self.feature_bonus = feature_bonus
         self.feature_knowledge = feature_knowledge
-        self.cluster_bp = Blueprint('cluster', __name__)
+        self.portrait_bp = Blueprint('cluster', __name__)
         self.register_routes()
 
     def register_routes(self):
-        self.cluster_bp.add_url_rule('/cluster/centers', view_func=self.cluster_centers, methods=['GET'])
-        self.cluster_bp.add_url_rule('/cluster/everyone', view_func=self.cluster_everyone, methods=['GET'])
-        self.cluster_bp.add_url_rule('/cluster/students', view_func=self.cluster_center_students, methods=['GET'])
+        self.portrait_bp.add_url_rule('/cluster/centers', view_func=self.cluster_centers, methods=['GET'])
+        self.portrait_bp.add_url_rule('/cluster/everyone', view_func=self.cluster_everyone, methods=['GET'])
+        self.portrait_bp.add_url_rule('/cluster/students', view_func=self.cluster_center_students, methods=['GET'])
 
     def cluster_centers(self):
         return jsonify(self.cluster_analysis.get_cluster_centers())

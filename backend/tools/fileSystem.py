@@ -23,17 +23,18 @@ def load_data(filename):
         return None
 
 # 拼接文件为新df
-def contact_data(classDir, classList):
-    return pd.concat([load_data(os.path.join(classDir,'SubmitRecord-' + class_i['text'] + '.csv')) for class_i in classList if class_i['checked']], axis=0)
+def contact_df(classDir, classList):
+    return pd.concat(
+        (load_data(os.path.join(classDir,'SubmitRecord-' + class_i + '.csv')) for class_i in classList),
+        axis=0)
 
 # 合并数据题目和提交记录
-# filename2: 题目信息文件
-def merge_data(f1, f2):
-    if isinstance(f1, str):
-        f1 = load_data(f1) 
-    if isinstance(f2, str):
-        f2 = load_data(f2) 
-    merged_data = pd.merge(f1, f2[['title_ID', 'knowledge']], on='title_ID', how='left')
+def merge_df_or_file(df1=None, df2=None, filename1=None, filename2=None, on=None, filter_col1=None, filter_col2=None):
+    f1 = df1 if df1 is not None else load_data(filename1)
+    f2 = df2 if df2 is not None else load_data(filename2)
+    f1 = f1[filter_col1] if filter_col1 is not None else f1
+    f2 = f2[filter_col2] if filter_col2 is not None else f2
+    merged_data = pd.merge(f1, f2, on=on, how='left')
     return merged_data
 
 # 处理非数字值

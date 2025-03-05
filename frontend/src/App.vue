@@ -1,6 +1,7 @@
 <template>
 <div class="app-container">
-  <div class="header"><HeaderConfig /></div>  
+  <div class="header"><NavHeader />
+</div>  
   <div class="body">
     <div class="main">
       <div class="top">
@@ -36,11 +37,12 @@
        </div>
     </div>
   </div>
+
 </div> 
 </template>
 
 <script>
-import HeaderConfig from './components/HeaderConfig.vue'
+import NavHeader from './components/NavHeader.vue'
 import ParallelView from './components/ParallelView.vue'
 import ScatterView from './components/ScatterView.vue'
 import PortraitView from './components/PortraitView.vue'
@@ -48,10 +50,9 @@ import QuestionView from './components/QuestionView.vue'
 import WeekView from './components/WeekView.vue'
 import StudentView from './components/StudentView.vue'
 import { mapActions, mapGetters } from 'vuex'
-import { filterClasses, getFilter } from './api/App'
 export default {
   components: {
-    HeaderConfig,
+    NavHeader,
     ParallelView,
     ScatterView,
     PortraitView,
@@ -74,47 +75,16 @@ export default {
     JustClusterData(){
       return this.$store.state.justClusterData
     },
-    displayButton(){
-      if(this.CheckoutAllClass) return 'All'
-      if(this.CheckoutClasses.some(item => item.checked)) return 'Part'
-      else return 'none'
-    }
   },
   async created() {
-    // for(let i = 1; i <= 15; i++){
-    //   this.CheckoutClasses.push({checked: false, text: `Class${i}`, id: i})
-    // }
-    // this.CheckoutClasses[0].checked = true
-    const {data} = await getFilter()
-    this.CheckoutClasses =  data
-    this.CheckoutAllClass = false
+   
   },
   mounted() {
     this.fetchClusterData()
   },
   methods: {
     ...mapActions(['fetchClusterData', 'toggleHadFilter']),
-    handleCheck(e){
-      console.log(e.target.name)
-      this.CheckoutClasses.checked = !this.CheckoutClasses.checked
-      this.CheckoutAllClass = this.CheckoutClasses.every(item => item.checked)
-      // console.log('change!!!')
-    },
-    handleAllCheck(){
-      if(this.CheckoutClasses.every(item => item.checked) || this.CheckoutClasses.every(item => !item.checked))
-        this.CheckoutClasses.forEach(item => item.checked = !item.checked)
-      else{
-        this.CheckoutClasses.forEach(item => item.checked = this.CheckoutAllClass)
-      }
-      // console.log('change!!!')
-    },
-    async submitClasses(e){
-      e.preventDefault()
-      const response = await filterClasses(this.CheckoutClasses)
-      // console.log(response.data.data)
-      this.CheckoutClasses = response.data.data
-      this.toggleHadFilter()
-    }
+    
   },
   watch: {
     //监视被选中的学生实例

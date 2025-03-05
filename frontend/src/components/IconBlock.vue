@@ -71,7 +71,6 @@ export default {
         { features: 7, value: 0.7 },
         { features: 8, value: 1 },
       ]
-      console.log(iconRadarData)
       const angleRadar = d3.scaleBand()
           .domain(dimension)
           .range([0, 2 * Math.PI])

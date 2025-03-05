@@ -1,0 +1,26 @@
+{
+  "classes": [
+    { "text": "Class1", "checked": true },
+    { "text": "Class2", "checked": false },
+    { "text": "Class3", "checked": false },
+    { "text": "Class4", "checked": false },
+    { "text": "Class5", "checked": false },
+    { "text": "Class6", "checked": false },
+    { "text": "Class7", "checked": false },
+    { "text": "Class8", "checked": false },
+    { "text": "Class9", "checked": false },
+    { "text": "Class10", "checked": false },
+    { "text": "Class11", "checked": false },
+    { "text": "Class12", "checked": false },
+    { "text": "Class13", "checked": false },
+    { "text": "Class14", "checked": false },
+    { "text": "Class15", "checked": false }
+  ],
+  "majors": [
+    { "text": "J23517", "checked": true },
+    { "text": "J40192", "checked": true },
+    { "text": "J57489", "checked": true },
+    { "text": "J78901", "checked": true },
+    { "text": "J87654", "checked": true }
+  ]
+}

@@ -37,7 +37,7 @@
 import IconBlock from '@/components/IconBlock.vue'
 import ConfigPanel from './ConfigPanel.vue'
 export default {
-  name: 'HeaderConfig',
+  name: 'NavHeader',
   components: {
     IconBlock,
     ConfigPanel,

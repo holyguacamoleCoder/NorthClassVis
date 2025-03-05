@@ -5,11 +5,11 @@ class ScatterRoutes:
         self.config = config
         self.pca_analysis = pca_analysis
         self.cluster_analysis = cluster_analysis
-        self.pca_bp = Blueprint('pca', __name__)
+        self.scatter_bp = Blueprint('pca', __name__)
         self.register_routes()
 
     def register_routes(self):
-        self.pca_bp.add_url_rule('/pca/scatter', view_func=self.pca_cluster, methods=['GET'])
+        self.scatter_bp.add_url_rule('/pca/scatter', view_func=self.pca_cluster, methods=['GET'])
 
     def pca_cluster(self):
         # 获取PCA变换后的数据
