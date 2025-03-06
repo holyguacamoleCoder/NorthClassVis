@@ -5,7 +5,7 @@ from tools import StudentView as sv
 class StudentRoutes:
     def __init__(self, config):
         self.config = config
-        self.all_class_df = self.config.get_all_class_df()
+        self.class_df_filtered_majors = self.config.get_class_df_filtered_majors()
         self.student_bp = Blueprint('student', __name__)
         self.register_routes()
 
@@ -13,8 +13,11 @@ class StudentRoutes:
         self.student_bp.add_url_rule('/student/submissions', view_func=self.get_submissions, methods=['GET'])
         self.student_bp.add_url_rule('/student/tree_data', view_func=self.get_tree_data, methods=['GET'])
 
+    def update_data(self, new_config):
+        self.config = new_config
+        self.class_df_filtered_majors = self.config.get_class_df_filtered_majors()
     def get_submissions(self):
-        df = self.all_class_df
+        df = self.class_df_filtered_majors
         if df is None:
             return jsonify({"error": "Failed to load submissions data."}), 500
 
@@ -53,7 +56,7 @@ class StudentRoutes:
         return jsonify(records_list)
 
     def get_tree_data(self):
-        df = self.all_class_df
+        df = self.class_df_filtered_majors
         limit = request.args.get('limit')
 
         if df is None:
@@ -72,6 +75,3 @@ class StudentRoutes:
                 return jsonify({"error": "Invalid limit parameter."}), 400
 
         return jsonify(tree_data)
-    
-    def update_all_class_df(self):
-        self.all_class_df = self.config.get_all_class_df()

@@ -1,6 +1,5 @@
-from flask import Blueprint,request, jsonify
+from flask import Blueprint, request, jsonify
 from tools import fileSystem as fs
-
 
 class NavRoutes:
     def __init__(self, config):
@@ -12,7 +11,6 @@ class NavRoutes:
 
     def filter_info(self):
         return jsonify(self.config.classList)
-
     
     def process_classes(self):
         # 获取前端发送的数据，这里假设前端发送的是JSON格式的数据
@@ -41,7 +39,10 @@ class NavRoutes:
         # 更新配置
         self.config.set_class_list(classes)
         self.config.set_majors(majors)
-        self.config.set_all_class_df(filtered_df)
-        self.config.set_merged_process_data(self.config.merge_process_data())
+        self.config.set_class_df_filtered_majors(filtered_df)
+        self.config.set_data_with_title_knowledge(self.config.merge_title_data())
+        
+        # 通知 FeatureFactory 重新初始化依赖对象
+        self.config.notify_observers()
 
         return jsonify({'message': 'Classes have been successfully processed and filtered.'}), 200

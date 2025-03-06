@@ -5,7 +5,7 @@
   <div class="body">
     <div class="main">
       <div class="top">
-        <!-- A. Scatter View -->
+        <!-- A. Scatter View or Parallel View -->
         <div class="scatter-view" v-if="clusterData">
           <ParallelView v-if="false"/>
           <ScatterView />
@@ -23,7 +23,7 @@
           <QuestionView />
         </div>
         
-        <!-- D. Question Tooltip -->
+        <!-- D. Week View -->
         <div class="week-view" v-if="JustClusterData">
           <WeekView />
         </div>

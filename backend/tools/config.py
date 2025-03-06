@@ -1,6 +1,7 @@
 from flask import Blueprint
 from tools import fileSystem as fs
 
+
 class Config:
     _instance = None
 
@@ -16,21 +17,23 @@ class Config:
         # 配置总处理文件类型
         self.classList = []
         self.majors = []
-        self.all_class_df = None
-        self.merged_process_data = None
+        self.class_df_filtered_majors = None
+        self.data_with_title_knowledge = None
+        self._observers = []
 
         self.initialize()
 
     def initialize(self):
         self.classList = ['Class1']
         self.majors = fs.load_data(fs.studentFilename)['major'].unique().tolist()
-        self.all_class_df = fs.load_data(fs.classFilename)
-        self.merged_process_data = self.merge_process_data()
+        self.class_df_filtered_majors = fs.load_data(fs.classFilename)
+        self.data_with_title_knowledge = self.merge_title_data()
 
-    def merge_process_data(self):
+    def merge_title_data(self):
+        print('merge_title_data')
         return fs.process_non_numeric_values(
             fs.merge_df_or_file(
-                df1=self.all_class_df, 
+                df1=self.class_df_filtered_majors, 
                 filename2=fs.titleFilename,
                 filter_col2=['title_ID', 'knowledge'],
                 on='title_ID')
@@ -40,8 +43,8 @@ class Config:
     def get_api_bp(self):
         return self.api_bp
 
-    def get_all_class_df(self):
-        return self.all_class_df
+    def get_class_df_filtered_majors(self):
+        return self.class_df_filtered_majors
 
     def get_class_list(self):
         return self.classList
@@ -49,19 +52,26 @@ class Config:
     def get_majors(self):
         return self.majors
 
-    def get_merged_process_data(self):
-        return self.merged_process_data
+    def get_data_with_title_knowledge(self):
+        return self.data_with_title_knowledge
 
     # Setters
-    def set_all_class_df(self, all_class_df):
-        self.all_class_df = all_class_df
-        self.merged_process_data = self.merge_process_data()
-
     def set_class_list(self, class_list):
         self.classList = class_list
 
     def set_majors(self, majors):
         self.majors = majors
 
-    def set_merged_process_data(self, merged_process_data):
-        self.merged_process_data = merged_process_data
+    def set_class_df_filtered_majors(self, class_df_filtered_majors):
+        self.class_df_filtered_majors = class_df_filtered_majors
+        # self.notify_observers()
+    def set_data_with_title_knowledge(self, data_with_title_knowledge):
+        self.data_with_title_knowledge = data_with_title_knowledge
+
+    # Observer methods
+    def add_observer(self, observer):
+        self._observers.append(observer)
+
+    def notify_observers(self):
+        for observer in self._observers:
+            observer.update_data(self)

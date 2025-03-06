@@ -8,7 +8,6 @@ class PCAAnalysis:
     def get_raw_pca_data(self):
         return self.final_feature_calculator
 
-
     def get_transformed_data(self):
         # 进行PCA分析
         # 这里假设有一个PCA实现，例如使用scikit-learn

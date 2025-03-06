@@ -1,10 +1,8 @@
 from flask import Blueprint, jsonify
 
 class ScatterRoutes:
-    def __init__(self, config, pca_analysis, cluster_analysis):
-        self.config = config
-        self.pca_analysis = pca_analysis
-        self.cluster_analysis = cluster_analysis
+    def __init__(self, feature_factory):
+        self.feature_factory = feature_factory
         self.scatter_bp = Blueprint('pca', __name__)
         self.register_routes()
 
@@ -13,10 +11,10 @@ class ScatterRoutes:
 
     def pca_cluster(self):
         # 获取PCA变换后的数据
-        transformed_data = self.pca_analysis.get_transformed_data()
-        transformed_data.index = self.pca_analysis.raw_pca_data.index  # 确保索引一致
+        transformed_data = self.feature_factory.pca_analysis.get_transformed_data()
+        transformed_data.index = self.feature_factory.pca_analysis.raw_pca_data.index  # 确保索引一致
        
-        student_clusters = self.cluster_analysis.get_student_clusters()
+        student_clusters = self.feature_factory.cluster_analysis.get_student_clusters()
 
         # 合并聚类结果和PCA结果
         result = []

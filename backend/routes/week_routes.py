@@ -5,15 +5,19 @@ from tools.features import PreliminaryFeatureCalculator, FinalFeatureCalculator
 class WeekRoutes:
     def __init__(self, config):
         self.config = config
-        self.merged_process_data = self.config.get_merged_process_data()
+        self.data_with_title_knowledge = self.config.get_data_with_title_knowledge()
         self.week_bp = Blueprint('week', __name__)
         self.register_routes()
 
     def register_routes(self):
         self.week_bp.add_url_rule('/week/week_data', view_func=self.week_analysis, methods=['GET'])
-
+    
+    def update_data(self, new_config):
+        self.config = new_config
+        self.data_with_title_knowledge = self.config.get_data_with_title_knowledge()
+        
     def week_analysis(self):
-        df = self.merged_process_data
+        df = self.data_with_title_knowledge
         start_date = df['time'].min()
         df['week'] = df['time'].apply(lambda x: wv.calculate_week_of_year(x, start_date=start_date))
         
@@ -29,5 +33,3 @@ class WeekRoutes:
         result = wv.transform_data_for_visualization(result)
         return jsonify(result)
     
-    def update_merged_process_data(self):
-        self.merged_process_data = self.config.get_merged_process_data()
