@@ -3,6 +3,7 @@ import { getClusterEveryone } from '@/api/ParallelView.js'
 
 export default createStore({
   state: {
+    configLoaded: 0, //管理后端配置
     clusterData: null,
     justClusterData: null,
     selectedStudentIds: [],
@@ -11,6 +12,9 @@ export default createStore({
     hadFilter: false
   },
   mutations: {
+    SET_CONFIG_LOADED(state, value) {
+      state.configLoaded = value;
+    },
     setClusterData(state, data) {
       state.clusterData = data
     },
@@ -57,6 +61,7 @@ export default createStore({
     }
   },
   getters: {
+    getConfigLoaded: state => state.configLoaded,
     getClusterData(state) {
       return state.clusterData
     },

@@ -8,25 +8,30 @@
       </select>
       <div class="filter">Major:</div>
     </div>
-    <Simplebar style="height: 1170px" @scroll="handleScroll">
-      <div id="visualizationS" ref="visualizationS"></div>
+    <Simplebar style="height: 1160px" @scroll="handleScroll">
+      <div id="visualizationStu" ref="visualizationStu">
+        <LoadingSpinner v-if="loading" />
+      </div>
     </Simplebar>
   </div>
 </template>
 
 <script>
-import { mapGetters } from 'vuex'
+import { mapState, mapGetters } from 'vuex'
 import { getStudents } from '@/api/StudentView'
 import Simplebar from 'simplebar-vue'
 import 'simplebar-vue/dist/simplebar.min.css'
+import LoadingSpinner from './LoadingSpinner.vue'
 
 export default {
   name: 'StudentView',
   components: {
-    Simplebar
+    Simplebar,
+    LoadingSpinner
   },
   data() {
     return {
+      loading: true, // 加载状态
       treeData: [], // 树形数据
       currentCluster: null, // 当前集群
       selectedMajor: '', // 选中的专业
@@ -34,12 +39,12 @@ export default {
       PanelsHeight: [], // 面板高度
       visibleIndices: new Set(), // 可见的学生索引集合
       expandedIndices: new Set(), // 展开的学生索引集合
-      loading: false, // 加载状态
       batchSize: 20, // 每次加载的数量
       uniqueMajors: [] // 唯一的专业列表
     }
   },
   computed: {
+    ...mapState(['configLoaded']),
     ...mapGetters(['getHadFilter', 'getColors']), // 从 Vuex 获取过滤状态和颜色
     JustClusterData() {
       return this.$store.state.justClusterData // 从 Vuex 获取集群数据
@@ -176,7 +181,7 @@ export default {
       const tipBlockWidth = (width - margin.right - margin.left) / 3 // 提示块宽度
       const tipContent = ['Knowledge', 'State', 'Score'] // 提示内容
 
-      const svg = d3.select('#visualizationS') // 选择 SVG 元素
+      const svg = d3.select('#visualizationStu') // 选择 SVG 元素
 
       const g = svg.append('g') // 创建一个新的组
       
@@ -210,7 +215,7 @@ export default {
           .attr('text-anchor', 'start')
         let Bbox = textElement.node().getBBox()
         nowBoxStartPosition += (Bbox.width  + labelMargin + labelPadding * 2) // 更新下一个标签的起始位置
-        console.log('nowBoxStartPosition', nowBoxStartPosition)
+        // console.log('nowBoxStartPosition', nowBoxStartPosition)
         // 添加背景矩形
         sg.insert('rect', ':first-child') // 在第一个子元素之前插入，确保它位于文本下方
           .attr('x', Bbox.x - labelPadding) // 留出一些额外的空间
@@ -277,15 +282,30 @@ export default {
     applyFilter() {
       this.visibleIndices.clear() // 清空可见索引集合并重新加载
       this.expandedIndices.clear() // 清空展开索引集合并重新加载
-      this.$refs.visualizationS.innerHTML = '' // 清空现有内容
+      this.$refs.visualizationStu.innerHTML = '' // 清空现有内容
       this.loadInitialBatch() // 重新加载初始批次的数据
+    },
+    async loadData() {
+      this.loading = true
+      this.visibleIndices.clear() // 清空可见索引集合并重新加载
+      this.expandedIndices.clear() // 清空展开索引集合并重新加载
+      this.$refs.visualizationStu.innerHTML = '' // 清空现有内容
+      await this.getTreeData() // 初始化时获取学生数据
+      this.loadInitialBatch() // 重新加载初始批次的数据
+      this.loading = false
     }
   },
   watch: {
+    configLoaded(newVal) {
+      if (newVal) {
+        // 重新加载逻辑
+        // this.loadData()
+      }
+    },
     getHadFilter() {
       this.visibleIndices.clear() // 清空可见索引集合并重新加载
       this.expandedIndices.clear() // 清空展开索引集合并重新加载
-      this.$refs.visualizationS.innerHTML = '' // 清空现有内容
+      this.$refs.visualizationStu.innerHTML = '' // 清空现有内容
       this.loadInitialBatch() // 重新加载初始批次的数据
     }
   }

@@ -66,9 +66,10 @@ NorthClassVision/
 │   ├── package.json
 │   ├── README.md
 │   └── vue.config.js
-├── notes/ # 学习笔记
-│   ├── study_recourse.md
+├── notes/ # 学习思考笔记
 │   ├── D3_study.md
+│   ├── DesignPatterns.md
+│   ├── study_recourse.md
 │   └── optimization_journey.md
 ├── problem.md # 竞赛内容，含官方数据集下载链接
 └── README.md
@@ -113,7 +114,6 @@ npm install
 6. 启动前端服务：
 
 ```bash
-cd ../frontend
 npm run serve
 ```
 

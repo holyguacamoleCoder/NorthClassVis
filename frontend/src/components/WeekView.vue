@@ -9,29 +9,36 @@
       <div class="limit">kind:</div>
     </div>
     <Simplebar style="height: 560px; width: 98%">
-      <div id="visualizationW"></div>
+      <LoadingSpinner v-if=loading />
+      <div id="visualizationW">
+      </div>
     </Simplebar>
   </div>
 </template>
 
 <script>
 import { getWeeks } from '@/api/WeekView'
-import { mapGetters } from 'vuex'
+import { mapState, mapGetters } from 'vuex'
 import Simplebar from 'simplebar-vue'
 import 'simplebar-vue/dist/simplebar.min.css'
+import LoadingSpinner from './LoadingSpinner.vue'
 
 export default {
   name: 'WeekView',
   components: {
-    Simplebar
+    Simplebar,
+    LoadingSpinner
   },
   data() {
     return {
+      loading: true,
       WeekData: [],
       selectedKind: '',
     }
   },
   computed: {
+    ...mapState(['configLoaded']),
+
     ...mapGetters(['getHadFilter', 'getColors']),
     JustClusterData() {
       return this.$store.state.justClusterData
@@ -276,11 +283,11 @@ export default {
 <style scoped lang="less">
 #week-view {
   .title {
-    height: 20px;
-    margin-top: 10px;
-    padding-bottom: 7px;
-    border-bottom: 1px solid #ccc;
-
+    border-bottom: 1px solid #ccc; 
+    width: 100%;
+    padding-top: 10px;
+    padding-bottom: 5px;
+    margin-bottom: 5px;
     span {
       height: 20px;
       width: inherit;

@@ -4,9 +4,10 @@
       <span>Portrait View</span>
     </div>
     <div class="vis-panel">
-      <div id="visualization0"></div>
-      <div id="visualization1"></div>
-      <div id="visualization2"></div>
+      <LoadingSpinner v-if="loading" />
+      <div id="visualization0" ref="visualization0"></div>
+      <div id="visualization1" ref="visualization1"></div>
+      <div id="visualization2" ref="visualization2"></div>
     </div>
     <div class="labels">
       <div id="label-bar"></div>
@@ -17,14 +18,19 @@
 </template>
 
 <script>
-import { mapGetters, mapActions } from 'vuex'
+import { mapState, mapGetters, mapActions } from 'vuex'
 import { getClusterStudents } from '@/api/PortraitView'
+import LoadingSpinner from './LoadingSpinner.vue'
 // import mockData from '@/mock/mockData.json'
 
 export default {
   name: 'PortraitView',
+  components:{
+    LoadingSpinner,
+  },
   data() {
     return {
+      loading: true,
       PortraitData: [],
       ourGroup: [],
       arc: null,
@@ -46,10 +52,11 @@ export default {
     // this.PortraitData = mockData
   },
   async mounted() {
-    await this.getPortraitData()
-  
+    // await this.getPortraitData()
+    // this.initialChart()
   },
   computed: {
+    ...mapState(['configLoaded']),
     ...mapGetters(['getSelection', 'getSelectionData', 'getColors', 'getHadFilter']),
     filteredSelectionData() {
       if (this.getSelectionData.length < 3) return []
@@ -63,10 +70,10 @@ export default {
   methods: {
     ...mapActions(['toggleSelection']),
     async getPortraitData() {
-      // console.log('getPortraitData')
       const { data } = await getClusterStudents()
       this.PortraitData = data
-      
+    },
+    initialChart(){
       this.renderPortraitData()
       this.renderLabelBar()
       this.renderLabelRadar()
@@ -406,9 +413,30 @@ export default {
         this.hadRender[kind] = true
       })
     },
+    async loadData() {
+      this.loading = true
+      console.log(this.loading)
+
+      this.$d3.select('#visualization0').selectAll('*').remove()
+      this.$d3.select('#visualization1').selectAll('*').remove()
+      this.$d3.select('#visualization2').selectAll('*').remove()
+      this.$d3.select('#label-bar').selectAll('*').remove()
+      await this.getPortraitData()
+      console.log('update')
+      this.initialChart()
+      
+      this.loading = false
+      console.log(this.loading)
+    }
     
   },
   watch: {
+    configLoaded(newVal) {
+      if (newVal) {
+        // 重新加载逻辑
+        // this.loadData()
+      }
+    },
     getSelection: {
       handler() {
         this.renderSelectData()
@@ -422,6 +450,7 @@ export default {
       this.$d3.select('#visualization2').selectAll('*').remove()
       this.$d3.select('#label-bar').selectAll('*').remove()
       this.getPortraitData()
+      this.initialChart()
     },
   },
 }

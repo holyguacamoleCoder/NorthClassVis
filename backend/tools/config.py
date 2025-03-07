@@ -30,7 +30,6 @@ class Config:
         self.data_with_title_knowledge = self.merge_title_data()
 
     def merge_title_data(self):
-        print('merge_title_data')
         return fs.process_non_numeric_values(
             fs.merge_df_or_file(
                 df1=self.class_df_filtered_majors, 

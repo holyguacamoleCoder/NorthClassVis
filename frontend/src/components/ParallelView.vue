@@ -20,6 +20,7 @@ export default {
   name: 'ParallelView',
   data() {
     return {
+      loading: true,
       lines: null,
       svg: null,
       g: null,

@@ -2,6 +2,7 @@
   <div id="scatter-chart">
     <div class="title">
       <span>Scatter View</span>
+
     </div>
     <div class="labels">
       <div class="label" v-for="(color, i) in getColors" :key="i">
@@ -9,18 +10,21 @@
         <div class="color-box" :style="{ backgroundColor: color }"></div>
       </div>
     </div>
-    <div id="visualizationS"></div>
+    <div id="visualizationS">
+      <LoadingSpinner v-if=loading />
+    </div>
   </div>
 </template>
 
 <script>
 import { getScatterData } from '@/api/ScatterView'
-import { mapActions, mapGetters } from 'vuex'
-
+import { mapState, mapActions, mapGetters } from 'vuex'
+import LoadingSpinner from './LoadingSpinner.vue'
 export default {
   name: 'ScatterView',
   data() {
     return {
+      loading: true,
       svg: null,
       g: null,
       xScale: null,
@@ -33,12 +37,16 @@ export default {
       renderedData: [], // 已渲染的数据
     }
   },
+  components: {
+    LoadingSpinner
+  },
   async mounted() {
     const { data } = await getScatterData()
     this.allData = data 
     this.initChart()
   },
   computed: {
+    ...mapState(['configLoaded']),
     ...mapGetters(['getSelection', 'getColors', 'getHadFilter']),
 
   },
@@ -216,6 +224,7 @@ export default {
     }
   }
   #visualizationS {
+    position: relative;
     margin: 20px;
     padding: 0 20px 20px 0;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);

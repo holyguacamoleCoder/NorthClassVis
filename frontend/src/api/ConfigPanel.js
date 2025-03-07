@@ -7,6 +7,6 @@ export const setConfig = throttle((CheckoutClasses, CheckoutMajors) => {
   })
 })
 
-export const getCOnfig = throttle(() => {
+export const getConfig = throttle(() => {
   return request.get('/nav/filter')
 })

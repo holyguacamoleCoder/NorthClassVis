@@ -1,10 +1,11 @@
 <template>
-  <div id="question-view" style="padding: 10px;">
+  <div id="question-view">
     <div class="title">
       <span>Question View</span>
       <!-- 困难度排序按钮 -->
       <div class="filter difficulty" @click="toggleSortOrder">Difficulty Order:{{ this.sortAscending ? " ↑" : " ↓" }}</div>
       <!-- 下拉菜单筛选知识点 -->
+
       <Dropdown>
         <!-- trigger element -->
         <template #trigger>
@@ -58,20 +59,24 @@
         </DropdownContent>
       </Dropdown>
       <div class="filter">Knowledge:</div>
+
     </div>
     
     <Simplebar style="height: 560px">
-      <div id="visualizationQ"></div>
+      <div id="visualizationQ">
+        <LoadingSpinner v-if="loading"/>
+      </div>
     </Simplebar>
   </div>
 </template>
 
 <script>
 import { getQuestions } from '@/api/QuestionView'
-import { mapGetters } from 'vuex'
+import { mapState, mapGetters } from 'vuex'
 import Simplebar from 'simplebar-vue'
 import 'simplebar-vue/dist/simplebar.min.css'
 import { Dropdown, DropdownContent } from 'v-dropdown'
+import LoadingSpinner from './LoadingSpinner.vue'
 
 export default {
   name: 'QuestionView',
@@ -79,9 +84,11 @@ export default {
     Simplebar,
     Dropdown,
     DropdownContent,
+    LoadingSpinner
   },
   data() {
     return {
+      loading: true,
       QuestionData: [],
       uniqueKnowledge: [],
       selectedKnowledge: {},
@@ -93,6 +100,7 @@ export default {
     // this.getQuestionData()
   },
   computed: {
+    ...mapState(['configLoaded']),
     ...mapGetters(['getHadFilter']),
     displayButton() {
       if (this.selectAllKnowledge) return 'All'
@@ -529,17 +537,17 @@ export default {
 </script>
 
 <style scoped lang="less">
-
 #question-view {
   .title {
-    border-bottom: 1px solid #ccc;
-    padding-bottom: 4px;
-    span {
+    border-bottom: 1px solid #ccc; 
+    width: 100%;
+    padding-left: 20px;
+    padding-top: 10px;
+    padding-bottom: 5px;
+    margin-bottom: 5px;
+    span{
       font-size: 20px;
       font-weight: bold;
-      padding-bottom: 10px;
-      margin-bottom: 20px;
-      padding-left: 10px;
     }
     .filter {
       float: right;
@@ -550,6 +558,7 @@ export default {
     }
     .difficulty{
       margin-left: 20px;
+      padding-right: 30px;
     }
     .dd-trigger {
       float: right;

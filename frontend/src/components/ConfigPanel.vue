@@ -22,6 +22,7 @@
 import config from '@/assets/config/config.json'
 import CheckboxDropdown from './CheckboxDropdown.vue'
 import { setConfig } from '@/api/ConfigPanel.js'
+import { mapActions } from 'vuex'
 export default {
   name: 'ConfigPanel',
   components: {
@@ -38,9 +39,10 @@ export default {
   mounted(){
   },
   computed: {
-    
+    // ...mapState(['configLoaded']),
   },
   methods: {
+    ...mapActions(['updateConfig']),
     updateSelectedClasses(selectedClasses, text) {
       this.displayClassesText = text
     },
@@ -50,13 +52,21 @@ export default {
     async submitConfigData(){
       const selectedClasses = this.CheckoutClasses.filter(item => item.checked).map(item => item.text)      
       const selectedMajors = this.CheckoutMajors.filter(item => item.checked).map(item => item.text)
+      if(selectedClasses.length === 0){
+        alert('Please select at least one class.')
+        return
+      }
+      if(selectedMajors.length === 0) {
+        alert('Please select at least one major.')
+        return
+      }
       console.log('Selected Classes:', selectedClasses)
       console.log('Selected Majors:', selectedMajors)
       const data  = await setConfig(selectedClasses, selectedMajors)
       if(data.status === 200){
         console.log('Config updated successfully')
-        this.closePanel()
-        // ???
+        // this.closePanel()
+        this.$store.commit('SET_CONFIG_LOADED', Date.now()); // 重置状态以触发重新加载
       }
     },
     closePanel() {
