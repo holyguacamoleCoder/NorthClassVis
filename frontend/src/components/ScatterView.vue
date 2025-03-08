@@ -10,8 +10,10 @@
         <div class="color-box" :style="{ backgroundColor: color }"></div>
       </div>
     </div>
-    <div id="visualizationS">
-      <LoadingSpinner v-if=loading />
+    <div>
+      <div id="visualizationS" ref="visualizationS">
+        <LoadingSpinner v-if=loading />
+      </div>
     </div>
   </div>
 </template>
@@ -24,7 +26,8 @@ export default {
   name: 'ScatterView',
   data() {
     return {
-      loading: true,
+      debugger: true,
+      loading: false,
       svg: null,
       g: null,
       xScale: null,
@@ -171,8 +174,32 @@ export default {
 
       circles.exit().remove()
     },
+    async loadData() {
+      this.loading = true
+      // this.svg.selectAll('*').remove()
+      this.$d3.select('#visualizationS').selectAll('*').remove()
+      const { data } = await getScatterData()
+      this.svg = null
+      this.g = null
+      this.xScale = null
+      this.yScale = null
+      this.tooltip = null
+      this.currentBatch = 0
+      this.totalBatches = 0
+      this.allData = []
+      this.renderedData = []
+      this.allData = data 
+      this.initChart()
+      this.loading = false
+    },
   },
   watch: {
+    configLoaded(newVal) {
+      if (newVal) {
+        // 重新加载逻辑
+        this.loadData()
+      }
+    },
     async getHadFilter() {
       console.log('had filter change!!SSSS')
       this.svg.selectAll('*').remove()

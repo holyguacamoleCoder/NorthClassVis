@@ -1,13 +1,15 @@
 <template>
   <div class="config-container">
     <div class="config-panel">
+      <LoadingSpinner v-if="loading" />
+
       <div class="config-panel-title">
         <div class="config-panel-title-icon"></div>
         <span class="config-panel-title-text">Cluster Configuration</span>
       </div>
       <div class="config-panel-checkbox">
-        <CheckboxDropdown :items="CheckoutClasses" title="Class" @change="updateSelectedClasses"/>
-        <CheckboxDropdown :items="CheckoutMajors" title="Major" @change="updateSelectedMajors"/>
+        <CheckboxDropdown v-if="CheckoutClasses" :items="CheckoutClasses" title="Class" @change="updateSelectedClasses"/>
+        <CheckboxDropdown v-if="CheckoutMajors" :items="CheckoutMajors" title="Major" @change="updateSelectedMajors"/>
       </div>
 
       <div class="config-panel-main">
@@ -21,19 +23,43 @@
 <script>
 import config from '@/assets/config/config.json'
 import CheckboxDropdown from './CheckboxDropdown.vue'
-import { setConfig } from '@/api/ConfigPanel.js'
+import LoadingSpinner from './LoadingSpinner.vue'
+import { setConfig, getConfig } from '@/api/ConfigPanel.js'
 import { mapActions } from 'vuex'
 export default {
   name: 'ConfigPanel',
   components: {
-    CheckboxDropdown
+    CheckboxDropdown,
+    LoadingSpinner
   },
   data() {
     return {
-      CheckoutClasses: config.classes,
-      CheckoutMajors: config.majors,
+      loading: false,
+      CheckoutClasses: [],
+      CheckoutMajors: [],
       displayClassesText: 'Part',
       displayMajorsText: 'All'
+    }
+  },
+  async created(){
+    const response = await getConfig()
+    if (response.status === 200) {
+      const backendClasses = response.data.classes
+      const backendMajors = response.data.majors
+
+      // 初始化所有项为 checked: false
+      this.CheckoutClasses = config.classes.map(item => ({
+        text: item.text,
+        checked: backendClasses.includes(item.text)
+      }))
+
+      this.CheckoutMajors = config.majors.map(item => ({
+        text: item.text,
+        checked: backendMajors.includes(item.text)
+      }))
+      console.log('Config loaded successfully');
+    } else {
+      console.error('Failed to fetch config data:', response);
     }
   },
   mounted(){
@@ -62,11 +88,14 @@ export default {
       }
       console.log('Selected Classes:', selectedClasses)
       console.log('Selected Majors:', selectedMajors)
+      this.loading =  true
       const data  = await setConfig(selectedClasses, selectedMajors)
       if(data.status === 200){
         console.log('Config updated successfully')
         // this.closePanel()
         this.$store.commit('SET_CONFIG_LOADED', Date.now()); // 重置状态以触发重新加载
+        this.loading = false
+        this.closePanel()
       }
     },
     closePanel() {

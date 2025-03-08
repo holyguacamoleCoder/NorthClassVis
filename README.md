@@ -120,3 +120,27 @@ npm run serve
 7. 打开浏览器，访问 `http://localhost:8080` 查看可视化效果。
 
 ## 样式预览
+
+1. 选择配置班级和专业
+
+![image-preview1](src/README/image-preview1.png)
+
+2.点击配置，等待配置成功
+
+![image-preview2](src/README/image-preview2.png)
+
+3.等待其他组件计算渲染
+
+![image-preview3](src/README/image-preview3.png)
+
+4.渲染成功，鼠标靠近获取详细信息
+
+![image-preview4](src/README/image-preview4.png)
+
+（以下内容尚未完成......）
+
+5.点击选中元素/框选元素
+
+6.点击CLUSTER处理被选择的样本，等待CLUSTER处理完毕
+
+7.可见被处理元素

@@ -1,18 +1,20 @@
 <template>
-  <div id="portrait-view" style="display: flex; justify-content: space-around;">
+  <div id="portrait-view">
     <div class="title">
       <span>Portrait View</span>
     </div>
-    <div class="vis-panel">
-      <LoadingSpinner v-if="loading" />
-      <div id="visualization0" ref="visualization0"></div>
-      <div id="visualization1" ref="visualization1"></div>
-      <div id="visualization2" ref="visualization2"></div>
-    </div>
-    <div class="labels">
-      <div id="label-bar"></div>
-      <div id="label-radar"></div>
-      <div id="label-legend"></div>
+    <div class="vis-container">
+      <div class="vis-panel">
+        <LoadingSpinner v-if="loading" />
+        <div id="visualization0" ref="visualization0"></div>
+        <div id="visualization1" ref="visualization1"></div>
+        <div id="visualization2" ref="visualization2"></div>
+      </div>
+      <div class="labels">
+        <div id="label-bar"></div>
+        <div id="label-radar"></div>
+        <div id="label-legend"></div>
+      </div>
     </div>
   </div>
 </template>
@@ -30,10 +32,11 @@ export default {
   },
   data() {
     return {
-      loading: true,
-      PortraitData: [],
-      ourGroup: [],
+      debugger: true,
+      loading: false,
+      PortraitData: {},
       arc: null,
+      ourGroup: [null, null, null],
       hadRender: [false, false, false],
       radar_dimension: [
           'Error-Free Bonus', 
@@ -52,8 +55,8 @@ export default {
     // this.PortraitData = mockData
   },
   async mounted() {
-    // await this.getPortraitData()
-    // this.initialChart()
+    await this.getPortraitData()
+    this.initialChart()
   },
   computed: {
     ...mapState(['configLoaded']),
@@ -70,8 +73,18 @@ export default {
   methods: {
     ...mapActions(['toggleSelection']),
     async getPortraitData() {
-      const { data } = await getClusterStudents()
-      this.PortraitData = data
+      try {
+        const response = await getClusterStudents();
+        if (response && response.data) {
+          this.PortraitData = response.data;
+        } else {
+          console.error('Unexpected response structure:', response);
+          this.PortraitData = {}; // 或者设置为默认值
+        }
+      } catch (error) {
+        console.error('Failed to fetch cluster students:', error);
+        this.PortraitData = {}; // 或者设置为默认值
+      }
     },
     initialChart(){
       this.renderPortraitData()
@@ -219,7 +232,7 @@ export default {
      const d3 = this.$d3
      const height = 200
      const width = 270
-     const boxHeight = 50
+    //  const boxHeight = 50
      const labelRadius = 55
      const labelCenter = { 
        X: width / 2,
@@ -230,7 +243,7 @@ export default {
        .append('svg')
        .attr('width', width)
        .attr('height', height)
-       .attr('transform', `translate(${5},${boxHeight - height / 2})`)
+       .attr('transform', `translate(${5},${0})`)
      const labelG = svg.append('g')
        .attr('class', 'label-bar')
        .attr('transform', `translate(${labelCenter.X}, ${labelCenter.Y})`)
@@ -278,7 +291,7 @@ export default {
       const d3 = this.$d3
       const height = 200
       const width = 270
-      const boxHeight = 50
+      // const boxHeight = 50
       const labelRadius = 55
       const labelCenter = { 
         X: width / 2,
@@ -289,7 +302,7 @@ export default {
         .append('svg')
         .attr('width', width)
         .attr('height', height)
-        .attr('transform', `translate(${5},${boxHeight - height / 2})`)
+        .attr('transform', `translate(${5},${0})`)
       const labelG = svg.append('g')
         .attr('class', 'label-radar')
         .attr('transform', `translate(${labelCenter.X}, ${labelCenter.Y})`)
@@ -359,7 +372,7 @@ export default {
         .append('svg')
         .attr('width', width)
         .attr('height', height)
-        .attr('transform', `translate(${60},${boxHeight - height / 2})`)
+        .attr('transform', `translate(${20},${boxHeight - height / 2})`)
       
       // Create legend items
       const legendItems = [
@@ -415,26 +428,24 @@ export default {
     },
     async loadData() {
       this.loading = true
-      console.log(this.loading)
-
-      this.$d3.select('#visualization0').selectAll('*').remove()
-      this.$d3.select('#visualization1').selectAll('*').remove()
-      this.$d3.select('#visualization2').selectAll('*').remove()
-      this.$d3.select('#label-bar').selectAll('*').remove()
-      await this.getPortraitData()
-      console.log('update')
-      this.initialChart()
+      this.$d3.select('.vis-panel').selectAll('svg').remove()
       
+      this.PortraitData = {}
+      this.arc =  null
+      this.ourGroup = [null, null, null]
+      this.hadRender = [false, false, false]
+
+      await this.getPortraitData()
+      this.initialChart()
       this.loading = false
-      console.log(this.loading)
     }
     
   },
   watch: {
     configLoaded(newVal) {
-      if (newVal) {
+      if (newVal && this.debugger) {
         // 重新加载逻辑
-        // this.loadData()
+        this.loadData()
       }
     },
     getSelection: {
@@ -448,7 +459,6 @@ export default {
       this.$d3.select('#visualization0').selectAll('*').remove()
       this.$d3.select('#visualization1').selectAll('*').remove()
       this.$d3.select('#visualization2').selectAll('*').remove()
-      this.$d3.select('#label-bar').selectAll('*').remove()
       this.getPortraitData()
       this.initialChart()
     },
@@ -458,62 +468,61 @@ export default {
 
 <style scoped lang="less">
 #portrait-view {
-  position: relative;
-  .title{
-    border-bottom: 1px solid #ccc; 
-    width: 100%;
+  .title {
+    border-bottom: 1px solid #ccc;
     padding-left: 20px;
     padding-top: 10px;
     padding-bottom: 5px;
     margin-bottom: 5px;
-    span{
+    span {
       font-size: 20px;
       font-weight: bold;
     }
   }
-  @visPanelWidth: 1210px;
-  .vis-panel {
-    position: absolute;
-    top: 45px;
+
+  .vis-container {
     height: 480px;
-    left: 10px;
-    width: @visPanelWidth;
+    width: 100%;
+    margin-left: 10px;
+    display: flex;
+    justify-content: space-between;
     margin-top: 25px;
-    margin-left: 0px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-
-    [id^='visualization'] {
-      width: calc(@visPanelWidth / 3);
-      padding-top: 55px;
-      display: inline-block;
-    }
-  }
-  @labelsHeight: 500px;
-  @labelWidth: 90px;
-  .labels {
-    height: @labelsHeight;
-    width: @labelWidth;
-    z-index: 5;
-    top: 100px;
-    right: 165px;
-    position: absolute;
-    margin: 30px 0;
-    //background-color: blue;
-    @labelHeight: calc(@labelsHeight / 3);
-    #label-bar {
-      height: @labelHeight;
-      width: @labelWidth;
-      //background-color: red;
+    .vis-panel {
+      position: relative;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      margin-left: 0px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  
+      [id^='visualization'] {
+        flex: 1;
+        padding-top: 55px;
+        display: inline-block;
+      }
     }
 
-    #label-radar {
-      height: @labelHeight;
-      width: @labelWidth;
-      //background-color: green;
+    .labels {
+      width: 300px;
+      margin: 30px 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+  
+      #label-bar,
+      #label-radar,
+      #label-legend {
+        width: 100%;
+        height: calc(100% / 3);
+        margin-top: 35px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
     }
   }
 }
 </style>
-
 
 

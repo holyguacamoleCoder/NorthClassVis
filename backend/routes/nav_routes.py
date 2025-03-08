@@ -6,11 +6,14 @@ class NavRoutes:
         self.config = config
         self.nav_bp = Blueprint('nav', __name__)
         # 注册路由
-        self.nav_bp.add_url_rule('/nav/filter', view_func=self.filter_info, methods=['GET'])
+        self.nav_bp.add_url_rule('/nav/filter', view_func=self.config_info, methods=['GET'])
         self.nav_bp.add_url_rule('/nav/config', view_func=self.process_classes, methods=['POST'])
 
-    def filter_info(self):
-        return jsonify(self.config.classList)
+    def config_info(self):
+        return jsonify(
+            {"classes": self.config.classList,
+             "majors": self.config.majors,
+            })
     
     def process_classes(self):
         # 获取前端发送的数据，这里假设前端发送的是JSON格式的数据

@@ -31,7 +31,8 @@ export default {
   },
   data() {
     return {
-      loading: true, // 加载状态
+      debugger: true,
+      loading: false, // 加载状态
       treeData: [], // 树形数据
       currentCluster: null, // 当前集群
       selectedMajor: '', // 选中的专业
@@ -55,11 +56,11 @@ export default {
     }
   },
   async created() {
-    // await this.getTreeData() // 初始化时获取学生数据
-    // this.loadInitialBatch() // 加载初始批次的数据
+    await this.getTreeData() // 初始化时获取学生数据
+    this.loadInitialBatch() // 加载初始批次的数据
   },
   mounted() {
-    // this.handleScroll() // 初始处理滚动事件
+    this.handleScroll() // 初始处理滚动事件
   },
   methods: {
     async getTreeData() {
@@ -299,7 +300,7 @@ export default {
     configLoaded(newVal) {
       if (newVal) {
         // 重新加载逻辑
-        // this.loadData()
+        this.loadData()
       }
     },
     getHadFilter() {

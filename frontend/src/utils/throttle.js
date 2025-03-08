@@ -1,5 +1,6 @@
-const defaultWait = 30000;
-function throttle(func, wait=defaultWait) {
+const defaultWait = 3000;
+
+function throttle(func, wait = defaultWait) {
   let timeout = null;
   let lastArgs = null;
   let lastThis = null;
@@ -31,7 +32,7 @@ function throttle(func, wait=defaultWait) {
       return lastResult;
     } else if (!timeout) {
       timeout = setTimeout(later, remainingTime);
-      return lastResult || Promise.resolve(); // 返回一个空的 Promise 以保持一致性
+      return lastResult; // 返回上次的结果，保持一致性
     }
   };
 }

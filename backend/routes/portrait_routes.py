@@ -33,7 +33,7 @@ class PortraitRoutes:
                 'knowledge': knowledge,
                 'bonus': bonus
             }
-        return jsonify(result)
+        return jsonify(result), 200
     
     # 以下弃用，使用依赖注入而非观察者模式
     # def update_data(self):

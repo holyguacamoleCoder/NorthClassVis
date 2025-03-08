@@ -8,7 +8,7 @@
       </select>
       <div class="limit">kind:</div>
     </div>
-    <Simplebar style="height: 560px; width: 98%">
+    <Simplebar style="height: 550px; width: 98%">
       <LoadingSpinner v-if=loading />
       <div id="visualizationW">
       </div>
@@ -31,7 +31,8 @@ export default {
   },
   data() {
     return {
-      loading: true,
+      debugger: true,
+      loading: false,
       WeekData: [],
       selectedKind: '',
     }
@@ -49,7 +50,7 @@ export default {
     }
   },
   async created() {
-    // await this.getWeekData()
+    await this.getWeekData()
   },
   methods: {
     async getWeekData() {
@@ -141,12 +142,13 @@ export default {
         .endAngle(d => angleX(d.knowledge) + angleX.bandwidth())
         .padAngle(0.05)
         .padRadius(innerRadius)
-
+      const colors = this.getColors
       filteredData.forEach((s, i) => {
         const student_id = s.id
         const student_weeks = s.weeks
         const kind = this.JustClusterData[student_id]
-        const student_color = this.getColors[kind]
+        console.log(kind)
+        const student_color = colors[kind]
 
         // 定义legend组
         const lg = g.append('g')
@@ -269,9 +271,22 @@ export default {
       d3.select('#visualizationW').selectAll('*').remove()
       // 重新渲染图表
       this.renderWeekData()
+    },
+    async loadData() {
+      this.loading = true
+      this.$d3.select('#visualizationW').selectAll('*').remove()
+      this.weekData = []
+      await this.getWeekData()
+      this.loading = false
     }
   },
   watch: {
+    configLoaded(newVal) {
+      if (newVal && this.debugger) {
+        // 重新加载逻辑
+        this.loadData()
+      }
+    },
     getHadFilter() {
       this.$d3.select('#visualizationW').selectAll('*').remove()
       this.getWeekData()

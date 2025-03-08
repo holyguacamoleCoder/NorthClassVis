@@ -62,7 +62,7 @@
 
     </div>
     
-    <Simplebar style="height: 560px">
+    <Simplebar style="height: 555px">
       <div id="visualizationQ">
         <LoadingSpinner v-if="loading"/>
       </div>
@@ -88,7 +88,8 @@ export default {
   },
   data() {
     return {
-      loading: true,
+      debugger: true,
+      loading: false,
       QuestionData: [],
       uniqueKnowledge: [],
       selectedKnowledge: {},
@@ -97,7 +98,7 @@ export default {
     };
   },
   async mounted() {
-    // this.getQuestionData()
+    this.getQuestionData()
   },
   computed: {
     ...mapState(['configLoaded']),
@@ -130,7 +131,7 @@ export default {
     // 渲染题目视图数据
     renderQuestion() {
       const d3 = this.$d3
-      const width = 650
+      const width = 655
       const margin = { top: 30, right: 5, bottom: 20, left: 5 }
       const padding = 20
       const innerWidth = width - margin.left - margin.right - padding
@@ -399,8 +400,8 @@ export default {
           .range(['Expert', 'Hard', 'Medium', 'Easy'])
         // 定义难度高度比例尺
         const stickScale = d3.scaleLinear()
-          .domain([50, 0])
-          .range([0, candyStickHeight])
+          .domain([200, 0])
+          .range([10, candyStickHeight])
         // 定义半径比例尺
         const avgScoreCircleRadius = 25
         const deltaRadius = 5
@@ -525,9 +526,21 @@ export default {
       d3.select('#visualizationQ').selectAll('*').remove()
       // 重新渲染图表
       this.renderQuestion()
+    },
+    async loadData() {
+      this.loading = true
+      this.$d3.select('#visualizationQ').selectAll('*').remove()
+      await this.getQuestionData()
+      this.loading = false
     }
   },
   watch: {
+    configLoaded(newVal) {
+      if (newVal && this.debugger) {
+        // 重新加载逻辑
+        this.loadData()
+      }
+    },
     getHadFilter() {
       this.$d3.select('#visualizationQ').selectAll('*').remove()
       this.getQuestionData()
@@ -538,6 +551,7 @@ export default {
 
 <style scoped lang="less">
 #question-view {
+  margin-left: 5px;
   .title {
     border-bottom: 1px solid #ccc; 
     width: 100%;

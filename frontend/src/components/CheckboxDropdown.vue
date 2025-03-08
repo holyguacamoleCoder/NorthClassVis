@@ -32,7 +32,13 @@ export default {
     DropdownContent,
     DropdownTrigger,
   },
-  props: ['items', 'title', 'text'],
+  props: {
+    items: {
+      type: Array,
+      default: () => []
+    },
+    title: String
+  },
   computed: {
     allChecked: {
       get() {
