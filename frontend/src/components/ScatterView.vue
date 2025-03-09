@@ -33,11 +33,13 @@ export default {
       xScale: null,
       yScale: null,
       tooltip: null,
+      brushing: null,
       batchSize: 100, // 每批加载的数据量
       currentBatch: 0, // 当前批次索引
       totalBatches: 0, // 总批次数
       allData: [], // 所有数据
       renderedData: [], // 已渲染的数据
+      brushedStudent: new Set()
     }
   },
   components: {
@@ -51,10 +53,31 @@ export default {
   computed: {
     ...mapState(['configLoaded']),
     ...mapGetters(['getSelection', 'getColors', 'getHadFilter']),
-
+ 
   },
   methods: {
     ...mapActions(['fetchScatterData', 'toggleSelection']),
+    updateChart(event){
+      if (!event.selection) return
+      function isBrushed(brush_coords, cx, cy) {
+           var x0 = brush_coords[0][0],
+               x1 = brush_coords[1][0],
+               y0 = brush_coords[0][1],
+               y1 = brush_coords[1][1];
+          return x0 <= cx && cx <= x1 && y0 <= cy && cy <= y1;    // This return TRUE or FALSE depending on if the points is in the selected area
+      }
+      const extent = event.selection
+      const circles = this.g.selectAll('.circle-scatter')
+      circles
+      .classed("selected", (d) =>{ 
+        const selected = isBrushed(extent, this.xScale(d.transform.x), this.yScale(d.transform.y))
+        if (selected) {
+          console.log(d.student_id)
+            this.brushedStudent.add(d.student_id)
+        }
+        return selected
+      })
+    },
     async initChart() {
       const d3 = this.$d3
       const height = 450
@@ -95,11 +118,15 @@ export default {
       // 绘制坐标轴
       // const xAxis = d3.axisBottom(this.xScale)
       // const yAxis = d3.axisLeft(this.yScale)
-
+      
       this.g.append('g')
           .attr('transform', `translate(0,${height - margin.top - margin.bottom})`)
-
-      this.g.append('g')
+      
+      this.brushing = d3.brush()
+            .on("start", this.brushedStudent.clear()) // 清空brushedStudent数)
+            // .on("brush", this.updateChart.bind(this))
+            .on("end", this.updateChart.bind(this))
+      this.g.call(this.brushing)
     },
     renderNextBatch() {
       if (this.currentBatch >= this.totalBatches) return
@@ -124,6 +151,7 @@ export default {
           .attr('stroke', d => this.getSelection.includes(d.student_id) ? 'black' : 'none')
           .attr('stroke-width', d => this.getSelection.includes(d.student_id) ? 2 : 1)
           .attr('opacity', d => this.getSelection.includes(d.student_id) ? 1 : 0.8)
+          .classed('selected', d => this.brushedStudent.has(d.student_id))
           .on('click', (e, d) => {
             this.toggleSelection(d.student_id)
             this.updateCircles()
@@ -142,6 +170,8 @@ export default {
 
       this.currentBatch++
       setTimeout(() => this.renderNextBatch(), 0) // 使用setTimeout来模拟异步加载
+      
+      
     },
     updateCircles() {
       // 使用 enter-update-exit 模式
@@ -158,6 +188,7 @@ export default {
           .attr('stroke', d => this.getSelection.includes(d.student_id) ? 'black' : 'none')
           .attr('stroke-width', d => this.getSelection.includes(d.student_id) ? 2 : 1)
           .attr('opacity', d => this.getSelection.includes(d.student_id) ? 1 : 0.8)
+          .classed('selected', d => this.brushedStudent.has(d.student_id))
           .on('click', (e, d) => {
             this.toggleSelection(d.student_id)
             this.updateCircles()
@@ -266,6 +297,11 @@ export default {
       }
     }
   }
+}
+.selected {
+  opacity: 1 !important;
+  stroke: black !important;
+  stroke-width: 1px !important;
 }
 </style>
 

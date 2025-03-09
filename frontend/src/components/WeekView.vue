@@ -147,7 +147,7 @@ export default {
         const student_id = s.id
         const student_weeks = s.weeks
         const kind = this.JustClusterData[student_id]
-        console.log(kind)
+        // console.log(kind)
         const student_color = colors[kind]
 
         // 定义legend组
