@@ -50,7 +50,7 @@ export default {
     }
   },
   async created() {
-    await this.getWeekData()
+    // await this.getWeekData()
   },
   methods: {
     async getWeekData() {

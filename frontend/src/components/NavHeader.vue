@@ -19,7 +19,7 @@
       </div>
     </div>
     <div class="config-button" @click="toggleConfigPanel"></div>
-    <div class="cluster-button">CLUSTER</div>
+    <div class="cluster-button" @click="handleClusterClick">CLUSTER</div>
   </div>
   
   <ConfigPanel 
@@ -42,6 +42,12 @@ export default {
     IconBlock,
     ConfigPanel,
   },
+  props: {
+    brushedStudents: {
+      type: Array,
+      default: () => []
+    }
+  },
   data() {
     return {
       isConfigPanelVisible: false,
@@ -59,6 +65,11 @@ export default {
       this.isConfigPanelVisible = false;
       this.selectedClasses = classesText
       this.selectedMajors = majorsText
+    },
+    handleClusterClick() {
+      // 将 Set 转换为数组
+      console.log(this.brushedStudents)
+      // console.log(brushedStudentArray) 
     }
   }
 };
@@ -132,6 +143,7 @@ export default {
       font-weight: bold;
       border-radius: 5px;
       background-color: #fff;
+      cursor: pointer;
     }
   }
 }

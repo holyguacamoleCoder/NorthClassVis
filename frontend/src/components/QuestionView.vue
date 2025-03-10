@@ -98,7 +98,7 @@ export default {
     };
   },
   async mounted() {
-    this.getQuestionData()
+    // this.getQuestionData()
   },
   computed: {
     ...mapState(['configLoaded']),

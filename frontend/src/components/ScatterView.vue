@@ -2,7 +2,9 @@
   <div id="scatter-chart">
     <div class="title">
       <span>Scatter View</span>
-
+      <button class="brush-button" @click="toggleBrush">
+      </button>
+      <!-- <button class="click-button" @click="toggleBrush"></button> -->
     </div>
     <div class="labels">
       <div class="label" v-for="(color, i) in getColors" :key="i">
@@ -39,7 +41,9 @@ export default {
       totalBatches: 0, // 总批次数
       allData: [], // 所有数据
       renderedData: [], // 已渲染的数据
-      brushedStudent: new Set()
+      clickedStudent: new Set(),
+      brushedStudent: new Set(),
+      brushEnabled: false
     }
   },
   components: {
@@ -72,11 +76,14 @@ export default {
       .classed("selected", (d) =>{ 
         const selected = isBrushed(extent, this.xScale(d.transform.x), this.yScale(d.transform.y))
         if (selected) {
-          console.log(d.student_id)
-            this.brushedStudent.add(d.student_id)
+          // console.log(d.student_id)
+          this.brushedStudent.add(d.student_id)
         }
+        // console.log(this.brushedStudent)
         return selected
       })
+      this.updateCircles() // 立即更新圆点样式
+
     },
     async initChart() {
       const d3 = this.$d3
@@ -123,10 +130,19 @@ export default {
           .attr('transform', `translate(0,${height - margin.top - margin.bottom})`)
       
       this.brushing = d3.brush()
-            .on("start", this.brushedStudent.clear()) // 清空brushedStudent数)
-            // .on("brush", this.updateChart.bind(this))
-            .on("end", this.updateChart.bind(this))
-      this.g.call(this.brushing)
+            .on("start", () => {
+              console.log('start')
+              this.brushedStudent.clear()
+              console.log(this.brushedStudent.size)
+            }) // 清空brushedStudent数
+            .on("brush", this.updateChart.bind(this))
+            .on("end", () => {            
+              this.updateChart.bind(this)
+              console.log(this.brushedStudent.size)
+              this.$emit('brushed-students-updated', Array.from(this.brushedStudent))
+            })
+      // this.g.call(this.brushing)
+      // this.updateBrushing()
     },
     renderNextBatch() {
       if (this.currentBatch >= this.totalBatches) return
@@ -146,12 +162,12 @@ export default {
           .merge(circles)
           .attr('cx', d => this.xScale(d.transform.x))
           .attr('cy', d => this.yScale(d.transform.y))
-          .attr('r', d => this.getSelection.includes(d.student_id) ? 8 : 5)
+          .attr('r', d => this.clickedStudent.has(d.student_id) || this.brushedStudent.has(d.student_id) ? 8 : 5)
           .attr('fill', d => this.getColors[d.cluster])
-          .attr('stroke', d => this.getSelection.includes(d.student_id) ? 'black' : 'none')
-          .attr('stroke-width', d => this.getSelection.includes(d.student_id) ? 2 : 1)
-          .attr('opacity', d => this.getSelection.includes(d.student_id) ? 1 : 0.8)
-          .classed('selected', d => this.brushedStudent.has(d.student_id))
+          .attr('stroke', d => this.clickedStudent.has(d.student_id) || this.brushedStudent.has(d.student_id) ? 'black' : 'none')
+          .attr('stroke-width', d => this.clickedStudent.has(d.student_id) || this.brushedStudent.has(d.student_id) ? 2 : 1)
+          .attr('opacity', d => this.clickedStudent.has(d.student_id) || this.brushedStudent.has(d.student_id) ? 1 : 0.8)
+          // .classed('selected', d => this.brushedStudent.has(d.student_id))
           .on('click', (e, d) => {
             this.toggleSelection(d.student_id)
             this.updateCircles()
@@ -183,14 +199,16 @@ export default {
           .merge(circles)
           .attr('cx', d => this.xScale(d.transform.x))
           .attr('cy', d => this.yScale(d.transform.y))
-          .attr('r', d => this.getSelection.includes(d.student_id) ? 8 : 5)
+          .attr('r', 5)
           .attr('fill', d => this.getColors[d.cluster])
-          .attr('stroke', d => this.getSelection.includes(d.student_id) ? 'black' : 'none')
-          .attr('stroke-width', d => this.getSelection.includes(d.student_id) ? 2 : 1)
-          .attr('opacity', d => this.getSelection.includes(d.student_id) ? 1 : 0.8)
-          .classed('selected', d => this.brushedStudent.has(d.student_id))
+          .attr('stroke', d => this.clickedStudent.has(d.student_id) || this.brushedStudent.has(d.student_id) ? 'black' : 'none')
+          .attr('stroke-width', d => this.clickedStudent.has(d.student_id) || this.brushedStudent.has(d.student_id) ? 1 : 0)
+          .attr('opacity', d => this.clickedStudent.has(d.student_id) || this.brushedStudent.has(d.student_id) ? 1 : 0.8)
           .on('click', (e, d) => {
-            this.toggleSelection(d.student_id)
+            if(this.clickedStudent.has(d.student_id)){
+              this.clickedStudent.delete(d.student_id)
+            }
+            else this.clickedStudent.add(d.student_id)
             this.updateCircles()
           })
           .on('mouseover', (e, d) => {
@@ -204,6 +222,18 @@ export default {
           })
 
       circles.exit().remove()
+    },
+    updateBrushing() {
+      if(this.brushEnabled === false) {
+        this.g.call(this.brushing.move, null) // 清除当前的刷选区域
+        this.g.on('.brush', null) // 移除所有brush事件
+      }else{
+        this.g.call(this.brushing)
+      }
+    },
+    toggleBrush() {
+      this.brushEnabled = !this.brushEnabled
+      this.updateBrushing()
     },
     async loadData() {
       this.loading = true
@@ -236,6 +266,9 @@ export default {
       this.svg.selectAll('*').remove()
       await this.fetchScatterData()
       this.initChart()
+    },
+    brushEnabled() {
+      this.updateBrushing()
     }
   }
 }
@@ -254,6 +287,26 @@ export default {
     span{
       font-size: 20px;
       font-weight: bold;
+    }
+    .brush-button{
+      float: right;
+      position: relative;
+      margin-top: 4px;
+      margin-right: 40px;
+      height: 20px;
+      width: 20px;
+      border: 0;
+      background: no-repeat center/85% url('~@/assets/images/brush.png') ;
+    }
+    .click-button{
+      float: right;
+      position: relative;
+      margin-top: 4px;
+      margin-right: 10px;
+      height: 20px;
+      width: 20px;
+      border: 0;
+      background: no-repeat center/100% url('~@/assets/images/click.png') ;
     }
   }
   .labels{
@@ -298,10 +351,6 @@ export default {
     }
   }
 }
-.selected {
-  opacity: 1 !important;
-  stroke: black !important;
-  stroke-width: 1px !important;
-}
+
 </style>
 

@@ -1,14 +1,15 @@
 <template>
 <div class="app-container">
-  <div class="header"><NavHeader />
-</div>  
+  <div class="header">
+    <NavHeader :brushedStudents="brushedStudents"/>
+  </div>  
   <div class="body">
     <div class="main">
       <div class="top">
         <!-- A. Scatter View or Parallel View -->
         <div class="scatter-view" v-if="clusterData">
           <ParallelView v-if="false"/>
-          <ScatterView />
+          <ScatterView @brushed-students-updated="updateBrushedStudents"/>
         </div>
         
         <!-- B. Portrait View -->
@@ -64,7 +65,8 @@ export default {
     return {
       selectedClasses: 2,
       CheckoutAllClass: true,
-      CheckoutClasses: []
+      CheckoutClasses: [],
+      brushedStudents: []
     }
   },
   computed: {
@@ -81,10 +83,13 @@ export default {
   },
   mounted() {
     this.fetchClusterData()
+    
   },
   methods: {
     ...mapActions(['fetchClusterData', 'toggleHadFilter']),
-    
+    updateBrushedStudents(students) {
+      this.brushedStudents = students
+    }
   },
   watch: {
     //监视被选中的学生实例

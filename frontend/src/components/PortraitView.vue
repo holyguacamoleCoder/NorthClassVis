@@ -55,8 +55,8 @@ export default {
     // this.PortraitData = mockData
   },
   async mounted() {
-    await this.getPortraitData()
-    this.initialChart()
+    // await this.getPortraitData()
+    // this.initialChart()
   },
   computed: {
     ...mapState(['configLoaded']),
