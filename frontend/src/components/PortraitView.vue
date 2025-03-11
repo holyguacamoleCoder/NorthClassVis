@@ -23,7 +23,6 @@
 import { mapState, mapGetters, mapActions } from 'vuex'
 import { getClusterStudents } from '@/api/PortraitView'
 import LoadingSpinner from './LoadingSpinner.vue'
-// import mockData from '@/mock/mockData.json'
 
 export default {
   name: 'PortraitView',
@@ -36,6 +35,7 @@ export default {
       loading: false,
       PortraitData: {},
       arc: null,
+      radarLine: null,
       ourGroup: [null, null, null],
       hadRender: [false, false, false],
       radar_dimension: [
@@ -52,23 +52,14 @@ export default {
   },
   created() {
     this.hadRender = [false, false, false]
-    // this.PortraitData = mockData
   },
   async mounted() {
-    // await this.getPortraitData()
-    // this.initialChart()
+    await this.getPortraitData()
+    this.initialChart()
   },
   computed: {
     ...mapState(['configLoaded']),
-    ...mapGetters(['getSelection', 'getSelectionData', 'getColors', 'getHadFilter']),
-    filteredSelectionData() {
-      if (this.getSelectionData.length < 3) return []
-      let useData = []
-      for (let i = 0; i < this.getSelectionData.length; i++) {
-        useData.push(this.getSelectionData[i])
-      }
-      return useData
-    },
+    ...mapGetters(['getSelectedData', 'getColors']),
   },
   methods: {
     ...mapActions(['toggleSelection']),
@@ -92,10 +83,10 @@ export default {
       this.renderLabelRadar()
       this.renderLegend()
     },
-    async renderPortraitData() {
+    renderPortraitData() {
       const d3 = this.$d3
       let useData = Object.values(this.PortraitData)
-      useData.forEach((clusterData, i) => {
+      useData.forEach((clusterData) => {
         const data = clusterData
         const kind = clusterData.cluster
         const knowledge_dimension = Object.keys(data.knowledge)
@@ -104,129 +95,151 @@ export default {
           value: d[1],
           index: d[1],
         }))
-        
+      
         const radar_dimension = this.radar_dimension
         const radar_data = radar_dimension.map(feature => ({
           features: feature,
           value: data.bonus[feature],
           index: data.bonus[feature],
         }))
-        
+      
         const height = 360
         const width = 360
         const radius = Math.min(height, width) / 2
         const innerRadius = 0.5 * radius
         const outerRadius = radius
-        const center = { X: width / 2, Y: height / 2 }
-        const svg = d3.select(`#visualization${i}`)
-          .html('') // Clear previous content
-          .append('svg')
-          .attr('width', height)
-          .attr('height', width)
-          .attr('transform', `translate(${20}, ${0})`)
-        const g = svg.append('g')
-          .attr('transform', `translate(${center.X}, ${center.Y})`)
-        this.ourGroup[i] = g
-        
-        
+      
+        const g = this.createSVGAndGroup(kind, height, width)
         const angleCircularBar = d3.scaleBand()
-          .domain(knowledge_dimension)
-          .range([0, 2 * Math.PI])
-          .align(0)
-      
+              .domain(knowledge_dimension)
+              .range([0, 2 * Math.PI])
+              .align(0)
         const radiusY = d3.scaleLinear()
-          .domain([0, 1])
-          .range([innerRadius, outerRadius])
-        // 聚类柱状图
+              .domain([0, 1])
+              .range([innerRadius, outerRadius])
         this.arc = d3.arc()
-          .innerRadius(innerRadius)
-          .outerRadius(d => radiusY(d.value))
-          .startAngle(d => angleCircularBar(d.knowledge))
-          .endAngle(d => angleCircularBar(d.knowledge) + angleCircularBar.bandwidth())
-          .padAngle(0.01)
-          .padRadius(innerRadius)
-      
-        const levels = 3
-        const opcityCircles = 0.01
-        const lradius = radius
-        const axisGrid = g.append('g')
-          .attr('class', 'axis-grid')
-        // 圆圈虚线
-        axisGrid.selectAll('.levels')
-          .data(d3.range(1, levels + 1).reverse())
-          .join('circle')
-          .attr('class', 'grid-circle')
-          .attr('r', d => d * (lradius / levels))
-          .style('fill', '#CDCDCD')
-          .style('stroke', '#CDCDCD')
-          .style('fill-opacity', opcityCircles)
-          .style('filter', 'url(#glow)')
-          .style('stroke-dasharray', '4, 4')
-      
-        // const knowledge = Object.keys(this.PortraitData[0].knowledge)
-        const axis = axisGrid.selectAll('.axis')
-          .data(knowledge_dimension)
-          .join('g')
-          .attr('class', 'axis')
-        // 直虚线
-        axis.append('line')
-          .attr('x1', 0)
-          .attr('y1', 0)
-          .attr('x2', d => radiusY(1) * Math.sin(angleCircularBar(d)))
-          .attr('y2', d => -radiusY(1) * Math.cos(angleCircularBar(d)))
-          .attr('class', 'line')
-          .style('stroke', '#CDCDCD')
-          .style('stroke-width', '1px')
-          .style('stroke-dasharray', '4, 3')
-      
-        // 绘制聚类柱状图
-        g.selectAll('path')
-          .data(knowledge_data)
-          .join('path')
-          .attr('fill', `${this.getColors[kind]}`)
-          .attr('d', this.arc)
-
-        // 绘制内圈雷达图
-        const angleRadar = d3.scaleBand()
-          .domain(radar_dimension)
-          .range([0, 2 * Math.PI])
-          .align(0)
-        const radiusR = d3.scaleLinear()
-          .domain([0, 1])
-          .range([0, innerRadius])
-        const radarLine = d3.lineRadial()
-          .radius(d => radiusR(d.value))
-          .angle(d => angleRadar(d.features))
-
-        // 创建渐变
-        const gradientId = `gradient-${kind}`
-        svg.append('defs')
-          .append('radialGradient')
-          .attr('id', gradientId)
-          .attr('cx', '50%')
-          .attr('cy', '50%')
-          .attr('r', '100%')
-          .selectAll('stop')
-          .data([
-            { offset: '0%', color: 'white' },
-            { offset: '100%', color: `${this.getColors[kind]}` , opcityCircles: 0.8},
-            // { offset: '100%', color: `${this.getColors[kind]}`, opcityCircles: 0.8}
-          ])
-          .enter().append('stop')
-          .attr('offset', d => d.offset)
-          .attr('stop-color', d => d.color)
-          .attr('stop-opacity', d => d.opcityCircles)
-        // 确保雷达图路径闭合
+        .innerRadius(innerRadius)
+        .outerRadius(d => radiusY(d.value))
+        .startAngle(d => angleCircularBar(d.knowledge))
+        .endAngle(d => angleCircularBar(d.knowledge) + angleCircularBar.bandwidth())
+        .padAngle(0.02)
+        .padRadius(innerRadius)
         
-        const closedData = [...radar_data, radar_data[0]]
-        g.append('path')
-          .datum(closedData)
-          .attr('fill',  `url(#${gradientId})`)
-          .attr('fill-opacity', 0.5)
-          .attr('stroke', `${this.getColors[kind]}`)
-          .attr('stroke-width', 2)
-          .attr('d', radarLine)
-          })
+        // 绘制圆形虚线、直虚线
+        this.drawCircularGrid(g, radius)
+        this.drawCircularAxes(g, angleCircularBar, radiusY)
+        // 绘制圆环柱状图
+        this.drawCircularBars(g, knowledge_data, kind, true)
+      
+        const angleRadar = d3.scaleBand()
+              .domain(radar_dimension)
+              .range([0, 2 * Math.PI])
+              .align(0)
+  
+        const radiusR = d3.scaleLinear()
+              .domain([0, 1])
+              .range([0, innerRadius])
+        this.radarLine = d3.lineRadial()
+        .radius(d => radiusR(d.value))
+        .angle(d => angleRadar(d.features))
+        // 绘制雷达图
+        this.drawRadarChart(g, radar_data, this.radarLine, kind, true)
+      })
+    },
+    createSVGAndGroup(index, height, width) {
+      const d3 = this.$d3;
+      const center = { X: width / 2, Y: height / 2 }
+
+      const svg = d3.select(`#visualization${index}`)
+        .html('') // Clear previous content
+        .append('svg')
+        .attr('width', height)
+        .attr('height', width)
+        .attr('transform', `translate(${20}, ${0})`)
+
+      const g = svg.append('g')
+        .attr('transform', `translate(${center.X}, ${center.Y})`)
+
+      this.ourGroup[index] = g
+      
+
+      return g
+    },
+    drawCircularBars(g, knowledge_data, kind, fill) {
+      g.selectAll('path')
+        .data(knowledge_data)
+        .join('path')
+        .attr('stroke', fill ? 'none' : 'black')
+        .attr('stroke-width', fill ? 2 : 3)
+        .attr('fill', fill ? `${this.getColors[kind]}` : 'none')
+        .attr('d', this.arc)
+    },
+    drawCircularGrid(g, radius) {
+  const d3 = this.$d3
+  const levels = 3
+  const opcityCircles = 0.01
+  const lradius = radius
+
+  const axisGrid = g.append('g')
+    .attr('class', 'axis-grid')
+
+  axisGrid.selectAll('.levels')
+    .data(d3.range(1, levels + 1).reverse())
+    .join('circle')
+    .attr('class', 'grid-circle')
+    .attr('r', d => d * (lradius / levels))
+    .style('fill', '#CDCDCD')
+    .style('stroke', '#CDCDCD')
+    .style('fill-opacity', opcityCircles)
+    .style('stroke-dasharray', '4, 4')
+    },
+    drawCircularAxes(g, angleCircularBar, radiusY) {
+  // const d3 = this.$d3;
+
+  const axis = g.append('g')
+    .attr('class', 'axis')
+
+  axis.selectAll('.axis')
+    .data(angleCircularBar.domain())
+    .join('g')
+    .attr('class', 'axis')
+    .append('line')
+    .attr('x1', 0)
+    .attr('y1', 0)
+    .attr('x2', d => radiusY(1) * Math.sin(angleCircularBar(d)))
+    .attr('y2', d => -radiusY(1) * Math.cos(angleCircularBar(d)))
+    .attr('class', 'line')
+    .style('stroke', '#CDCDCD')
+    .style('stroke-width', '1px')
+    .style('stroke-dasharray', '4, 3')
+    },
+    drawRadarChart(g, radar_data, radarLine, kind, fill) {
+      const gradientId = `gradient-${kind}`
+    
+      g.append('defs')
+        .append('radialGradient')
+        .attr('id', gradientId)
+        .attr('cx', '50%')
+        .attr('cy', '50%')
+        .attr('r', '100%')
+        .selectAll('stop')
+        .data([
+          { offset: '0%', color: 'white' },
+          { offset: '100%', color: `${this.getColors[kind]}`, opcityCircles: 0.8 },
+        ])
+        .enter().append('stop')
+        .attr('offset', d => d.offset)
+        .attr('stop-color', d => d.color)
+        .attr('stop-opacity', d => d.opcityCircles);
+      // 确保雷达图路径闭合
+      const closedData = [...radar_data, radar_data[0]];
+      g.append('path')
+        .datum(closedData)
+        .attr('fill', fill ? `url(#${gradientId})` : 'none')
+        .attr('fill-opacity', fill ? 0.5 : 1)
+        .attr('stroke', fill ? `${this.getColors[kind]}` : 'black')
+        .attr('stroke-width', fill ? 2 : 2.5)
+        .attr('d', radarLine)
     },
     renderLabelBar() {
      const d3 = this.$d3
@@ -286,7 +299,7 @@ export default {
        .attr('text-anchor', (d, i) => i >= knowledgeNum / 2 ? 'end' : 'start')
        .attr('font-size', '0.6em')
        .text(d => d)
-     },
+    },
     renderLabelRadar() {
       const d3 = this.$d3
       const height = 200
@@ -306,7 +319,6 @@ export default {
       const labelG = svg.append('g')
         .attr('class', 'label-radar')
         .attr('transform', `translate(${labelCenter.X}, ${labelCenter.Y})`)
-      
       
       // let features_dimension = Object.keys(Object.values(this.PortraitData)[0].radar)
       // 调整渲染顺序
@@ -328,7 +340,6 @@ export default {
         .style('fill', '#CDCDCD')
         .style('stroke', '#CDCDCD')
         .style('fill-opacity', opcityCircles)
-        .style('filter', 'url(#glow)')
         .style('stroke-dasharray', '9, 9')
       // 直虚线
       const axis = labelG.selectAll('.axis-radar')
@@ -399,32 +410,85 @@ export default {
           .style('text-anchor', 'start')
       })
     },
-    renderSelectData() {
-      if (this.filteredSelectionData.length === 0) return
+    renderSelectedData() {
+      // const d3 = this.$d3
 
-      this.filteredSelectionData.forEach(baseData => {
-        const data = Object.entries(baseData.knowledge).map(d => ({
+      const selectedData = this.getSelectedData
+      // 分别渲染三种类型数据平均值
+      for (let kind = 0; kind < 3; kind++) {
+        // 筛选出i类数据
+        const data = Object.values(selectedData).filter(d => d.cluster === kind)
+        // 如果没有，则不渲染
+        
+        if (data.length === 0) {
+          continue
+        }
+        console.log(data)
+        // 计算当前类中所有学生的指标平均值
+        const calculateAverage = (datum) => {
+          // 初始化平均值对象
+          const avgBonus = {}
+          const avgKnowledge = {}
+
+            // 初始化各项指标的总和
+            this.radar_dimension.forEach(feature => {
+            avgBonus[feature] = 0;
+          })
+          Object.keys(datum[0].knowledge).forEach(knowledge => {
+            avgKnowledge[knowledge] = 0;
+          })
+
+          // 计算各项指标的总和
+          datum.forEach(item => {
+            this.radar_dimension.forEach(feature => {
+              avgBonus[feature] += item.bonus[feature];
+            })
+
+            Object.keys(item.knowledge).forEach(knowledge => {
+              avgKnowledge[knowledge] += item.knowledge[knowledge];
+            })
+          })
+
+          // 计算平均值
+          this.radar_dimension.forEach(feature => {
+            avgBonus[feature] /= datum.length;
+          })
+
+          Object.keys(avgKnowledge).forEach(knowledge => {
+            avgKnowledge[knowledge] /= datum.length;
+          })
+          return { avgBonus, avgKnowledge }
+        }// function: calculateAverage
+        const { avgBonus, avgKnowledge } = calculateAverage(data)
+
+        // console.log(`Cluster ${kind} Average Bonus:`, avgBonus)
+        // console.log(`Cluster ${kind} Average Knowledge:`, avgKnowledge)
+        
+        let thisGroup = null
+        if(this.ourGroup[kind].select('.select-group')){
+          this.ourGroup[kind].select('.select-group').remove()
+        }
+        thisGroup =this.ourGroup[kind].append('g')
+            .attr('class', 'select-group')
+          // this.ourGroup[kind].select('.select-group').clear()
+        // 绘制圆环柱状图
+        const knowledge_data = Object.entries(avgKnowledge).map(d => ({
           knowledge: d[0],
           value: d[1],
           index: d[1],
         }))
-        const kind = baseData.cluster
-        if (this.hadRender[kind]) {
-          this.ourGroup[kind].selectAll('.stu').remove()
-        }
-        this.ourGroup[kind]
-          .append('g')
-          .selectAll('path')
-          .data(data)
-          .join('g')
-          .append('path')
-          .attr('class', 'stu')
-          .attr('fill', 'none')
-          .attr('d', this.arc)
-          .attr('stroke', 'black')
-          .attr('stroke-width', '2px')
-        this.hadRender[kind] = true
-      })
+        this.drawCircularBars(thisGroup, knowledge_data, kind, false)
+        // 绘制雷达图
+        const radar_dimension = this.radar_dimension
+        const radar_data = radar_dimension.map(feature => ({
+          features: feature,
+          value: avgBonus[feature],
+          index: avgBonus[feature],
+        }))
+        this.drawRadarChart(thisGroup, radar_data, this.radarLine, kind, false)
+        
+        // 渲染逻辑
+      } // for-i
     },
     async loadData() {
       this.loading = true
@@ -448,20 +512,12 @@ export default {
         this.loadData()
       }
     },
-    getSelection: {
-      handler() {
-        this.renderSelectData()
-      },
-      deep: true,
-    },
-    getHadFilter() {
-      console.log('had filter change!!')
-      this.$d3.select('#visualization0').selectAll('*').remove()
-      this.$d3.select('#visualization1').selectAll('*').remove()
-      this.$d3.select('#visualization2').selectAll('*').remove()
-      this.getPortraitData()
-      this.initialChart()
-    },
+    getSelectedData(newVal) {
+      if (!newVal) {
+        return
+      }
+      this.renderSelectedData()
+    }
   },
 }
 </script>

@@ -1,10 +1,10 @@
 import request from '@/utils/request'
 
-// 获取周视图相关数据
-export const getSelectedData = (brushedStudent) => {
-  return request.get('/cluster/select', { 
+// 获取被选中学生的各个指标数据
+export const getSelectedData = (selectedStudent) => {
+  return request.get('/cluster/display', { 
     params: {
-      brushedStudent
+      student_ids: selectedStudent
     } 
   })
 }

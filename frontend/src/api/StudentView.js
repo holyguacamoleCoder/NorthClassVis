@@ -1,10 +1,10 @@
 import request from '@/utils/request'
 
-// 获取周视图相关数据
-export const getStudents = () => {
-  return request.get('student/tree_data',{
+// 获取学生视图相关数据
+export const getStudents = (selectedIds) => {
+  return request.get('student/tree_data',selectedIds ? {
     params: {
-      // limit: 10
+      student_ids: selectedIds
     }
-  })
+  } : null)
 }

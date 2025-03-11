@@ -10,6 +10,7 @@
     </div>
     <Simplebar style="height: 1160px" @scroll="handleScroll">
       <div id="visualizationStu" ref="visualizationStu">
+        <div class="wait-prompt"  v-if="isWaiting">Waiting for brush :) ...</div>
         <LoadingSpinner v-if="loading" />
       </div>
     </Simplebar>
@@ -32,6 +33,7 @@ export default {
   data() {
     return {
       debugger: true,
+      isWaiting: true,
       loading: false, // 加载状态
       treeData: [], // 树形数据
       currentCluster: null, // 当前集群
@@ -46,26 +48,22 @@ export default {
   },
   computed: {
     ...mapState(['configLoaded']),
-    ...mapGetters(['getHadFilter', 'getColors']), // 从 Vuex 获取过滤状态和颜色
-    JustClusterData() {
-      return this.$store.state.justClusterData // 从 Vuex 获取集群数据
-    },
+    ...mapGetters(['getStudentClusterInfo','getSelectedIds', 'getSelectedData','getColors']),
     filteredTreeData() {
       if (!this.selectedMajor) return this.treeData
       return this.treeData.filter(student => student.major === this.selectedMajor)
     }
   },
   async created() {
-    // await this.getTreeData() // 初始化时获取学生数据
-    // this.loadInitialBatch() // 加载初始批次的数据
+    
   },
   mounted() {
-    // this.handleScroll() // 初始处理滚动事件
   },
   methods: {
-    async getTreeData() {
-      const { data: { children } } = await getStudents() // 获取学生树形数据
+    async getTreeData(stu_ids) {
+      const { data: { children } } = await getStudents(stu_ids) // 获取学生树形数据
       // console.log('studentData', children)
+      // 筛选出选中的学生数据
       this.treeData = children
       this.factLength = children.length // 设置实际的学生数量
       this.PanelsHeight = new Array(this.factLength).fill(0) // 初始化学生面板高度数组
@@ -177,7 +175,7 @@ export default {
       const labelMargin = 20 // 标签外边距
       const labelContent = ['name', 'class', 'major'] // 标签内容
       const margin = { top: 20, right: 20, bottom: 10, left: 20 } // 边距
-      const padding = { top: 0, right: 10, bottom: 10, left: 5 } // 内边距
+      const padding = { top: 5, right: 10, bottom: 10, left: 5 } // 内边距
       const studentTipHeight = 40 // 学生提示高度
       const tipBlockWidth = (width - margin.right - margin.left) / 3 // 提示块宽度
       const tipContent = ['Knowledge', 'State', 'Score'] // 提示内容
@@ -188,7 +186,7 @@ export default {
       
       const s = this.filteredTreeData[index]
       
-      this.currentCluster = this.JustClusterData[s.name] // 设置当前集群
+      this.currentCluster = this.getStudentClusterInfo[s.name] // 设置当前集群
       const studentPanelHeight = studentTitleHeight + studentTipHeight + margin.bottom // 计算学生面板高度
       const varToggleFunc = this.togglePanelHeight
       const studentPanel = g.append('svg') // 创建学生面板
@@ -196,6 +194,7 @@ export default {
         .attr('class', 'student-panel')
         .attr('width', width - margin.left - margin.right)
         .attr('height', studentPanelHeight)
+        // .attr('height', this.PanelsHeight[index])
         .style('box-shadow', '0 0 10px rgba(0, 0, 0, 0.1)')
         .on("click", function() {
           // 点击时，切换面板的高度
@@ -233,7 +232,7 @@ export default {
           .attr('x', padding.left + tipBlockWidth * t)
           .attr('y', padding.top + studentTitleHeight)
           .text(tipContent[t])
-          .attr('font-size', '12px')
+          .attr('font-size', '17px')
           .attr('font-weight', '300')
           .attr('text-anchor', 'start')
       }
@@ -291,7 +290,7 @@ export default {
       this.visibleIndices.clear() // 清空可见索引集合并重新加载
       this.expandedIndices.clear() // 清空展开索引集合并重新加载
       this.$refs.visualizationStu.innerHTML = '' // 清空现有内容
-      await this.getTreeData() // 初始化时获取学生数据
+      await this.getTreeData(this.getSelectedIds) // 初始化时获取学生数据
       this.loadInitialBatch() // 重新加载初始批次的数据
       this.loading = false
     }
@@ -303,11 +302,11 @@ export default {
         this.loadData()
       }
     },
-    getHadFilter() {
-      this.visibleIndices.clear() // 清空可见索引集合并重新加载
-      this.expandedIndices.clear() // 清空展开索引集合并重新加载
-      this.$refs.visualizationStu.innerHTML = '' // 清空现有内容
-      this.loadInitialBatch() // 重新加载初始批次的数据
+    async getSelectedData(newVal) {
+      if (!newVal) {
+        return
+      }
+      this.loadData() 
     }
   }
 }
@@ -315,7 +314,6 @@ export default {
 
 <style scoped lang="less">
 #student-view {
-  
   .title {
     font-size: 20px;
     font-weight: bold;
@@ -343,6 +341,15 @@ export default {
     .filter{
       font-weight: bold;
     }
+  }
+  .wait-prompt{
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translateX(-50%) translateY(-50%);;
+    font-size: 30px;
+    font-weight: bold;
+    color: #eee;
   }
   .student-panel {
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);

@@ -56,11 +56,11 @@ export default {
   },
   computed: {
     ...mapState(['configLoaded']),
-    ...mapGetters(['getSelection', 'getColors', 'getHadFilter']),
+    ...mapGetters(['getColors']),
  
   },
   methods: {
-    ...mapActions(['fetchScatterData', 'toggleSelection']),
+    ...mapActions(['toggleSelectedIds']),
     updateChart(event){
       if (!event.selection) return
       function isBrushed(brush_coords, cx, cy) {
@@ -131,15 +131,14 @@ export default {
       
       this.brushing = d3.brush()
             .on("start", () => {
-              console.log('start')
+              // console.log('start')
               this.brushedStudent.clear()
-              console.log(this.brushedStudent.size)
+              // console.log(this.brushedStudent.size)
             }) // 清空brushedStudent数
             .on("brush", this.updateChart.bind(this))
             .on("end", () => {            
               this.updateChart.bind(this)
-              console.log(this.brushedStudent.size)
-              this.$emit('brushed-students-updated', Array.from(this.brushedStudent))
+              this.toggleSelectedIds(Array.from(this.brushedStudent))
             })
       // this.g.call(this.brushing)
       // this.updateBrushing()
@@ -169,8 +168,12 @@ export default {
           .attr('opacity', d => this.clickedStudent.has(d.student_id) || this.brushedStudent.has(d.student_id) ? 1 : 0.8)
           // .classed('selected', d => this.brushedStudent.has(d.student_id))
           .on('click', (e, d) => {
-            this.toggleSelection(d.student_id)
+            if(this.clickedStudent.has(d.student_id)){
+              this.clickedStudent.delete(d.student_id)
+            }
+            else this.clickedStudent.add(d.student_id)
             this.updateCircles()
+            // console.log(this.clickedStudent)
           })
           .on('mouseover', (e, d) => {
             this.tooltip.style('visibility', 'visible')
@@ -261,12 +264,7 @@ export default {
         this.loadData()
       }
     },
-    async getHadFilter() {
-      console.log('had filter change!!SSSS')
-      this.svg.selectAll('*').remove()
-      await this.fetchScatterData()
-      this.initChart()
-    },
+    
     brushEnabled() {
       this.updateBrushing()
     }

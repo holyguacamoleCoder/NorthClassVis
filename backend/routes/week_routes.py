@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from tools import WeekView as wv
 from tools.features import PreliminaryFeatureCalculator, FinalFeatureCalculator
 
@@ -17,10 +17,14 @@ class WeekRoutes:
         self.data_with_title_knowledge = self.config.get_data_with_title_knowledge()
         
     def week_analysis(self):
+        student_ids = request.args.getlist('student_ids[]')
+
         df = self.data_with_title_knowledge
+        if student_ids:
+            df = df[df['student_ID'].isin(student_ids)]
+            
         start_date = df['time'].min()
         df['week'] = df['time'].apply(lambda x: wv.calculate_week_of_year(x, start_date=start_date))
-        
         pre_calculator = PreliminaryFeatureCalculator(df)
         pre_calc_submit_records = pre_calculator.get_features()
 
@@ -29,7 +33,6 @@ class WeekRoutes:
         final_result = final_calculator.calc_final_features()
 
         result = final_result.to_dict(orient='index')
-        
         result = wv.transform_data_for_visualization(result)
         return jsonify(result)
     

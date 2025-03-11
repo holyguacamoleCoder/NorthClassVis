@@ -57,11 +57,13 @@ class StudentRoutes:
 
     def get_tree_data(self):
         df = self.class_df_filtered_majors
+        student_ids = request.args.getlist('student_ids[]')
         limit = request.args.get('limit')
 
         if df is None:
             return jsonify({'error': 'Failed to load data.'}), 500
-
+        if student_ids:
+            df = df[df['student_ID'].isin(student_ids)]
         # 转换数据
         student_info = fileSystem.load_data(fileSystem.studentFilename)
         tree_data = sv.transform_data(df, student_info)

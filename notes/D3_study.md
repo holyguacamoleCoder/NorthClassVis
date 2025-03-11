@@ -37,11 +37,30 @@
 
 ### scatter graph - PCA
 
+每个属性具有8个指标，所以想要在二维平面可视化，就要对数据进行降维，常见的方法有PCA、t-SNE，PCA处理在后端使用sklearn处理，变为两个指标即可，这里数据结构为：
+
+~~~json
+{
+    "student_id": xxx,
+    "cluster": x,
+    "transform": {
+        "x": xxx,
+        "y": xxx
+    }
+}
+~~~
+
+
+
+接下来就是常规的渲染步骤
+
 ## PortraitView
 
 ![image-20250222165644840](src/D3_study/image-20250222165644840.png)
 
 ### relative axis and labels
+
+这里的虚线坐标轴本质是圆圈、直线
 
 ### circular barplot
 

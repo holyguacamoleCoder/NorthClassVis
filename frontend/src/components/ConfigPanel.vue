@@ -111,8 +111,8 @@ export default {
   padding: 0;
   box-sizing: border-box;
 }
-@config-panel-width: 600px;
-@config-panel-height: 500px;
+@config-panel-width: 400px;
+@config-panel-height: 250px;
 .config-container{
   z-index: 100;
   position: relative;
@@ -124,6 +124,7 @@ export default {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* 添加阴影 */
   .config-panel-title{
     height: 50px;
+    margin-bottom: 10px;
     .config-panel-title-icon{
       float: left;
       height: 50px;

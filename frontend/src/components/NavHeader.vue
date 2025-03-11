@@ -19,7 +19,7 @@
       </div>
     </div>
     <div class="config-button" @click="toggleConfigPanel"></div>
-    <div class="cluster-button" @click="handleClusterClick">CLUSTER</div>
+    <div class="cluster-button" @click="handleClusterClick">DISPLAY</div>
   </div>
   
   <ConfigPanel 
@@ -34,6 +34,7 @@
 </template>
 
 <script>
+import { mapActions } from 'vuex'
 import IconBlock from '@/components/IconBlock.vue'
 import ConfigPanel from './ConfigPanel.vue'
 export default {
@@ -55,9 +56,13 @@ export default {
       selectedMajors: 'None',
     }
   },
+  computed:{
+    // ...mapGetters(['getSelectedIds'])
+  },
   created(){
   },
   methods: {
+    ...mapActions(['fetchSelectedData']),
    toggleConfigPanel(){
       this.isConfigPanelVisible = !this.isConfigPanelVisible;
     },
@@ -67,9 +72,8 @@ export default {
       this.selectedMajors = majorsText
     },
     handleClusterClick() {
-      // 将 Set 转换为数组
-      console.log(this.brushedStudents)
-      // console.log(brushedStudentArray) 
+      // console.log(this.getSelectedIds)
+      this.fetchSelectedData(this.getSelection) 
     }
   }
 };

@@ -1,15 +1,15 @@
 <template>
 <div class="app-container">
   <div class="header">
-    <NavHeader :brushedStudents="brushedStudents"/>
+    <NavHeader/>
   </div>  
   <div class="body">
     <div class="main">
       <div class="top">
         <!-- A. Scatter View or Parallel View -->
-        <div class="scatter-view" v-if="clusterData">
+        <div class="scatter-view" v-if="studentClusterInfo">
           <ParallelView v-if="false"/>
-          <ScatterView @brushed-students-updated="updateBrushedStudents"/>
+          <ScatterView/>
         </div>
         
         <!-- B. Portrait View -->
@@ -25,7 +25,7 @@
         </div>
         
         <!-- D. Week View -->
-        <div class="week-view" v-if="JustClusterData">
+        <div class="week-view" v-if="studentClusterInfo">
           <WeekView />
         </div>
       </div>
@@ -33,7 +33,7 @@
 
     <!-- E. Student View -->
     <div class="panel">
-       <div class="student-view" v-if="JustClusterData">
+       <div class="student-view" v-if="studentClusterInfo">
          <StudentView />
        </div>
     </div>
@@ -63,20 +63,14 @@ export default {
   },
   data() {
     return {
-      selectedClasses: 2,
-      CheckoutAllClass: true,
-      CheckoutClasses: [],
-      brushedStudents: []
+      
     }
   },
   computed: {
-    ...mapGetters(['getClusterData', 'getJustClusterData', 'getHadFilter']),
-    clusterData(){
-      return this.$store.state.clusterData
-    },
-    JustClusterData(){
-      return this.$store.state.justClusterData
-    },
+    ...mapGetters(['getStudentClusterInfo']),
+    studentClusterInfo(){
+      return this.getStudentClusterInfo
+    }
   },
   async created() {
    
@@ -86,16 +80,10 @@ export default {
     
   },
   methods: {
-    ...mapActions(['fetchClusterData', 'toggleHadFilter']),
-    updateBrushedStudents(students) {
-      this.brushedStudents = students
-    }
+    ...mapActions(['fetchClusterData']),
   },
   watch: {
-    //监视被选中的学生实例
-    getHadFilter(){
-      // console.log('had filter change!!')
-    }
+    
   }
 };
 </script>

@@ -1,84 +1,74 @@
 import { createStore } from 'vuex'
 import { getClusterEveryone } from '@/api/ParallelView.js'
+import { getSelectedData } from '@/api/NavHeader.js'
+
 
 export default createStore({
   state: {
-    configLoaded: 0, //管理后端配置
-    clusterData: null,
-    justClusterData: null,
-    selectedStudentIds: [],
-    selectedStudentData: [],
+    configLoaded: 0,    // 表示后端配置是否加载完成
+    studentClusterInfo: {}, // 存储从后端获取的聚类数据,key:stu_id,value:cluster
+    selectedStudentIds: [], // 存储选中的学生 ID ，从前端交互而来
+    selectedStudentData: [], // 对应的学生各项指标数据，需要从后端获取
     colors: ['#ff7f00', '#377eb8', '#4daf4a'],
-    hadFilter: false
   },
   mutations: {
+    // 更新 configLoaded 状态
     SET_CONFIG_LOADED(state, value) {
       state.configLoaded = value;
     },
-    setClusterData(state, data) {
-      state.clusterData = data
+
+    // 设置 studentClusterInfo
+    setStudentClusterInfo(state, data) {
+      state.studentClusterInfo = data
     },
-    setJustClusterData(state, data) {
-      state.justClusterData = data
+
+    // 切换学生 ID 的选中状态（添加或移除）
+    setSelectedStudents(state, student_ids){
+      state.selectedStudentIds = student_ids
     },
-    setSelectedStudents(state, student_id){
-      const index = state.selectedStudentIds.indexOf(student_id)
-      if(index === -1){
-        state.selectedStudentIds.push(student_id)
-      }else{
-        state.selectedStudentIds.splice(index, 1)
-      }
+
+    // 设置selectedStudentData
+    setSelectedStudentData(state, students_data){
+      state.selectedStudentData = students_data
     },
-    setStudentData(state){
-      state.selectedStudentIds.forEach(item =>{
-        state.selectedStudentData.push(state.clusterData[item])
-      })
-    },
-    setHadFilter(state){
-      state.hadFilter = !state.hadFilter
-    }
   },
   actions: {
+    // 后端获取数据:{stu_id: cluster}
     async fetchClusterData(context) {
       const { data } = await getClusterEveryone()
-      // console.log('data', data)
-      const RData = {}
-      for (let key in data){
-        RData[key] = data[key].cluster
+      context.commit('setStudentClusterInfo', data)
+    },
+    // 前端交互获得被选中的学生id
+    toggleSelectedIds(context, student_ids){
+      context.commit('setSelectedStudents', student_ids)
+      // console.log('selectedStudentIds', student_ids)
+    },
+    // 后端获取被选中的学生数据
+    /**
+     * 返回的数据格式：
+     * stu_id:{
+     *  "bonus": {xxx},
+     *  "knowledge": {xxx}
+     * } 
+     */
+    async fetchSelectedData(context){
+      const { data } = await getSelectedData(context.state.selectedStudentIds)
+      const selectedStudentData = {}
+      for(let i = 0; i < context.state.selectedStudentIds.length; i++){
+        selectedStudentData[context.state.selectedStudentIds[i]] = {
+          ...data[context.state.selectedStudentIds[i]],
+          cluster: context.state.studentClusterInfo[context.state.selectedStudentIds[i]]
+        }
       }
-      context.commit('setClusterData', data)
-      context.commit('setJustClusterData', RData)
-      // console.log('clusterData', this.state.clusterData)
-      // console.log('justClusterData', this.state.justClusterData)
+      context.commit('setSelectedStudentData', selectedStudentData)
+      // alert('已获取被选择数据')
     },
-    toggleSelection(context, student_id){
-      context.commit('setSelectedStudents', student_id)
-      context.commit('setStudentData')
-      // console.log('selectStudentData', this.state.selectedStudentData)
-    },
-    toggleHadFilter(context){
-      context.commit('setHadFilter')
-    }
   },
   getters: {
     getConfigLoaded: state => state.configLoaded,
-    getClusterData(state) {
-      return state.clusterData
-    },
-    getJustClusterData(state) {
-      return state.justClusterData
-    },
-    getSelection(state){
-      return state.selectedStudentIds
-    },
-    getSelectionData(state){
-      return state.selectedStudentData
-    },
-    getColors(state){
-      return state.colors
-    },
-    getHadFilter(state){
-      return state.hadFilter
-    }
+    getStudentClusterInfo: state => state.studentClusterInfo,
+    getSelectedIds: state => state.selectedStudentIds,
+    getSelectedData: state => state.selectedStudentData,
+    getColors: state => state.colors,
   }
 })

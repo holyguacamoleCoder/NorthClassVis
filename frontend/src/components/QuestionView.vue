@@ -98,11 +98,11 @@ export default {
     };
   },
   async mounted() {
-    // this.getQuestionData()
+    this.getQuestionData()
   },
   computed: {
     ...mapState(['configLoaded']),
-    ...mapGetters(['getHadFilter']),
+    ...mapGetters([]),
     displayButton() {
       if (this.selectAllKnowledge) return 'All'
       const selectedCount = Object.values(this.selectedKnowledge).filter(Boolean).length
@@ -541,10 +541,6 @@ export default {
         this.loadData()
       }
     },
-    getHadFilter() {
-      this.$d3.select('#visualizationQ').selectAll('*').remove()
-      this.getQuestionData()
-    }
   }
 };
 </script>

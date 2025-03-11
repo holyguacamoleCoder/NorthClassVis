@@ -10,6 +10,7 @@
     </div>
     <Simplebar style="height: 550px; width: 98%">
       <LoadingSpinner v-if=loading />
+      <div class="wait-prompt"  v-if="isWaiting">Waiting for brush :) ...</div>
       <div id="visualizationW">
       </div>
     </Simplebar>
@@ -33,28 +34,24 @@ export default {
     return {
       debugger: true,
       loading: false,
+      isWaiting: true,
       WeekData: [],
       selectedKind: '',
     }
   },
   computed: {
     ...mapState(['configLoaded']),
-
-    ...mapGetters(['getHadFilter', 'getColors']),
-    JustClusterData() {
-      return this.$store.state.justClusterData
-    },
+    ...mapGetters(['getStudentClusterInfo','getSelectedIds', 'getSelectedData','getColors']),
     filteredData() {
       if (!this.selectedKind) return this.WeekData.students
-      return this.WeekData.students.filter(s => this.JustClusterData[s.id] === this.selectedKind - 1)
+      return this.WeekData.students.filter(s => this.getStudentClusterInfo[s.id] === this.selectedKind - 1)
     }
   },
   async created() {
-    // await this.getWeekData()
   },
   methods: {
-    async getWeekData() {
-      const { data } = await getWeeks()
+    async getWeekData(stu_ids) {
+      const { data } = await getWeeks(stu_ids)
       this.WeekData = data
       // console.log('WeekData', this.WeekData)
       this.renderWeekData()
@@ -143,10 +140,11 @@ export default {
         .padAngle(0.05)
         .padRadius(innerRadius)
       const colors = this.getColors
-      filteredData.forEach((s, i) => {
+      const studentClusterInfo = this.getStudentClusterInfo
+       filteredData.forEach((s, i) => {
         const student_id = s.id
         const student_weeks = s.weeks
-        const kind = this.JustClusterData[student_id]
+        const kind = studentClusterInfo[student_id]
         // console.log(kind)
         const student_color = colors[kind]
 
@@ -215,23 +213,23 @@ export default {
             r1: labelInnerRadius,
             r2: labelOuterRadius
           }]
-          const circleMiddleData = [{
-            r1: innerCircleRadius,
-            r2: labelInnerRadius
-          }]
+          // const circleMiddleData = [{
+          //   r1: innerCircleRadius,
+          //   r2: labelInnerRadius
+          // }]
           const circleInnerData = [{
             r1: 0,
             r2: innerCircleRadius
           }]
-
+          // outer外圈圆
           const labelOG = rg.append('g')
             .attr('class', 'label-circle')
             .attr("transform", position)
-
-          const labelMG = rg.append('g')
-            .attr('class', 'label-circle')
-            .attr("transform", position)
-
+          // middle灰色圈
+          // const labelMG = rg.append('g')
+          //   .attr('class', 'label-circle')
+          //   .attr("transform", position)
+          // 外围白色圈
           const labelG = rg.append('g')
             .attr('class', 'label-circle')
             .attr("transform", position)
@@ -244,20 +242,21 @@ export default {
             .attr('fill', `${'#FFFFFF'}`)
             .attr('d', labelArc)
 
-          labelMG.selectAll('.label-circle')
-            .data(circleMiddleData)
-            .enter()
-            .append('g')
-            .append("path")
-            .attr('fill', `${'#eee'}`)
-            .attr('d', labelArc)
+          // labelMG.selectAll('.label-circle')
+          //   .data(circleMiddleData)
+          //   .enter()
+          //   .append('g')
+          //   .append("path")
+          //   .attr('fill', `${'#eee'}`)
+          //   .attr('d', labelArc)
 
           labelG.selectAll('.label-circle')
             .data(circleInnerData)
             .enter()
             .append('g')
             .append("path")
-            .attr('fill', `${'#FFFFFF'}`)
+            .attr('fill', `${student_color}`)
+            .attr('opacity', 0.5)
             .attr('d', labelArc)
         }) // forEach.w
       }) // forEach.s
@@ -276,7 +275,7 @@ export default {
       this.loading = true
       this.$d3.select('#visualizationW').selectAll('*').remove()
       this.weekData = []
-      await this.getWeekData()
+      await this.getWeekData(this.getSelectedIds)
       this.loading = false
     }
   },
@@ -287,9 +286,11 @@ export default {
         this.loadData()
       }
     },
-    getHadFilter() {
-      this.$d3.select('#visualizationW').selectAll('*').remove()
-      this.getWeekData()
+    async getSelectedData(newVal) {
+      if (!newVal) {
+        return
+      }
+      this.loadData() 
     }
   }
 }
@@ -327,6 +328,15 @@ export default {
       font-weight: bold;
       padding-right: 10px;
     }
+  }
+  .wait-prompt{
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translateX(-50%) translateY(-50%);;
+    font-size: 40px;
+    font-weight: bold;
+    color: #eee;
   }
   .simplebar-content-wrapper {
     /*添加阴影*/
