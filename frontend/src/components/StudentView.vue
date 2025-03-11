@@ -285,13 +285,15 @@ export default {
       this.$refs.visualizationStu.innerHTML = '' // 清空现有内容
       this.loadInitialBatch() // 重新加载初始批次的数据
     },
-    async loadData() {
+    async loadData(render = true) {
       this.loading = true
       this.visibleIndices.clear() // 清空可见索引集合并重新加载
       this.expandedIndices.clear() // 清空展开索引集合并重新加载
       this.$refs.visualizationStu.innerHTML = '' // 清空现有内容
-      await this.getTreeData(this.getSelectedIds) // 初始化时获取学生数据
-      this.loadInitialBatch() // 重新加载初始批次的数据
+      if(render){
+        await this.getTreeData(this.getSelectedIds) // 初始化时获取学生数据
+        this.loadInitialBatch() // 重新加载初始批次的数据
+      }
       this.loading = false
     }
   },
@@ -299,13 +301,15 @@ export default {
     configLoaded(newVal) {
       if (newVal) {
         // 重新加载逻辑
-        this.loadData()
+        this.loadData(false)
+        this.isWaiting = true
       }
     },
     async getSelectedData(newVal) {
       if (!newVal) {
         return
       }
+      this.isWaiting = false
       this.loadData() 
     }
   }

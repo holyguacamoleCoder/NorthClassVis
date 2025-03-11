@@ -271,11 +271,13 @@ export default {
       // 重新渲染图表
       this.renderWeekData()
     },
-    async loadData() {
+    async loadData(render = true) {
       this.loading = true
       this.$d3.select('#visualizationW').selectAll('*').remove()
       this.weekData = []
-      await this.getWeekData(this.getSelectedIds)
+      if(render){
+        await this.getWeekData(this.getSelectedIds)
+      }
       this.loading = false
     }
   },
@@ -283,13 +285,15 @@ export default {
     configLoaded(newVal) {
       if (newVal && this.debugger) {
         // 重新加载逻辑
-        this.loadData()
+        this.loadData(false)
+        this.isWaiting = true
       }
     },
     async getSelectedData(newVal) {
       if (!newVal) {
         return
       }
+      this.isWaiting = false
       this.loadData() 
     }
   }

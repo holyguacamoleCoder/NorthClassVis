@@ -125,22 +125,30 @@ npm run serve
 
 ![image-preview1](src/README/image-preview1.png)
 
-2.点击配置，等待配置成功
+2.点击submit按钮，等待后端配置成功
 
 ![image-preview2](src/README/image-preview2.png)
 
-3.等待其他组件计算渲染
+3.此时后端配置完成，前端部分组件也已经更新渲染
 
 ![image-preview3](src/README/image-preview3.png)
 
-4.渲染成功，鼠标靠近获取详细信息
+4.点击刷选工具，框选数据，点击DISPLAY按钮。随后可以在PortraitView看到被选中学生的指标平均值（黑色），Week/Student View后端正在计算
 
-![image-preview4](src/README/image-preview4.png)
+![image-preview4-1](src/README/image-preview4-1.png)
 
-（以下内容尚未完成......）
+5.再试着框选一些并点击DISPLAY，点击StudentView具体框可以展开
 
-5.点击选中元素/框选元素
+![image-preview4-2](src/README/image-preview4-2.png)
 
-6.点击CLUSTER处理被选择的样本，等待CLUSTER处理完毕
+6.WeekView展示的是被选中学生的每周不同知识点进展
 
-7.可见被处理元素
+![image-preview4-3](src/README/image-preview4-3.png)
+
+7. 其他一些样例，请欣赏
+
+![image-preview5-1](src/README/image-preview5-1.png)
+
+![image-preview5-2](src/README/image-preview5-2.png)
+
+<img src="src/README/image-preview7.png" alt="image-preview7" style="zoom: 27%;" /> <img src="src/README/image-preview6.png" alt="image-preview6" style="zoom: 27%;" />
