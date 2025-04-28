@@ -2,7 +2,7 @@ from flask import Flask
 from flask_cors import CORS
 # from flask_limiter import Limiter
 # from flask_limiter.util import get_remote_address
-from routes.main import api_bp
+from routes import api_bp
 
 app = Flask(__name__)
 # 使用 Flask-Cors 自动处理 CORS 头部

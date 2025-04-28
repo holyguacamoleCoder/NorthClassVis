@@ -8,8 +8,8 @@
       <div class="top">
         <!-- A. Scatter View or Parallel View -->
         <div class="scatter-view" v-if="studentClusterInfo">
-          <ParallelView v-if="false"/>
-          <ScatterView/>
+          <!-- <ParallelView v-if="false"/> -->
+          <ScatterView v-if="true" />
         </div>
         
         <!-- B. Portrait View -->
@@ -44,7 +44,7 @@
 
 <script>
 import NavHeader from './components/NavHeader.vue'
-import ParallelView from './components/ParallelView.vue'
+// import ParallelView from './components/ParallelView.vue'
 import ScatterView from './components/ScatterView.vue'
 import PortraitView from './components/PortraitView.vue'
 import QuestionView from './components/QuestionView.vue'
@@ -54,7 +54,7 @@ import { mapActions, mapGetters } from 'vuex'
 export default {
   components: {
     NavHeader,
-    ParallelView,
+    // ParallelView,
     ScatterView,
     PortraitView,
     QuestionView,

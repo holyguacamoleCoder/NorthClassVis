@@ -77,6 +77,8 @@ NorthClassVision/
 
 ## 如何运行
 
+> 注意：使用的python:3.11.1, 使用的node:v16.20.2, npm:v8.19.4
+
 0. 参见**problem.md**前往官网下载数据集，放置在data文件夹下
 
 1. 克隆项目到本地：

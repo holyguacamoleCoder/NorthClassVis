@@ -37,7 +37,12 @@ export default {
     }
   },
   async mounted() {
-    // this.initChart()
+    // 获取维度
+    if (Object.keys(this.getClusterData).length === 0) {
+        console.error('No cluster data available');
+        return;
+    }
+    this.initChart()
   },
   computed: {
     ...mapGetters(['getClusterData', 'getSelection', 'getColors', 'getHadFilter']),
@@ -46,6 +51,10 @@ export default {
     ...mapActions(['fetchClusterData', 'toggleSelection']),
     initChart() {
       const d3 = this.$d3
+      if (!d3) {
+      console.error("d3 is not available!");
+      return;
+      }
       const height = 450
       const width = 350
       const margin = { top: 30, right: 10, bottom: 10, left: 30 }
@@ -55,14 +64,11 @@ export default {
           .append("svg")
           .attr("width", width)
           .attr("height", height)
+      console.log(this.svg)
       this.g = this.svg.append("g")
           .attr("transform", `translate(${margin.left},${margin.top})`)
 
-      // 获取维度
-      if (Object.keys(this.getClusterData).length === 0) {
-        console.error('No cluster data available');
-        return;
-      }
+      
 
       const dimensions = Object.keys(Object.values(this.getClusterData)[0].knowledge)
       this.dimensionsX = d3.scalePoint()
@@ -206,12 +212,6 @@ export default {
     //   },
     //   deep: true
     // },
-    async getHadFilter() {
-      console.log('had filter change!!PPPP')
-      this.svg.selectAll('*').remove()
-      await this.fetchClusterData()
-      this.initChart()
-    }
   }
 }
 </script>

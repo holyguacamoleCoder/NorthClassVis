@@ -11,8 +11,8 @@ class ScatterRoutes:
 
     def pca_cluster(self):
         # 获取PCA变换后的数据
-        transformed_data = self.feature_factory.pca_analysis.get_transformed_data()
-        transformed_data.index = self.feature_factory.pca_analysis.raw_pca_data.index  # 确保索引一致
+        transformed_data = self.feature_factory.dim_reduction.get_transformed_data()
+        transformed_data.index = self.feature_factory.dim_reduction.raw_pca_data.index  # 确保索引一致
        
         student_clusters = self.feature_factory.cluster_analysis.get_student_clusters()
 

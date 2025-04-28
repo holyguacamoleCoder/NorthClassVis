@@ -90,6 +90,8 @@ export default {
       const height = 450
       const width = 350
       const margin = { top: 30, right: 10, bottom: 10, left: 30 }
+      const lowerBound = -5
+      const upperBound = 5
 
       // 初始化SVG和G元素
       this.svg = d3.select("#visualizationS")
@@ -101,11 +103,11 @@ export default {
 
       // 定义x轴和y轴比例尺
       this.xScale = d3.scaleLinear()
-          .domain([-1, 1])
+          .domain([lowerBound, upperBound])
           .range([0, width - margin.right - margin.left])
 
       this.yScale = d3.scaleLinear()
-          .domain([-1, 1])
+          .domain([lowerBound, upperBound])
           .range([height - margin.top - margin.bottom, margin.top])
 
       // 创建tooltip
