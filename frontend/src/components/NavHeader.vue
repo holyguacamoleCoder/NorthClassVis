@@ -52,8 +52,8 @@ export default {
   data() {
     return {
       isConfigPanelVisible: false,
-      selectedClasses: 'None',
-      selectedMajors: 'None',
+      selectedClasses: 'Part',
+      selectedMajors: 'All',
     }
   },
   computed:{

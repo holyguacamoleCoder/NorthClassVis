@@ -10,3 +10,11 @@ export const getWeeks = (selectedIds) => {
 }
 
 
+export const getPeaks = (selectedIds, day = 5) => {
+  return request.get('week/peak_data', selectedIds ? {
+    params: {
+      student_ids: selectedIds,
+      day: day
+    }
+  } : null)
+}

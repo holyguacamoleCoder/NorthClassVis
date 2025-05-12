@@ -94,7 +94,13 @@ export default {
       uniqueKnowledge: [],
       selectedKnowledge: {},
       selectAllKnowledge: true,
-      sortAscending: true // 默认按升序排序
+      sortAscending: true, // 默认按升序排序
+      difficultyIndex: null,
+      // 提交数量和平均分的最大最小值，用于标准化
+      submissionMin: null,
+      submissionMax: null,
+      scoreMin: null,
+      scoreMax: null,
     };
   },
   async mounted() {
@@ -126,6 +132,27 @@ export default {
         this.selectedKnowledge[knowledge] = true
       })
 
+      // 计算归一化所需的 min/max 值
+      const d3 = this.$d3
+      this.submissionMin = d3.min(this.QuestionData, d => d.sum_submit)
+      this.submissionMax = d3.max(this.QuestionData, d => d.sum_submit)
+      this.scoreMin = d3.min(this.QuestionData, d => d.avg_score)
+      this.scoreMax = d3.max(this.QuestionData, d => d.avg_score)
+      this.difficultyIndex = (dd) => {
+          // 标准化 submissions（越大表示越简单）
+          const submissionNorm =
+            (dd.sum_submit - this.submissionMin) / (this.submissionMax - this.submissionMin);
+
+          // 标准化 avg_score（取反后，分数越低则难度越高）
+          const scoreNorm =
+            1 - (dd.avg_score - this.scoreMin) / (this.scoreMax - this.scoreMin);
+
+          // 等权重加权
+          const w1 = 0.5;
+          const w2 = 0.5;
+
+          return w1 * submissionNorm + w2 * scoreNorm; // 范围 [0, 1]
+        }
       this.renderQuestion()
     },
     // 渲染题目视图数据
@@ -385,7 +412,8 @@ export default {
 
       // 绘制棒棒糖图
       const candyStickHeight = 50
-      questionPanel.each(function(d) {
+      const difficultyIndex = this.difficultyIndex
+      questionPanel.each(async function(d) {
         const svg = d3.select(this)
           .attr('width', innerWidth)
           .attr('height', candyStickHeight + margin.top * 2)
@@ -396,11 +424,11 @@ export default {
 
         // 定义难度比例尺
         const difficultyScale = d3.scaleThreshold()
-          .domain([10, 25, 45, 60]) // 分成四个层级：低、中低、中高、高
-          .range(['Expert', 'Hard', 'Medium', 'Easy'])
+          .domain([0.2, 0.4, 0.5, 0.8]) // 分成四个层级：低、中低、中高、高
+          .range(['Easy', 'Hard', 'Medium', 'Expert'])
         // 定义难度高度比例尺
         const stickScale = d3.scaleLinear()
-          .domain([200, 0])
+          .domain([0, 1])
           .range([10, candyStickHeight])
         // 定义半径比例尺
         const avgScoreCircleRadius = 25
@@ -414,7 +442,8 @@ export default {
           .range([avgScoreCircleRadius, sumSubmitCircleRadius])
         
         // 计算难度值
-        const difficultyValue = (d.avg_score * 100 / d.sum_submit) * 100
+        const difficultyValue = difficultyIndex(d)
+        // console.log(difficultyValue)
         const stickHeight = stickScale(difficultyValue)
         // console.log(stickHeight)
 
