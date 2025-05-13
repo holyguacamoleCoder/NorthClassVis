@@ -11,7 +11,8 @@ class DimReduction:
         """支持选择性导入"""
         method = method.lower()
         available_methods = {
-            "pca": ("sklearn.decomposition", "PCA"),
+            # "pca": ("sklearn.decomposition", "PCA"),
+            "pca": ("tools.MyPCA", "MyPCA"),
             "tsne": ("sklearn.manifold", "TSNE"),
             "umap": ("umap", "UMAP"),
             "lle": ("sklearn.manifold", "LocallyLinearEmbedding"),

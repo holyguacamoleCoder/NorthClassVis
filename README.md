@@ -18,7 +18,9 @@ ChinaVis 2024数据可视化竞赛作品复现
 
 - 使用`pandas`/`numpy`对`.csv`文件处理，计算数据特征。
 
-- 利用`sklearn`库实现`PCA`降维和`kmeans`聚类
+- 利用自主实现`PCA`降维和`kmeans`聚类
+
+- 利用`sklearn`库学习对比降维和聚类算法
 
 - 应用面向对象设计模式，通过`单例模式`、`工厂模式`以及`观察者模式`优化全局配置和计算件管理，提高代码复用性和可维护性。
 
@@ -26,15 +28,15 @@ ChinaVis 2024数据可视化竞赛作品复现
 
 - 通过`依赖注入`实现类，实现代码解耦和可维护性。
 
-- 实现视口动态渲染和并行渲染技术，显著提升页面加载速度和用户体验。
+- ~~实现视口动态渲染和并行渲染技术，显著提升页面加载速度和用户体验。~~
 
-- 利用静态 JSON 数据测试前端样式，确保界面一致性和兼容性。
+- ~~利用静态 JSON 数据测试前端样式，确保界面一致性和兼容性。~~
 
 - ~~使用`pytest`编写单元测试，覆盖关键业务逻辑，确保后端功能的稳定性和可靠性。~~
 
 - ~~手写节流和防抖函数，优化用户体验。~~
 
-笔者目前正在学习, 学习记录、学习资源见**notes**文件夹
+笔者目前也在学习, 学习记录、学习资源见**notes**文件夹
 
 ## 项目结构
 
@@ -57,6 +59,17 @@ NorthClassVision/
 │   ├── src/
 │   │   ├── assets/
 │   │   ├── components/
+│   │   |   ├── CheckboxDropdown.vue # 下拉菜单
+│   │   |   ├── ConfigPanel.vue # 配置面板
+│   │   |   ├── IconBlock.vue # 右上角图标块
+│   │   |   ├── LoadingSpinner.vue # 加载图标
+│   │   |   ├── NavHeader.vue # 导航栏
+│   │   |   ├── ParallelView.vue
+│   │   |   ├── PortraitView.vue
+│   │   |   ├── QuestionView.vue
+│   │   |   ├── ScatterView.vue
+│   │   |   ├── StudentView.vue
+│   │   |   └── WeekView.vue
 │   │   ├── router/
 │   │   ├── store/
 │   │   ├── views/
@@ -67,17 +80,20 @@ NorthClassVision/
 │   ├── README.md
 │   └── vue.config.js
 ├── notes/ # 学习思考笔记
-│   ├── D3_study.md
-│   ├── DesignPatterns.md
-│   ├── study_recourse.md
-│   └── optimization_journey.md
+│   ├── D3_study.md # D3.js绘制相关图的心得
+│   ├── DesignPatterns.md # 为什么笔者要用设计模式
+│   ├── hands_on_KMeans.ipynb # 笔者学习和复现K-Means的笔记
+│   ├── hands_on_PCA.ipynb # 笔者学习和复现PCA的笔记
+│   ├── MachineLearning.md # 对比了聚类和降维算法效果
+│   ├── optimization_journey.md # 优化学习，暂时未完成
+│   └── study_recourse.md # 一些第三方网络学习资料
 ├── problem.md # 竞赛内容，含官方数据集下载链接
 └── README.md
 ```
 
 ## 如何运行
 
-> 注意：使用的python:3.11.1, 使用的node:v16.20.2, npm:v8.19.4
+> 注意：版本兼容 python: 3.11.1, node: v16.20.2, npm: v8.19.4
 
 0. 参见**problem.md**前往官网下载数据集，放置在data文件夹下
 

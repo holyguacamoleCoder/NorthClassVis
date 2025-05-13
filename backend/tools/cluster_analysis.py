@@ -52,7 +52,8 @@ class ClusterAnalysis:
         """动态创建聚类模型"""
         method = method.lower()
         available_methods = {
-            "kmeans": ("sklearn.cluster", "KMeans"),
+            "kmeans": ("tools.MyKMeans", "MyKMeans"),
+            # "kmeans": ("sklearn.cluster", "KMeans"),
             "dbscan": ("sklearn.cluster", "DBSCAN"),
             "agg": ("sklearn.cluster", "AgglomerativeClustering"),
             "gmm": ("sklearn.mixture", "GaussianMixture"),
