@@ -89,7 +89,12 @@ export default {
 
       // 渲染单个问题的方法
       const renderQuestion = (g, tree) => {
-        const currentColor = this.getColors[this.currentCluster] // 获取当前集群的颜色
+        // 修复：确保颜色不为 undefined，提供默认值
+        const colors = this.getColors
+        const cluster = (this.currentCluster >= 0 && this.currentCluster < colors.length) 
+          ? this.currentCluster 
+          : 0
+        const currentColor = colors[cluster] || colors[0] // 双重保险，确保颜色不为 undefined
 
         g.selectAll('path').data(tree.links()).join('path') // 绘制连接线
           .attr('fill', 'none')
@@ -186,7 +191,18 @@ export default {
       
       const s = this.filteredTreeData[index]
       
-      this.currentCluster = this.getStudentClusterInfo[s.name] // 设置当前集群
+      // 修复：处理 kind 为 undefined 的情况，提供默认值 0
+      // 同时处理键类型不匹配的情况（尝试字符串和数字两种格式）
+      const studentClusterInfo = this.getStudentClusterInfo
+      let currentCluster = studentClusterInfo[s.name]
+      if (currentCluster === undefined || currentCluster === null) {
+        // 尝试将 student_id 转换为字符串或数字
+        currentCluster = studentClusterInfo[String(s.name)] ?? studentClusterInfo[Number(s.name)] ?? 0
+      }
+      // 确保 currentCluster 是有效数字，且在 colors 数组范围内
+      const colors = this.getColors
+      currentCluster = (currentCluster >= 0 && currentCluster < colors.length) ? currentCluster : 0
+      this.currentCluster = currentCluster // 设置当前集群
       const studentPanelHeight = studentTitleHeight + studentTipHeight + margin.bottom // 计算学生面板高度
       const varToggleFunc = this.togglePanelHeight
       const studentPanel = g.append('svg') // 创建学生面板

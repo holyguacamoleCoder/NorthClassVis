@@ -171,9 +171,16 @@ export default {
        filteredWeekData.forEach((s, i) => {
         const student_id = s.id
         const student_weeks = s.weeks
-        const kind = studentClusterInfo[student_id]
-        // console.log(kind)
-        const student_color = colors[kind]
+        // 修复：处理 kind 为 undefined 的情况，提供默认值 0
+        // 同时处理键类型不匹配的情况（尝试字符串和数字两种格式）
+        let kind = studentClusterInfo[student_id]
+        if (kind === undefined || kind === null) {
+          // 尝试将 student_id 转换为字符串或数字
+          kind = studentClusterInfo[String(student_id)] ?? studentClusterInfo[Number(student_id)] ?? 0
+        }
+        // 确保 kind 是有效数字，且在 colors 数组范围内
+        kind = (kind >= 0 && kind < colors.length) ? kind : 0
+        const student_color = colors[kind] || colors[0] // 双重保险，确保颜色不为 undefined
 
         // 定义legend组
         const lg = g.append('g')
@@ -363,8 +370,16 @@ export default {
       filteredPeakData.forEach((s, i) => {
         const student_id = s.id;
         const student_weeks = s.weeks;
-        const kind = studentClusterInfo[student_id];
-        const student_color = colors[kind];
+        // 修复：处理 kind 为 undefined 的情况，提供默认值 0
+        // 同时处理键类型不匹配的情况（尝试字符串和数字两种格式）
+        let kind = studentClusterInfo[student_id];
+        if (kind === undefined || kind === null) {
+          // 尝试将 student_id 转换为字符串或数字
+          kind = studentClusterInfo[String(student_id)] ?? studentClusterInfo[Number(student_id)] ?? 0;
+        }
+        // 确保 kind 是有效数字，且在 colors 数组范围内
+        kind = (kind >= 0 && kind < colors.length) ? kind : 0;
+        const student_color = colors[kind] || colors[0]; // 双重保险，确保颜色不为 undefined
       
         const lg = g.append('g')
           .attr('transform', `translate(${margin.left + stu_icon}, ${weekLabelHeight})`);

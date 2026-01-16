@@ -52,16 +52,39 @@ export default createStore({
      * } 
      */
     async fetchSelectedData(context){
-      const { data } = await getSelectedData(context.state.selectedStudentIds)
-      const selectedStudentData = {}
-      for(let i = 0; i < context.state.selectedStudentIds.length; i++){
-        selectedStudentData[context.state.selectedStudentIds[i]] = {
-          ...data[context.state.selectedStudentIds[i]],
-          cluster: context.state.studentClusterInfo[context.state.selectedStudentIds[i]]
-        }
+      // 检查是否有选中的学生
+      if (!context.state.selectedStudentIds || context.state.selectedStudentIds.length === 0) {
+        console.warn('No students selected')
+        return
       }
-      context.commit('setSelectedStudentData', selectedStudentData)
-      // alert('已获取被选择数据')
+      
+      try {
+        const { data } = await getSelectedData(context.state.selectedStudentIds)
+        const selectedStudentData = {}
+        
+        // 确保 data 存在且是对象
+        if (!data) {
+          console.error('No data received from server')
+          return
+        }
+        
+        for(let i = 0; i < context.state.selectedStudentIds.length; i++){
+          const studentId = context.state.selectedStudentIds[i]
+          // 检查后端返回的数据中是否包含该学生
+          if (data[studentId]) {
+            selectedStudentData[studentId] = {
+              ...data[studentId],
+              cluster: context.state.studentClusterInfo[studentId]
+            }
+          } else {
+            console.warn(`Student ${studentId} not found in server response`)
+          }
+        }
+        context.commit('setSelectedStudentData', selectedStudentData)
+      } catch (error) {
+        console.error('Error fetching selected data:', error)
+        alert('Failed to fetch selected student data. Please try again.')
+      }
     },
   },
   getters: {

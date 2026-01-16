@@ -34,7 +34,7 @@
 </template>
 
 <script>
-import { mapActions } from 'vuex'
+import { mapActions, mapGetters } from 'vuex'
 import IconBlock from '@/components/IconBlock.vue'
 import ConfigPanel from './ConfigPanel.vue'
 export default {
@@ -57,7 +57,7 @@ export default {
     }
   },
   computed:{
-    // ...mapGetters(['getSelectedIds'])
+    ...mapGetters(['getSelectedIds'])
   },
   created(){
   },
@@ -72,8 +72,13 @@ export default {
       this.selectedMajors = majorsText
     },
     handleClusterClick() {
-      // console.log(this.getSelectedIds)
-      this.fetchSelectedData(this.getSelection) 
+      // 检查是否有选中的学生
+      if (!this.getSelectedIds || this.getSelectedIds.length === 0) {
+        alert('Please select at least one student point in the Scatter View before clicking DISPLAY.')
+        return
+      }
+      // fetchSelectedData action 不需要参数，它会从 store 中读取 selectedStudentIds
+      this.fetchSelectedData()
     }
   }
 };

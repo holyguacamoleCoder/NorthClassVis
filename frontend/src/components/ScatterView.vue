@@ -175,6 +175,9 @@ export default {
             }
             else this.clickedStudent.add(d.student_id)
             this.updateCircles()
+            // 同步更新到 store：合并 clickedStudent 和 brushedStudent
+            const allSelectedIds = Array.from(new Set([...this.clickedStudent, ...this.brushedStudent]))
+            this.toggleSelectedIds(allSelectedIds)
             // console.log(this.clickedStudent)
           })
           .on('mouseover', (e, d) => {
@@ -215,6 +218,9 @@ export default {
             }
             else this.clickedStudent.add(d.student_id)
             this.updateCircles()
+            // 同步更新到 store：合并 clickedStudent 和 brushedStudent
+            const allSelectedIds = Array.from(new Set([...this.clickedStudent, ...this.brushedStudent]))
+            this.toggleSelectedIds(allSelectedIds)
           })
           .on('mouseover', (e, d) => {
             this.tooltip.style('visibility', 'visible')
