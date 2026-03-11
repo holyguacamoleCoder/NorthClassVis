@@ -14,7 +14,37 @@ instance.interceptors.request.use(function (config) {
   return Promise.reject(error)
 })
 
-// // 添加响应拦截器
+// 响应拦截器：对 cluster 相关接口在 500/503 时自动重试（FeatureFactory 尚未就绪）
+const CLUSTER_RETRY_MAX = 3
+const CLUSTER_RETRY_DELAY_MS = 3000
+
+instance.interceptors.response.use(
+  function (response) {
+    return response
+  },
+  async function (error) {
+    const config = error.config
+    if (!config || config.__clusterRetryCount >= CLUSTER_RETRY_MAX) {
+      return Promise.reject(error)
+    }
+    if (config.method && config.method.toLowerCase() !== 'get') {
+      return Promise.reject(error)
+    }
+    const status = error.response?.status
+    if (status !== 500 && status !== 503) {
+      return Promise.reject(error)
+    }
+    const url = config.url || ''
+    if (!url.includes('cluster/everyone') && !url.includes('cluster/students')) {
+      return Promise.reject(error)
+    }
+    config.__clusterRetryCount = (config.__clusterRetryCount || 0) + 1
+    await new Promise(r => setTimeout(r, CLUSTER_RETRY_DELAY_MS))
+    return instance.request(config)
+  }
+)
+
+// // 添加响应拦截器（原注释保留）
 // instance.interceptors.response.use(function (response) {
 //   const res = response.data
 //   if (res.status !== 200) {

@@ -13,26 +13,44 @@ class LazyFeatureFactory:
     """
     延迟初始化 FeatureFactory，避免在启动时立即执行耗时的特征计算。
     只有在首次访问时才真正创建 FeatureFactory 实例。
+    并发请求会在 Condition 上等待初始化完成，避免「仍在初始化」报错。
     """
+    INIT_TIMEOUT_SECONDS = 120  # 等待初始化的最长时间
+
     def __init__(self, config):
         self.config = config
         self._factory = None  # 不立即创建
-        self._lock = threading.Lock()  # 线程锁，确保多线程安全
+        self._condition = threading.Condition()  # 用于「等待初始化完成」
         self._initializing = False
-    
+
     def _ensure_initialized(self):
-        """确保 FeatureFactory 已初始化（线程安全）"""
-        if self._factory is None and not self._initializing:
-            with self._lock:
-                # 双重检查，避免多个线程同时初始化
-                if self._factory is None and not self._initializing:
-                    self._initializing = True
-                    try:
-                        # 首次访问时才创建真正的 FeatureFactory
-                        self._factory = FeatureFactory(self.config)
-                    finally:
-                        self._initializing = False
-    
+        """确保 FeatureFactory 已初始化；若正在初始化则阻塞等待（线程安全）。"""
+        with self._condition:
+            if self._factory is not None:
+                return
+            if self._initializing:
+                # 其他线程正在初始化，等待完成或超时
+                self._condition.wait(timeout=self.INIT_TIMEOUT_SECONDS)
+                if self._factory is None:
+                    raise RuntimeError(
+                        "FeatureFactory initialization timed out or failed. Please try again."
+                    )
+                return
+            # 本线程负责初始化
+            self._initializing = True
+
+        try:
+            factory = FeatureFactory(self.config)
+        except Exception:
+            with self._condition:
+                self._initializing = False
+                self._condition.notify_all()
+            raise
+        with self._condition:
+            self._factory = factory
+            self._initializing = False
+            self._condition.notify_all()
+
     def __getattr__(self, name):
         """
         当访问任何属性时，先确保 FeatureFactory 已初始化。
@@ -42,10 +60,10 @@ class LazyFeatureFactory:
         if self._factory is None:
             raise RuntimeError("FeatureFactory is still initializing. Please try again.")
         return getattr(self._factory, name)
-    
+
     def update_data(self, new_config):
         """实现观察者模式接口，用于配置更新时重新初始化"""
-        with self._lock:
+        with self._condition:
             self.config = new_config
             # 如果已经初始化，需要重新初始化
             if self._factory is not None:
