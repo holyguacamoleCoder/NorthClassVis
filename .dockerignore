@@ -1,0 +1,24 @@
+# 构建上下文排除项，加快 build 并减小镜像
+.git
+.gitignore
+*.md
+
+# 前端：在镜像内重新 npm install + build，不复制本地 node_modules/dist
+frontend/node_modules
+frontend/dist
+
+# Python
+__pycache__
+*.py[cod]
+.venv
+venv
+.env
+.env.*
+
+# 测试与开发
+backend/test
+notes
+*.ipynb
+.idea
+.vscode
+terminals

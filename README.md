@@ -44,50 +44,77 @@ ChinaVis 2024数据可视化竞赛作品复现
 
 ```
 NorthClassVision/
-├── data/ # 数据集文件夹
-│   ├── Data_SubmitRecord/
+├── data/                          # 数据集
+│   ├── Data_SubmitRecord/         # 按班级的提交记录 CSV
 │   ├── Data_StudentInfo.csv
 │   ├── Data_TitleInfo.csv
 │   └── first_dataDes.docx
-├── backend/  # 后端代码
-│   ├── test/ # 测试文件
-│   ├── routes/ # 路由实现和配置
-│   ├── tools/ # 工具函数实现
-│   └── app.py
-├── frontend/ # 前端代码
+├── backend/                        # 后端（Flask）
+│   ├── config/                     # 应用配置
+│   │   └── app_config.py           # 单例 Config、观察者、数据源
+│   ├── core/                       # 核心数据与 IO
+│   │   └── data_loader.py          # 加载/合并 CSV、process_non_numeric_values
+│   ├── domain/                     # 领域逻辑
+│   │   ├── features/               # 特征计算
+│   │   │   ├── calculators.py      # 初步/最终特征计算器
+│   │   │   └── factory.py          # FeatureFactory（PCA/聚类入口）
+│   │   ├── reduction.py            # 降维（DimReduction）
+│   │   ├── clustering.py           # 聚类（ClusterAnalysis）
+│   │   └── algorithms/             # 自实现算法
+│   │       ├── pca.py
+│   │       └── kmeans.py
+│   ├── services/                   # 视图数据服务
+│   │   ├── week_service.py         # 周视图数据
+│   │   ├── question_service.py    # 题目时间轴/分布/按知识点
+│   │   └── student_service.py     # 学生树数据
+│   ├── routes/                     # API 路由与 Blueprint 注册
+│   │   ├── __init__.py             # 装配 Config、FeatureFactory、各路由
+│   │   ├── nav_routes.py
+│   │   ├── scatter_routes.py
+│   │   ├── portrait_routes.py
+│   │   ├── student_routes.py
+│   │   ├── question_routes.py
+│   │   └── week_routes.py
+│   ├── tools/                      # 兼容层（从 config/core/domain/services 再导出）
+│   ├── test/                       # 测试
+│   │   ├── test_fileSystem.py
+│   │   └── test_clustering.py
+│   └── app.py                      # Flask 入口
+├── frontend/                       # 前端（Vue2）
 │   ├── public/
 │   ├── src/
 │   │   ├── assets/
 │   │   ├── components/
-│   │   |   ├── CheckboxDropdown.vue # 下拉菜单
-│   │   |   ├── ConfigPanel.vue # 配置面板
-│   │   |   ├── IconBlock.vue # 右上角图标块
-│   │   |   ├── LoadingSpinner.vue # 加载图标
-│   │   |   ├── NavHeader.vue # 导航栏
-│   │   |   ├── ParallelView.vue
-│   │   |   ├── PortraitView.vue
-│   │   |   ├── QuestionView.vue
-│   │   |   ├── ScatterView.vue
-│   │   |   ├── StudentView.vue
-│   │   |   └── WeekView.vue
+│   │   │   ├── CheckboxDropdown.vue  # 下拉菜单
+│   │   │   ├── ConfigPanel.vue       # 配置面板
+│   │   │   ├── IconBlock.vue         # 右上角图标块
+│   │   │   ├── LoadingSpinner.vue    # 加载图标
+│   │   │   ├── NavHeader.vue         # 导航栏
+│   │   │   ├── ParallelView.vue
+│   │   │   ├── PortraitView.vue
+│   │   │   ├── QuestionView.vue
+│   │   │   ├── ScatterView.vue
+│   │   │   ├── StudentView.vue
+│   │   │   └── WeekView.vue
 │   │   ├── router/
 │   │   ├── store/
 │   │   ├── views/
+│   │   ├── api/                     # 接口封装
 │   │   └── App.vue
-│   ├── .gitignore
 │   ├── babel.config.js
 │   ├── package.json
 │   ├── README.md
 │   └── vue.config.js
-├── notes/ # 学习思考笔记
-│   ├── D3_study.md # D3.js绘制相关图的心得
-│   ├── DesignPatterns.md # 为什么笔者要用设计模式
-│   ├── hands_on_KMeans.ipynb # 笔者学习和复现K-Means的笔记
-│   ├── hands_on_PCA.ipynb # 笔者学习和复现PCA的笔记
-│   ├── MachineLearning.md # 对比了聚类和降维算法效果
-│   ├── optimization_journey.md # 优化学习，暂时未完成
-│   └── study_recourse.md # 一些第三方网络学习资料
-├── problem.md # 竞赛内容，含官方数据集下载链接
+├── plan/                           # 规划与清单（如后端重构清单）
+├── notes/                          # 学习笔记
+│   ├── D3_study.md
+│   ├── DesignPatterns.md
+│   ├── hands_on_KMeans.ipynb
+│   ├── hands_on_PCA.ipynb
+│   ├── MachineLearning.md
+│   ├── optimization_journey.md
+│   └── study_recourse.md
+├── problem.md                      # 竞赛说明与数据集链接
 └── README.md
 ```
 

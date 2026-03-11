@@ -1,6 +1,10 @@
 import axios from 'axios'
+
+// 使用环境变量，不写死地址与端口。开发时由 devServer 代理 /api，生产时由 Nginx 反代
+const baseURL = process.env.VUE_APP_API_BASE_URL ?? '/api'
+
 const instance = axios.create({
-  baseURL: 'http://localhost:5000/api/',
+  baseURL,
   timeout: 40000
 })
 
