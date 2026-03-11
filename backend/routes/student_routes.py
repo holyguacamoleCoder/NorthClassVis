@@ -1,11 +1,12 @@
-from flask import Blueprint, request, jsonify
-from tools import fileSystem as fileSystem
-from tools import StudentView as sv
+from flask import Blueprint, jsonify, request
+
+from core import data_loader
+from services import student_service
 
 class StudentRoutes:
     def __init__(self, config):
         self.config = config
-        self.class_df_filtered_majors = self.config.get_class_df_filtered_majors()
+        self.submissions_df = self.config.get_submissions_df()
         self.student_bp = Blueprint('student', __name__)
         self.register_routes()
 
@@ -15,9 +16,9 @@ class StudentRoutes:
 
     def update_data(self, new_config):
         self.config = new_config
-        self.class_df_filtered_majors = self.config.get_class_df_filtered_majors()
+        self.submissions_df = self.config.get_submissions_df()
     def get_submissions(self):
-        df = self.class_df_filtered_majors
+        df = self.submissions_df
         if df is None:
             return jsonify({"error": "Failed to load submissions data."}), 500
 
@@ -29,17 +30,13 @@ class StudentRoutes:
         # 过滤数据
         filtered_records = df.copy()
         if student_id:
-            try:
-                student_id = int(student_id)
-                filtered_records = filtered_records[filtered_records['student_ID'] == student_id]
-            except ValueError:
-                return jsonify({"error": "Invalid studentID parameter."}), 400
+            filtered_records = filtered_records[
+                filtered_records["student_ID"].astype(str) == str(student_id)
+            ]
         if title_id:
-            try:
-                title_id = int(title_id)
-                filtered_records = filtered_records[filtered_records['title_ID'] == title_id]
-            except ValueError:
-                return jsonify({"error": "Invalid titleID parameter."}), 400
+            filtered_records = filtered_records[
+                filtered_records["title_ID"].astype(str) == str(title_id)
+            ]
 
         # 如果指定了 limit 参数，则返回指定数量的记录
         if limit:
@@ -56,7 +53,7 @@ class StudentRoutes:
         return jsonify(records_list)
 
     def get_tree_data(self):
-        df = self.class_df_filtered_majors
+        df = self.submissions_df
         student_ids = request.args.getlist('student_ids[]')
         limit = request.args.get('limit')
 
@@ -65,8 +62,8 @@ class StudentRoutes:
         if student_ids:
             df = df[df['student_ID'].isin(student_ids)]
         # 转换数据
-        student_info = fileSystem.load_data(fileSystem.studentFilename)
-        tree_data = sv.transform_data(df, student_info)
+        student_info = data_loader.load_data(data_loader.STUDENT_INFO_PATH)
+        tree_data = student_service.build_student_tree(df, student_info)
         
         if limit:
             try:

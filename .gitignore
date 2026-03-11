@@ -3,7 +3,7 @@ data/*.csv
 data/Data_SubmitRecord/*.csv
 data/*.docx
 
-/notes/plan.md
+/plan
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

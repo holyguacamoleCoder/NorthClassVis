@@ -1,5 +1,6 @@
-from flask import Blueprint, request, jsonify
-from tools import fileSystem as fs
+from flask import Blueprint, jsonify, request
+
+from core import data_loader
 
 class NavRoutes:
     def __init__(self, config):
@@ -11,9 +12,11 @@ class NavRoutes:
 
     def config_info(self):
         return jsonify(
-            {"classes": self.config.classList,
-             "majors": self.config.majors,
-            })
+            {
+                "classes": self.config.get_class_list(),
+                "majors": self.config.get_majors(),
+            }
+        )
     
     def process_classes(self):
         # 获取前端发送的数据，这里假设前端发送的是JSON格式的数据
@@ -28,13 +31,14 @@ class NavRoutes:
         majors = data['majors']
 
         # 获取对应的DataFrame并合并
-        contacted_df = fs.contact_df(fs.class_dir, classes)
+        contacted_df = data_loader.load_submissions_by_classes(data_loader.SUBMISSIONS_DIR, classes)
 
-        merged_df = fs.merge_df_or_file(
-            df1=contacted_df, 
-            filename2=fs.studentFilename,
-            on='student_ID', 
-            filter_col2=['student_ID','major'])
+        merged_df = data_loader.merge_dataframes_or_files(
+            left_df=contacted_df,
+            right_path=data_loader.STUDENT_INFO_PATH,
+            on="student_ID",
+            right_columns=["student_ID", "major"],
+        )
 
         # 根据majors参数筛选对应majors数据
         filtered_df = merged_df[merged_df['major'].isin(majors)]
@@ -42,8 +46,8 @@ class NavRoutes:
         # 更新配置
         self.config.set_class_list(classes)
         self.config.set_majors(majors)
-        self.config.set_class_df_filtered_majors(filtered_df)
-        self.config.set_data_with_title_knowledge(self.config.merge_title_data())
+        self.config.set_submissions_df(filtered_df)
+        self.config.set_submissions_with_knowledge_df(self.config.merge_submissions_with_titles())
         
         # 通知 FeatureFactory 重新初始化依赖对象
         self.config.notify_observers()

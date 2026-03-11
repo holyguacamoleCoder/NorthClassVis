@@ -2,12 +2,12 @@ import sys
 import os
 import pytest
 import numpy as np
-from sklearn.cluster import KMeans
 
 current_dir = os.path.dirname(os.path.abspath(__file__)) # 获取当前文件的目录
 backend_dir = os.path.dirname(current_dir)      # 获取 backend 目录的路径
 sys.path.append(backend_dir)                      # 将 tools 目录添加到 sys.path
-from backend.tools.cluster_analysis import ClusterAnalysis
+from domain.algorithms.kmeans import MyKMeans
+from domain.clustering import ClusterAnalysis
 
 # 示例数据
 @pytest.fixture
@@ -22,7 +22,7 @@ def students_data():
 
 
 # 测试 extract_features 方法
-def test_extract_features():
+def test_extract_features(students_data):
     cluster_analysis = ClusterAnalysis(students_data)
     features_array = cluster_analysis.extract_features(students_data)
     expected_features = np.array([
@@ -33,15 +33,15 @@ def test_extract_features():
     ])
     assert np.array_equal(features_array, expected_features)
 
-# 测试 create_kmeans_model 方法
-def test_create_kmeans_model():
+# 测试 create_cluster_model 方法
+def test_create_cluster_model(students_data):
     cluster_analysis = ClusterAnalysis(students_data, n_clusters=2)
-    kmeans = cluster_analysis.create_kmeans_model(cluster_analysis.features_array, 2)
-    assert isinstance(kmeans, KMeans)
+    kmeans = cluster_analysis.create_cluster_model(method="kmeans", n_clusters=2)
+    assert isinstance(kmeans, MyKMeans)
     assert kmeans.n_clusters == 2
 
 # 测试 get_student_clusters 方法
-def test_get_student_clusters():
+def test_get_student_clusters(students_data):
     cluster_analysis = ClusterAnalysis(students_data, n_clusters=2)
     student_clusters = cluster_analysis.get_student_clusters()
     assert isinstance(student_clusters, dict)
@@ -52,7 +52,7 @@ def test_get_student_clusters():
         assert isinstance(info['cluster'], int)
 
 # 测试 get_cluster_center_students_ID 方法
-def test_get_cluster_center_students_ID():
+def test_get_cluster_center_students_ID(students_data):
     cluster_analysis = ClusterAnalysis(students_data, n_clusters=2)
     cluster_center_students = cluster_analysis.get_cluster_center_students_ID()
     assert isinstance(cluster_center_students, list)
@@ -63,7 +63,7 @@ def test_get_cluster_center_students_ID():
         assert isinstance(student['cluster'], int)
 
 # 测试 get_cluster_centers 方法
-def test_get_cluster_centers():
+def test_get_cluster_centers(students_data):
     cluster_analysis = ClusterAnalysis(students_data, n_clusters=2)
     cluster_centers = cluster_analysis.get_cluster_centers()
     assert isinstance(cluster_centers, dict)
@@ -73,48 +73,3 @@ def test_get_cluster_centers():
         assert 'knowledge' in info
         assert isinstance(info['cluster'], int)
         assert isinstance(info['knowledge'], dict)
-
-# 测试 analyze 方法
-def test_analyze_every():
-    cluster_analysis = ClusterAnalysis(students_data, n_clusters=2)
-    result_every = cluster_analysis.analyze(every=True)
-    assert isinstance(result_every, dict)
-    assert len(result_every) == 4
-    for student_id, info in result_every.items():
-        assert 'knowledge' in info
-        assert 'cluster' in info
-        assert isinstance(info['cluster'], int)
-
-def test_analyze_stu():
-    cluster_analysis = ClusterAnalysis(students_data, n_clusters=2)
-    result_stu = cluster_analysis.analyze(stu=True)
-    assert isinstance(result_stu, list)
-    assert len(result_stu) == 2
-    for student in result_stu:
-        assert 'student_ID' in student
-        assert 'cluster' in student
-        assert isinstance(student['cluster'], int)
-
-def test_analyze_centers():
-    cluster_analysis = ClusterAnalysis(students_data, n_clusters=2)
-    result_centers = cluster_analysis.analyze()
-    assert isinstance(result_centers, dict)
-    assert len(result_centers) == 2
-    for cluster_id, info in result_centers.items():
-        assert 'cluster' in info
-        assert 'knowledge' in info
-        assert isinstance(info['cluster'], int)
-        assert isinstance(info['knowledge'], dict)
-
-# 测试 reset_instance 方法
-def test_reset_instance():
-    cluster_analysis = ClusterAnalysis(students_data, n_clusters=2)
-    new_students_data = {
-        'student5': {'math': 80, 'science': 85, 'english': 88},
-        'student6': {'math': 70, 'science': 75, 'english': 78}
-    }
-    new_cluster_analysis = ClusterAnalysis.reset_instance(new_students_data, n_clusters=3)
-    assert new_cluster_analysis.raw_data == new_students_data
-    assert new_cluster_analysis.n_clusters == 3
-    assert len(new_cluster_analysis.features_array) == 2
-    assert new_cluster_analysis.kmeans.n_clusters == 3

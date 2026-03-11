@@ -106,7 +106,7 @@ def calculate_peak_data(df, day):
     ).reindex(columns=['Mon_to_Day', 'after_Day_to_Sun'], fill_value=0)
     
     # 格式转换成想要的结构
-     # ✅ 新增：格式转换成你想要的结构
+     # 新增：格式转换成你想要的结构
     result_list = []
     for student_id, group in pivoted.groupby(level='student_ID'):
         weeks = []
