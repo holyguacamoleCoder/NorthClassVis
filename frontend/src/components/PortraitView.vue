@@ -55,7 +55,9 @@ export default {
   },
   async mounted() {
     await this.getPortraitData()
-    this.initialChart()
+    if (Object.keys(this.PortraitData).length > 0) {
+      this.initialChart()
+    }
   },
   computed: {
     ...mapState(['configLoaded']),
@@ -78,6 +80,7 @@ export default {
       }
     },
     initialChart(){
+      if (Object.keys(this.PortraitData).length === 0) return
       this.renderPortraitData()
       this.renderLabelBar()
       this.renderLabelRadar()
@@ -270,8 +273,10 @@ export default {
        .attr('text-anchor', 'middle')
        .attr('transform', (d, i) => `translate(0, ${(i - 1) * 12})`)
        .text(d => d)
-    
-     const knowledge_dimension = Object.keys(Object.values(this.PortraitData)[0].knowledge)
+
+     const firstItem = Object.values(this.PortraitData)[0]
+     if (!firstItem?.knowledge) return
+     const knowledge_dimension = Object.keys(firstItem.knowledge)
 
      const knowledgeNum = knowledge_dimension.length
      const labelData = knowledge_dimension.map((_, i) => ({ r1: labelRadius * 0.8, r2: labelRadius, index: i }))

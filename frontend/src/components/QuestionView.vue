@@ -96,6 +96,7 @@ export default {
       selectAllKnowledge: true,
       sortAscending: true, // 默认按升序排序
       difficultyIndex: null,
+      lastAppliedAgentLink: null, // 避免 watch 重复应用
       // 提交数量和平均分的最大最小值，用于标准化
       submissionMin: null,
       submissionMax: null,
@@ -108,7 +109,7 @@ export default {
   },
   computed: {
     ...mapState(['configLoaded']),
-    ...mapGetters([]),
+    ...mapGetters(['getAgentVisualLink']),
     displayButton() {
       if (this.selectAllKnowledge) return 'All'
       const selectedCount = Object.values(this.selectedKnowledge).filter(Boolean).length
@@ -569,6 +570,20 @@ export default {
         // 重新加载逻辑
         this.loadData()
       }
+    },
+    getAgentVisualLink(newLink) {
+      if (!newLink || newLink.view !== 'QuestionView' || !newLink.params || !newLink.params.knowledge) return
+      if (JSON.stringify(newLink) === JSON.stringify(this.lastAppliedAgentLink)) return
+      if (!this.uniqueKnowledge || this.uniqueKnowledge.length === 0) return
+      const knowledge = newLink.params.knowledge
+      if (!this.uniqueKnowledge.includes(knowledge)) return
+      this.lastAppliedAgentLink = { ...newLink }
+      Object.keys(this.selectedKnowledge).forEach(k => { this.selectedKnowledge[k] = false })
+      this.selectedKnowledge[knowledge] = true
+      this.selectAllKnowledge = false
+      const d3 = this.$d3
+      d3.select('#visualizationQ').selectAll('*').remove()
+      this.renderQuestion()
     },
   }
 };

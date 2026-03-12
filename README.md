@@ -4,7 +4,8 @@ ChinaVis 2024数据可视化竞赛作品复现
 
 ## 项目简介
 
-本项目是2024年数据可视化竞赛的参赛作品非1:1复现(仅有大致原作成品参考，无原型图、设计稿等)，旨在基于可视化作品学习**D3.js**、**flask**的相关知识。
+本项目是2024年数据可视化竞赛的参赛作品非1:1复现(仅有大致原作成品参考，无原型图、设计稿等)，旨在基于可视化作品学习**D3.js**、**flask**的相关知识。  
+目前正在项目基础上扩展面向教师对话Agent能力，旧版代码分支`chainvis-original`。
 
 项目包含：
 
@@ -197,3 +198,4 @@ npm run serve
 ![image-preview5-2](src/README/image-preview5-2.png)
 
 <img src="src/README/image-preview7.png" alt="image-preview7" style="zoom: 27%;" /> <img src="src/README/image-preview6.png" alt="image-preview6" style="zoom: 27%;" />
+

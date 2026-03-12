@@ -7,37 +7,47 @@
     <div class="main">
       <div class="top">
         <!-- A. Scatter View or Parallel View -->
-        <div class="scatter-view" v-if="studentClusterInfo">
+        <div class="scatter-view" v-if="studentClusterInfo" ref="scatterViewRef">
           <!-- <ParallelView v-if="false"/> -->
           <ScatterView v-if="true" />
         </div>
         
         <!-- B. Portrait View -->
-        <div class="portrait-view" >
+        <div class="portrait-view" ref="portraitViewRef">
           <PortraitView />
         </div>
       </div>
       
       <div class="bottom">
         <!-- C. Question View -->
-        <div class="question-view">
+        <div class="question-view" ref="questionViewRef">
           <QuestionView />
         </div>
         
         <!-- D. Week View -->
-        <div class="week-view" v-if="studentClusterInfo">
+        <div class="week-view" v-if="studentClusterInfo" ref="weekViewRef">
           <WeekView />
         </div>
       </div>
     </div>
 
     <!-- E. Student View -->
-    <div class="panel">
+    <div class="panel" ref="studentViewRef">
        <div class="student-view" v-if="studentClusterInfo">
          <StudentView />
        </div>
     </div>
   </div>
+
+  <AgentChatFloat
+    :visible="getAgentPanelVisible"
+    :minimized="getAgentPanelMinimized"
+    :context="agentContext"
+    @close="closeAgentPanel"
+    @minimize="minimizeAgentPanel"
+    @expand="expandAgentPanel"
+    @visual-link-click="onAgentVisualLinkClick"
+  />
 
 </div> 
 </template>
@@ -50,10 +60,12 @@ import PortraitView from './components/PortraitView.vue'
 import QuestionView from './components/QuestionView.vue'
 import WeekView from './components/WeekView.vue'
 import StudentView from './components/StudentView.vue'
+import AgentChatFloat from './components/AgentChatFloat.vue'
 import { mapActions, mapGetters } from 'vuex'
 export default {
   components: {
     NavHeader,
+    AgentChatFloat,
     // ParallelView,
     ScatterView,
     PortraitView,
@@ -67,10 +79,19 @@ export default {
     }
   },
   computed: {
-    ...mapGetters(['getStudentClusterInfo']),
-    studentClusterInfo(){
+    ...mapGetters(['getStudentClusterInfo', 'getAgentPanelVisible', 'getAgentPanelMinimized', 'getSelectedIds', 'getNavClasses', 'getNavMajors']),
+    studentClusterInfo() {
       return this.getStudentClusterInfo
-    }
+    },
+    agentContext() {
+      const c = this.getNavClasses
+      const m = this.getNavMajors
+      return {
+        classes: (c != null && c !== '') ? [].concat(c) : [],
+        majors: (m != null && m !== '') ? [].concat(m) : [],
+        selected_student_ids: this.getSelectedIds || [],
+      }
+    },
   },
   async created() {
    
@@ -80,7 +101,30 @@ export default {
     
   },
   methods: {
-    ...mapActions(['fetchClusterData']),
+    ...mapActions(['fetchClusterData', 'closeAgentPanel', 'minimizeAgentPanel', 'expandAgentPanel', 'setAgentVisualLink', 'applyAgentSuggestedStudents']),
+    onAgentVisualLinkClick({ view, params }) {
+      this.setAgentVisualLink({ view, params })
+      const studentViews = ['ScatterView', 'PortraitView', 'StudentView']
+      if (params && Array.isArray(params.student_ids) && params.student_ids.length > 0 && studentViews.includes(view)) {
+        this.$store.commit('setAgentSuggestedStudentIds', params.student_ids)
+      }
+      this.$nextTick(() => this.scrollToView(view))
+    },
+    scrollToView(view) {
+      const refMap = {
+        QuestionView: 'questionViewRef',
+        WeekView: 'weekViewRef',
+        StudentView: 'studentViewRef',
+        ScatterView: 'scatterViewRef',
+        PortraitView: 'portraitViewRef',
+      }
+      const refName = refMap[view]
+      if (!refName || !this.$refs[refName]) return
+      const el = this.$refs[refName].$el || this.$refs[refName]
+      if (el && el.scrollIntoView) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    },
   },
   watch: {
     
@@ -169,6 +213,14 @@ export default {
   .view();
   width: 450px;
   height: @panel-height;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  .student-view {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
 }
 
 </style>

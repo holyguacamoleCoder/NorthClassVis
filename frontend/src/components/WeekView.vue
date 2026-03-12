@@ -54,19 +54,24 @@ export default {
       PeakData:[],
       selectedKind: '',
       showPeakView: false,
-      selectedDay: 5
+      selectedDay: 5,
+      lastAppliedAgentLink: null,
     }
   },
   computed: {
     ...mapState(['configLoaded']),
-    ...mapGetters(['getStudentClusterInfo','getSelectedIds', 'getSelectedData','getColors']),
+    ...mapGetters(['getStudentClusterInfo','getSelectedIds', 'getSelectedData','getColors', 'getAgentVisualLink']),
     filteredWeekData() {
-      if (!this.selectedKind) return this.WeekData.students
-      return this.WeekData.students.filter(s => this.getStudentClusterInfo[s.id] === this.selectedKind - 1)
+      const students = this.WeekData?.students
+      if (!students || !Array.isArray(students)) return []
+      if (!this.selectedKind) return students
+      return students.filter(s => this.getStudentClusterInfo[s.id] === this.selectedKind - 1)
     },
     filteredPeakData() {
-      if (!this.selectedKind) return this.PeakData.peaks
-      return this.PeakData.peaks.filter(s => this.getStudentClusterInfo[s.id] === this.selectedKind - 1)
+      const peaks = this.PeakData?.peaks
+      if (!peaks || !Array.isArray(peaks)) return []
+      if (!this.selectedKind) return peaks
+      return peaks.filter(s => this.getStudentClusterInfo[s.id] === this.selectedKind - 1)
     }
   },
   async created() {
@@ -85,12 +90,16 @@ export default {
     },
     renderWeekData() {
       const d3 = this.$d3
+      const filteredWeekData = this.filteredWeekData
+      if (!filteredWeekData.length || !filteredWeekData[0]?.weeks?.length) {
+        d3.select('#visualizationW').selectAll('*').remove()
+        return
+      }
       const height = 600
       const width = 1000
       const margin = { top: 20, bottom: 20, left: 20 ,right: 20 }
       const stu_icon = 40
       const weekLabelHeight = 20 // 周标签高度
-      const filteredWeekData = this.filteredWeekData
 
       // 定义维度
       const numWeeks = d3.max(filteredWeekData, d => d.weeks.length)
@@ -297,12 +306,16 @@ export default {
     },
     renderPeakData() {
       const d3 = this.$d3;
+      const filteredPeakData = this.filteredPeakData;
+      if (!filteredPeakData.length || !filteredPeakData[0]?.weeks?.length) {
+        d3.select('#visualizationW').selectAll('*').remove();
+        return;
+      }
       const height = 600;
       const width = 1000;
       const margin = { top: 20, bottom: 20, left: 20, right: 20 };
       const stu_icon = 40;
       const weekLabelHeight = 20; // 周标签高度
-      const filteredPeakData = this.filteredPeakData;
     
       // 定义维度
       const numWeeks = d3.max(filteredPeakData, d =>
@@ -552,8 +565,19 @@ export default {
         this.isWaiting = false;
         this.loadData();
       }
-    }
-
+    },
+    getAgentVisualLink(newLink) {
+      if (!newLink || newLink.view !== 'WeekView' || !newLink.params) return
+      if (newLink.params.kind === undefined && newLink.params.cluster === undefined) return
+      if (JSON.stringify(newLink) === JSON.stringify(this.lastAppliedAgentLink)) return
+      this.lastAppliedAgentLink = { ...newLink }
+      const kind = newLink.params.kind !== undefined ? newLink.params.kind : (newLink.params.cluster + 1)
+      const num = Number(kind)
+      if (num >= 1 && num <= 3) {
+        this.selectedKind = num
+        this.updateKind()
+      }
+    },
   }
 }
 </script>

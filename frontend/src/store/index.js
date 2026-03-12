@@ -10,6 +10,13 @@ export default createStore({
     selectedStudentIds: [], // 存储选中的学生 ID ，从前端交互而来
     selectedStudentData: [], // 对应的学生各项指标数据，需要从后端获取
     colors: ['#ff7f00', '#377eb8', '#4daf4a'],
+    // Agent 浮层
+    agentPanelVisible: false,
+    agentPanelMinimized: false,
+    agentVisualLink: null, // { view, params } 图表联动占位
+    agentSuggestedStudentIds: [], // 仅当用户点击「应用到选择」时才写入 selectedStudentIds，避免牵一发而动全身
+    navClasses: 'Part',
+    navMajors: 'All',
   },
   mutations: {
     // 更新 configLoaded 状态
@@ -30,6 +37,22 @@ export default createStore({
     // 设置selectedStudentData
     setSelectedStudentData(state, students_data){
       state.selectedStudentData = students_data
+    },
+    setAgentPanelVisible(state, visible) {
+      state.agentPanelVisible = visible
+    },
+    setAgentPanelMinimized(state, minimized) {
+      state.agentPanelMinimized = minimized
+    },
+    setAgentVisualLink(state, payload) {
+      state.agentVisualLink = payload
+    },
+    setAgentSuggestedStudentIds(state, ids) {
+      state.agentSuggestedStudentIds = Array.isArray(ids) ? ids : []
+    },
+    setNavFilter(state, { classes, majors }) {
+      if (classes != null) state.navClasses = classes
+      if (majors != null) state.navMajors = majors
     },
   },
   actions: {
@@ -86,6 +109,29 @@ export default createStore({
         alert('Failed to fetch selected student data. Please try again.')
       }
     },
+    openAgentPanel(context) {
+      context.commit('setAgentPanelVisible', true)
+      context.commit('setAgentPanelMinimized', false)
+    },
+    closeAgentPanel(context) {
+      context.commit('setAgentPanelVisible', false)
+      context.commit('setAgentPanelMinimized', false)
+    },
+    minimizeAgentPanel(context) {
+      context.commit('setAgentPanelMinimized', true)
+    },
+    expandAgentPanel(context) {
+      context.commit('setAgentPanelMinimized', false)
+    },
+    setAgentVisualLink(context, payload) {
+      context.commit('setAgentVisualLink', payload)
+    },
+    applyAgentSuggestedStudents(context) {
+      const ids = context.state.agentSuggestedStudentIds
+      if (!ids || ids.length === 0) return
+      context.commit('setSelectedStudents', ids)
+      return context.dispatch('fetchSelectedData')
+    },
   },
   getters: {
     getConfigLoaded: state => state.configLoaded,
@@ -93,5 +139,11 @@ export default createStore({
     getSelectedIds: state => state.selectedStudentIds,
     getSelectedData: state => state.selectedStudentData,
     getColors: state => state.colors,
+    getAgentPanelVisible: state => state.agentPanelVisible,
+    getAgentPanelMinimized: state => state.agentPanelMinimized,
+    getAgentVisualLink: state => state.agentVisualLink,
+    getAgentSuggestedStudentIds: state => state.agentSuggestedStudentIds,
+    getNavClasses: state => state.navClasses,
+    getNavMajors: state => state.navMajors,
   }
 })

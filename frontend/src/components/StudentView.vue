@@ -8,17 +8,23 @@
       </select>
       <div class="filter">Major:</div>
     </div>
-    <Simplebar style="height: 1160px" @scroll="handleScroll">
+    <div v-if="getAgentSuggestedStudentIds.length > 0" class="agent-suggest-bar">
+      <span>Agent 建议关注 {{ getAgentSuggestedStudentIds.length }} 个学生</span>
+      <button type="button" class="agent-apply-btn" @click="applyAgentSuggested">应用到选择</button>
+    </div>
+    <div class="student-view-scroll-wrap">
+      <Simplebar class="student-view-simplebar" @scroll="handleScroll">
       <div id="visualizationStu" ref="visualizationStu">
         <div class="wait-prompt"  v-if="isWaiting">Waiting for brush :) ...</div>
         <LoadingSpinner v-if="loading" />
       </div>
-    </Simplebar>
+      </Simplebar>
+    </div>
   </div>
 </template>
 
 <script>
-import { mapState, mapGetters } from 'vuex'
+import { mapState, mapGetters, mapActions } from 'vuex'
 import { getStudents } from '@/api/StudentView'
 import Simplebar from 'simplebar-vue'
 import 'simplebar-vue/dist/simplebar.min.css'
@@ -48,7 +54,7 @@ export default {
   },
   computed: {
     ...mapState(['configLoaded']),
-    ...mapGetters(['getStudentClusterInfo','getSelectedIds', 'getSelectedData','getColors']),
+    ...mapGetters(['getStudentClusterInfo','getSelectedIds', 'getSelectedData','getColors', 'getAgentSuggestedStudentIds']),
     filteredTreeData() {
       if (!this.selectedMajor) return this.treeData
       return this.treeData.filter(student => student.major === this.selectedMajor)
@@ -60,6 +66,10 @@ export default {
   mounted() {
   },
   methods: {
+    ...mapActions(['applyAgentSuggestedStudents']),
+    async applyAgentSuggested() {
+      await this.applyAgentSuggestedStudents()
+    },
     async getTreeData(stu_ids) {
       const { data: { children } } = await getStudents(stu_ids) // 获取学生树形数据
       // console.log('studentData', children)
@@ -334,7 +344,19 @@ export default {
 
 <style scoped lang="less">
 #student-view {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
   .title {
+    flex-shrink: 0;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    box-sizing: border-box;
     font-size: 20px;
     font-weight: bold;
     margin-left: 10px;
@@ -360,6 +382,49 @@ export default {
     }
     .filter{
       font-weight: bold;
+    }
+  }
+  .agent-suggest-bar {
+    width: 96%;
+    flex-shrink: 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    margin: 0 10px 8px;
+    background: #e8f4fd;
+    border: 1px solid #377eb8;
+    border-radius: 6px;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+  .agent-suggest-bar span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .student-view-scroll-wrap {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .student-view-simplebar {
+    height: 100%;
+  }
+  .agent-apply-btn {
+    flex-shrink: 0;
+    padding: 4px 12px;
+    background: #377eb8;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    &:hover {
+      background: #2d6ba3;
     }
   }
   .wait-prompt{

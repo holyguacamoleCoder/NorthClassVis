@@ -19,6 +19,7 @@
       </div>
     </div>
     <div class="config-button" @click="toggleConfigPanel"></div>
+    <div class="agent-button" @click="toggleAgentPanel">Agent</div>
     <div class="cluster-button" @click="handleClusterClick">DISPLAY</div>
   </div>
   
@@ -57,19 +58,31 @@ export default {
     }
   },
   computed:{
-    ...mapGetters(['getSelectedIds'])
+    ...mapGetters(['getSelectedIds', 'getAgentPanelVisible', 'getAgentPanelMinimized'])
   },
-  created(){
+  created() {
+    this.$store.commit('setNavFilter', {
+      classes: this.selectedClasses,
+      majors: this.selectedMajors,
+    })
   },
   methods: {
-    ...mapActions(['fetchSelectedData']),
+    ...mapActions(['fetchSelectedData', 'openAgentPanel', 'closeAgentPanel']),
+    toggleAgentPanel() {
+      if (this.getAgentPanelVisible && !this.getAgentPanelMinimized) {
+        this.closeAgentPanel()
+      } else {
+        this.openAgentPanel()
+      }
+    },
    toggleConfigPanel(){
       this.isConfigPanelVisible = !this.isConfigPanelVisible;
     },
-    hideConfigPanel(classesText, majorsText){
-      this.isConfigPanelVisible = false;
+    hideConfigPanel(classesText, majorsText) {
+      this.isConfigPanelVisible = false
       this.selectedClasses = classesText
       this.selectedMajors = majorsText
+      this.$store.commit('setNavFilter', { classes: classesText, majors: majorsText })
     },
     handleClusterClick() {
       // 检查是否有选中的学生
@@ -145,6 +158,20 @@ export default {
       border-radius: 100%;
       height: 40px;
       width: 40px;
+    }
+    .agent-button{
+      margin-left: 24px;
+      padding: 4px 12px;
+      font-weight: bold;
+      border-radius: 5px;
+      background-color: #377eb8;
+      color: #fff;
+      cursor: pointer;
+      border: none;
+      font-size: 14px;
+      &:hover {
+        background-color: #2d6ba3;
+      }
     }
     .cluster-button{
       margin-left: 40px;
