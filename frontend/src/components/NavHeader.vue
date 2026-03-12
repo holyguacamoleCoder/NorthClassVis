@@ -19,7 +19,7 @@
       </div>
     </div>
     <div class="config-button" @click="toggleConfigPanel"></div>
-    <div class="agent-button" @click="toggleAgentPanel">Agent</div>
+    <div class="agent-button" @click="toggleAgentPanel">AGENT</div>
     <div class="cluster-button" @click="handleClusterClick">DISPLAY</div>
   </div>
   
@@ -154,21 +154,24 @@ export default {
       position: relative;
       margin-left: 20px;
       background-color: #fff;
-      background: no-repeat center/60% url('~@/assets/images/settings.png') #fff;
+      background: no-repeat center/60% url('@/assets/images/settings.png') #fff;
       border-radius: 100%;
       height: 40px;
       width: 40px;
+      &:hover {
+        background-color: #2d6ba3;
+      }
     }
     .agent-button{
       margin-left: 24px;
       padding: 4px 12px;
       font-weight: bold;
       border-radius: 5px;
-      background-color: #377eb8;
-      color: #fff;
+      background-color: #fff;
+      color: #000;
       cursor: pointer;
       border: none;
-      font-size: 14px;
+      font-size: 16px;
       &:hover {
         background-color: #2d6ba3;
       }
@@ -180,6 +183,9 @@ export default {
       border-radius: 5px;
       background-color: #fff;
       cursor: pointer;
+      &:hover {
+        background-color: #2d6ba3;
+      }
     }
   }
 }

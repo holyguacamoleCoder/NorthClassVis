@@ -129,7 +129,7 @@ export default {
       float: left;
       height: 50px;
       width: 50px;
-      background: no-repeat center/60% url('~@/assets/images/settings.png') #fff;
+      background: no-repeat center/60% url('@/assets/images/settings.png') #fff;
     }
     .config-panel-title-text{
       font-size: 20px;

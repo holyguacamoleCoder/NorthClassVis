@@ -157,10 +157,10 @@ cd ../frontend
 npm install
 ```
 
-6. 启动前端服务：
+6. 启动前端服务（Vite 开发服务器）：
 
 ```bash
-npm run serve
+npm run dev
 ```
 
 7. 打开浏览器，访问 `http://localhost:8080` 查看可视化效果。

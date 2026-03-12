@@ -302,7 +302,7 @@ export default {
       height: 20px;
       width: 20px;
       border: 0;
-      background: no-repeat center/85% url('~@/assets/images/brush.png') ;
+      background: no-repeat center/85% url('@/assets/images/brush.png') ;
     }
     .click-button{
       float: right;
@@ -312,7 +312,7 @@ export default {
       height: 20px;
       width: 20px;
       border: 0;
-      background: no-repeat center/100% url('~@/assets/images/click.png') ;
+      background: no-repeat center/100% url('@/assets/images/click.png') ;
     }
   }
   .labels{
