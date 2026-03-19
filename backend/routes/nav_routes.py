@@ -11,10 +11,19 @@ class NavRoutes:
         self.nav_bp.add_url_rule('/nav/config', view_func=self.process_classes, methods=['POST'])
 
     def config_info(self):
+        min_week, max_week = self.config.get_week_extent()
+        selected = self.config.get_week_range()
+        if selected is None and max_week >= min_week:
+            selected = [max(min_week, max_week - 15), max_week]
         return jsonify(
             {
                 "classes": self.config.get_class_list(),
                 "majors": self.config.get_majors(),
+                "week_range": {
+                    "min": min_week,
+                    "max": max_week,
+                    "selected": selected,
+                },
             }
         )
     
@@ -48,6 +57,15 @@ class NavRoutes:
         self.config.set_majors(majors)
         self.config.set_submissions_df(filtered_df)
         self.config.set_submissions_with_knowledge_df(self.config.merge_submissions_with_titles())
+
+        week_range = data.get("week_range")
+        if week_range is not None and isinstance(week_range, list) and len(week_range) >= 2:
+            start_w, end_w = int(week_range[0]), int(week_range[1])
+            min_w, max_w = self.config.get_week_extent()
+            if start_w <= end_w and min_w <= start_w and end_w <= max_w:
+                self.config.set_week_range(start_w, end_w)
+            else:
+                self.config.set_week_range(None, None)
         
         # 通知 FeatureFactory 重新初始化依赖对象
         self.config.notify_observers()

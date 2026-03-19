@@ -138,6 +138,9 @@ class FinalFeatureCalculator:
         self.result = self.calc_final_features()
 
     def calc_final_features(self):
+        if self.df is None or self.df.empty:
+            return pd.DataFrame()
+
         grouped = self.df.groupby(self.group_apply).agg({
             "score_bonus": "sum",
             "tc_bonus": "sum",
@@ -161,6 +164,9 @@ class FinalFeatureCalculator:
             final_scores = grouped.pivot_table(
                 index=index, columns=columns, values="total_score"
             )
+
+        if final_scores.empty:
+            return pd.DataFrame(index=final_scores.index, columns=final_scores.columns)
 
         final_scores.fillna(0, inplace=True)
         for col in final_scores.columns:

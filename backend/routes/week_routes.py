@@ -31,7 +31,10 @@ class WeekRoutes:
         df['week'] = df['time'].apply(
             lambda value: week_service.calculate_week_of_year(value, start_date=start_date)
         )
-        df = week_service.filter_to_recent_weeks(df)
+        wr = self.config.get_week_range()
+        df = week_service.filter_to_week_range(df, wr[0], wr[1]) if wr else week_service.filter_to_recent_weeks(df)
+        if df.empty:
+            return jsonify({"students": []})
         pre_calculator = PreliminaryFeatureCalculator(df)
         pre_calc_submit_records = pre_calculator.get_features()
 

@@ -17,6 +17,31 @@ def filter_to_recent_weeks(df, max_weeks=MAX_WEEKS_FOR_PIVOT, week_col="week"):
     return df[df[week_col].isin(recent_weeks)]
 
 
+def filter_to_week_range(df, week_start, week_end, week_col="week"):
+    """保留 week_start <= week <= week_end 的行。"""
+    if week_col not in df.columns:
+        return df
+    return df[(df[week_col] >= week_start) & (df[week_col] <= week_end)]
+
+
+def get_week_extent(df, week_col="week"):
+    """从已有 week 列的 df 返回 (min_week, max_week)。若无 week 列则计算。"""
+    if df is None or df.empty:
+        return 0, 0
+    if week_col not in df.columns and "time" in df.columns:
+        start_date = df["time"].min()
+        df = df.copy()
+        df[week_col] = df["time"].apply(
+            lambda v: calculate_week_of_year(v, start_date=start_date)
+        )
+    if week_col not in df.columns:
+        return 0, 0
+    vals = df[week_col].dropna()
+    if vals.empty:
+        return 0, 0
+    return int(vals.min()), int(vals.max())
+
+
 def _normalize_to_timestamp(value):
     if isinstance(value, (pd.Timestamp, datetime)):
         return value

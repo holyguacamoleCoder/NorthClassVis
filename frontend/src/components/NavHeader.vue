@@ -24,7 +24,7 @@
   </div>
   
   <ConfigPanel 
-    v-if="isConfigPanelVisible"
+    v-show="isConfigPanelVisible"
     @close="hideConfigPanel"
     :selectedClasses="selectedClasses"
     :selectedMajors="selectedMajors"

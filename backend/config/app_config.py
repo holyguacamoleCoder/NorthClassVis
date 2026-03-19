@@ -16,6 +16,8 @@ class Config:
         self.api_bp = Blueprint("api", __name__)
         self.selected_classes = []
         self.majors = []
+        self.week_range = None  # [start_week, end_week] 或 None 表示默认最近 16 周
+        self.week_extent = (0, 0)  # 缓存当前数据的 (min_week, max_week)
         self.submissions_df = None
         self.submissions_with_knowledge_df = None
         self._observers = []
@@ -32,8 +34,7 @@ class Config:
         student_df = data_loader.load_data(data_loader.STUDENT_INFO_PATH)
         self.majors = student_df["major"].unique().tolist()
         self.submissions_df = data_loader.load_data(data_loader.SUBMISSIONS_FILE_PATH)
-        self.submissions_with_knowledge_df = self.merge_submissions_with_titles()
-        self._sync_legacy_fields()
+        self.set_submissions_with_knowledge_df(self.merge_submissions_with_titles())
 
     def merge_submissions_with_titles(self):
         return data_loader.process_non_numeric_values(
@@ -64,6 +65,17 @@ class Config:
     def get_majors(self):
         return self.majors
 
+    def get_week_range(self):
+        """返回 [start_week, end_week] 或 None（使用默认最近 16 周）。"""
+        return self.week_range
+
+    def get_week_extent(self):
+        """返回当前配置数据的周范围缓存 (min_week, max_week)。"""
+        return self.week_extent
+
+    def set_week_range(self, start_week, end_week):
+        self.week_range = [start_week, end_week] if start_week is not None and end_week is not None else None
+
     def get_submissions_with_knowledge_df(self):
         return self.submissions_with_knowledge_df
 
@@ -86,6 +98,9 @@ class Config:
 
     def set_submissions_with_knowledge_df(self, submissions_with_knowledge_df):
         self.submissions_with_knowledge_df = submissions_with_knowledge_df
+        # 延迟导入以避免在模块加载阶段增加依赖链
+        from services import week_service
+        self.week_extent = week_service.get_week_extent(submissions_with_knowledge_df)
         self._sync_legacy_fields()
 
     def set_data_with_title_knowledge(self, data_with_title_knowledge):
