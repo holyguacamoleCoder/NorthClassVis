@@ -14,6 +14,8 @@ export default createStore({
     agentPanelVisible: false,
     agentPanelMinimized: false,
     agentVisualLink: null, // { view, params } 图表联动占位
+    agentHighlightAt: 0, // 最近一次跳转时间戳，用于目标视图高亮
+    agentJumpFeedback: '', // 跳转后给聊天浮窗展示的文案，若干秒后清除
     agentSuggestedStudentIds: [], // 仅当用户点击「应用到选择」时才写入 selectedStudentIds，避免牵一发而动全身
     navClasses: 'Part',
     navMajors: 'All',
@@ -46,6 +48,12 @@ export default createStore({
     },
     setAgentVisualLink(state, payload) {
       state.agentVisualLink = payload
+    },
+    setAgentHighlightAt(state, timestamp) {
+      state.agentHighlightAt = timestamp || 0
+    },
+    setAgentJumpFeedback(state, message) {
+      state.agentJumpFeedback = message || ''
     },
     setAgentSuggestedStudentIds(state, ids) {
       state.agentSuggestedStudentIds = Array.isArray(ids) ? ids : []
@@ -125,6 +133,7 @@ export default createStore({
     },
     setAgentVisualLink(context, payload) {
       context.commit('setAgentVisualLink', payload)
+      context.commit('setAgentHighlightAt', Date.now())
     },
     applyAgentSuggestedStudents(context) {
       const ids = context.state.agentSuggestedStudentIds
@@ -142,6 +151,8 @@ export default createStore({
     getAgentPanelVisible: state => state.agentPanelVisible,
     getAgentPanelMinimized: state => state.agentPanelMinimized,
     getAgentVisualLink: state => state.agentVisualLink,
+    getAgentHighlightAt: state => state.agentHighlightAt,
+    getAgentJumpFeedback: state => state.agentJumpFeedback,
     getAgentSuggestedStudentIds: state => state.agentSuggestedStudentIds,
     getNavClasses: state => state.navClasses,
     getNavMajors: state => state.navMajors,

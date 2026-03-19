@@ -102,8 +102,33 @@ export default {
   },
   methods: {
     ...mapActions(['fetchClusterData', 'closeAgentPanel', 'minimizeAgentPanel', 'expandAgentPanel', 'setAgentVisualLink', 'applyAgentSuggestedStudents']),
+    viewToFriendlyName(view) {
+      const map = {
+        QuestionView: '题目视图',
+        WeekView: '周趋势视图',
+        StudentView: '学生列表',
+        ScatterView: '散点视图',
+        PortraitView: '画像视图',
+      }
+      return map[view] || view
+    },
+    buildJumpFeedbackText({ view, params }) {
+      const name = this.viewToFriendlyName(view)
+      let suffix = ''
+      if (params && params.knowledge) suffix = `（${params.knowledge}）`
+      else if (params && params.cluster_id != null) suffix = `（cluster ${params.cluster_id}）`
+      else if (params && Array.isArray(params.student_ids) && params.student_ids.length) suffix = '（建议关注学生）'
+      return `已跳转到${name}${suffix}`
+    },
     onAgentVisualLinkClick({ view, params }) {
       this.setAgentVisualLink({ view, params })
+      const feedback = this.buildJumpFeedbackText({ view, params })
+      this.$store.commit('setAgentJumpFeedback', feedback)
+      if (this._agentFeedbackTimer) clearTimeout(this._agentFeedbackTimer)
+      this._agentFeedbackTimer = setTimeout(() => {
+        this.$store.commit('setAgentJumpFeedback', '')
+        this._agentFeedbackTimer = null
+      }, 3000)
       const studentViews = ['ScatterView', 'PortraitView', 'StudentView']
       if (params && Array.isArray(params.student_ids) && params.student_ids.length > 0 && studentViews.includes(view)) {
         this.$store.commit('setAgentSuggestedStudentIds', params.student_ids)

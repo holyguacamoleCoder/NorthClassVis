@@ -6,6 +6,7 @@ from routes.portrait_routes import PortraitRoutes
 from routes.student_routes import StudentRoutes
 from routes.question_routes import QuestionRoutes
 from routes.week_routes import WeekRoutes
+from routes.agent_routes import AgentRoutes
 import threading
 
 # 延迟初始化包装器
@@ -83,6 +84,7 @@ portrait_routes = PortraitRoutes(feature_factory)
 student_routes = StudentRoutes(config)
 question_routes = QuestionRoutes(config)
 week_routes = WeekRoutes(config)
+agent_routes = AgentRoutes(config, feature_factory)
 
 # 注册 Blueprint 蓝图
 config.api_bp.register_blueprint(nav_routes.nav_bp, url_prefix='/api')
@@ -91,6 +93,7 @@ config.api_bp.register_blueprint(portrait_routes.portrait_bp, url_prefix='/api')
 config.api_bp.register_blueprint(student_routes.student_bp, url_prefix='/api')
 config.api_bp.register_blueprint(question_routes.question_bp, url_prefix='/api')
 config.api_bp.register_blueprint(week_routes.week_bp, url_prefix='/api')
+config.api_bp.register_blueprint(agent_routes.agent_bp, url_prefix='/api')
 
 # 暴露 api_bp 变量
 api_bp = config.get_api_bp()

@@ -43,31 +43,68 @@
             </template>
             <template v-else>
               <div class="agent-msg-bubble agent-msg-bubble--assistant">
-                <div class="agent-answer">{{ msg.answer }}</div>
-                <div v-if="msg.evidence && msg.evidence.length" class="agent-evidence">
+                <div v-if="revealPhase(msg) >= 0" class="agent-answer agent-reveal">{{ msg.answer }}</div>
+                <!-- 结果状态区：goal_check + summary -->
+                <div v-if="revealPhase(msg) >= 1 && (msg.goal_check || msg.summary)" class="agent-status-block agent-reveal">
+                  <div class="agent-section-label">结果状态</div>
+                  <div v-if="msg.goal_check" class="agent-goal-check" :class="{ 'agent-goal-check--satisfied': msg.goal_check.is_satisfied }">
+                    <template v-if="msg.goal_check.is_satisfied">本次回答已满足你的问题</template>
+                    <template v-else-if="msg.goal_check.is_pending_clarification">
+                      请按上方提示补充信息
+                      <span v-if="msg.goal_check.reason" class="agent-goal-check-reason">（{{ msg.goal_check.reason }}）</span>
+                    </template>
+                    <template v-else>
+                      当前回答可能不完整
+                      <span v-if="msg.goal_check.reason" class="agent-goal-check-reason">（{{ msg.goal_check.reason }}）</span>
+                    </template>
+                  </div>
+                  <div v-if="msg.summary" class="agent-summary-status">
+                    {{ summaryStatusText(msg.summary) }}
+                  </div>
+                  <div v-if="msg.summary && msg.summary.key_findings && msg.summary.key_findings.length" class="agent-key-findings">
+                    <span class="agent-key-findings-label">关键结论：</span>
+                    <ul>
+                      <li v-for="(f, fi) in msg.summary.key_findings.slice(0, 3)" :key="fi">{{ f }}</li>
+                    </ul>
+                  </div>
+                  <div v-if="msg.summary && msg.summary.unresolved_points && msg.summary.unresolved_points.length" class="agent-unresolved">
+                    <span class="agent-unresolved-label">未解决：</span>
+                    <ul>
+                      <li v-for="(u, ui) in msg.summary.unresolved_points" :key="ui">{{ u }}</li>
+                    </ul>
+                  </div>
+                </div>
+                <div v-if="revealPhase(msg) >= 2 && msg.evidence && msg.evidence.length" class="agent-evidence agent-reveal">
                   <div class="agent-section-label">依据</div>
                   <div
                     v-for="(e, i) in msg.evidence"
                     :key="i"
-                    class="agent-evidence-item"
+                    class="agent-evidence-item agent-stagger"
+                    :style="{ animationDelay: (i * 0.06) + 's' }"
                   >
                     <span class="agent-evidence-tool">{{ e.tool }}</span>
                     <span class="agent-evidence-summary">{{ e.summary }}</span>
                   </div>
                 </div>
-                <div v-if="msg.actions && msg.actions.length" class="agent-actions">
+                <div v-if="revealPhase(msg) >= 3 && msg.actions && msg.actions.length" class="agent-actions agent-reveal">
                   <div class="agent-section-label">建议</div>
                   <ul>
-                    <li v-for="(a, i) in msg.actions" :key="i">{{ a }}</li>
+                    <li
+                      v-for="(a, i) in msg.actions"
+                      :key="i"
+                      class="agent-stagger"
+                      :style="{ animationDelay: (i * 0.06) + 's' }"
+                    >{{ a }}</li>
                   </ul>
                 </div>
-                <div v-if="msg.visual_links && msg.visual_links.length" class="agent-visual-links">
+                <div v-if="revealPhase(msg) >= 4 && msg.visual_links && msg.visual_links.length" class="agent-visual-links agent-reveal">
                   <div class="agent-section-label">图表入口</div>
                   <button
                     v-for="(link, i) in msg.visual_links"
                     :key="i"
                     type="button"
-                    class="agent-visual-link-btn"
+                    class="agent-visual-link-btn agent-stagger"
+                    :style="{ animationDelay: (i * 0.08) + 's' }"
                     @click="onVisualLinkClick(link)"
                   >
                     {{ visualLinkLabel(link) }}
@@ -77,7 +114,9 @@
             </template>
           </div>
           <div v-if="loading" class="agent-msg agent-msg--assistant">
-            <div class="agent-msg-bubble agent-msg-bubble--assistant agent-loading">思考中…</div>
+            <div class="agent-msg-bubble agent-msg-bubble--assistant agent-loading">
+              <span class="agent-loading-dots">思考中</span><span class="agent-loading-dots-anim">…</span>
+            </div>
           </div>
         </div>
 
@@ -90,22 +129,43 @@
           >
             {{ traceOpen ? '收起' : '查看本次调用轨迹' }}
           </button>
-          <div v-show="traceOpen" class="agent-trace-content">
-            <template v-if="lastTrace && lastTrace.steps && lastTrace.steps.length">
-              <div
-                v-for="(step, i) in lastTrace.steps"
-                :key="i"
-                class="agent-trace-step"
-              >
-                <span class="agent-trace-tool">{{ step.tool }}</span>
-                <span v-if="step.params" class="agent-trace-params">{{ JSON.stringify(step.params) }}</span>
-                <span v-if="step.summary" class="agent-trace-summary">{{ step.summary }}</span>
-              </div>
-            </template>
-            <div v-else class="agent-trace-empty">暂无轨迹</div>
-          </div>
+          <Transition name="trace-fade">
+            <div v-show="traceOpen" class="agent-trace-content">
+              <template v-if="lastTrace && lastTrace.steps && lastTrace.steps.length">
+                <div
+                  v-for="(step, i) in lastTrace.steps"
+                  :key="i"
+                  class="agent-trace-step"
+                  :class="{ 'agent-trace-step--expanded': expandedTraceStepIndex === i }"
+                >
+                  <button
+                    type="button"
+                    class="agent-trace-step-header"
+                    @click="toggleTraceStep(i)"
+                  >
+                    <span class="agent-trace-tool">第 {{ i + 1 }} 步：{{ step.tool }}</span>
+                    <span v-if="step.summary" class="agent-trace-summary-inline">{{ step.summary }}</span>
+                    <span v-if="step.status" class="agent-trace-status" :class="'agent-trace-status--' + (step.status || '')">{{ step.status }}</span>
+                    <span v-if="step.duration_ms" class="agent-trace-duration">{{ step.duration_ms }}ms</span>
+                    <span class="agent-trace-expand-icon">{{ expandedTraceStepIndex === i ? '▼' : '▶' }}</span>
+                  </button>
+                  <div v-show="expandedTraceStepIndex === i" class="agent-trace-step-detail">
+                    <div v-if="step.reason" class="agent-trace-detail-row"><span class="agent-trace-detail-label">原因</span> {{ step.reason }}</div>
+                    <div v-if="step.params && Object.keys(step.params).length" class="agent-trace-detail-row"><span class="agent-trace-detail-label">参数</span> <pre class="agent-trace-params-pre">{{ JSON.stringify(step.params, null, 2) }}</pre></div>
+                    <div v-if="step.coverage && Object.keys(step.coverage).length" class="agent-trace-detail-row"><span class="agent-trace-detail-label">覆盖</span> {{ JSON.stringify(step.coverage) }}</div>
+                    <div v-if="step.quality && Object.keys(step.quality).length" class="agent-trace-detail-row"><span class="agent-trace-detail-label">质量</span> {{ JSON.stringify(step.quality) }}</div>
+                    <div v-if="step.error" class="agent-trace-detail-row agent-trace-detail-error"><span class="agent-trace-detail-label">错误</span> {{ step.error }}</div>
+                  </div>
+                </div>
+              </template>
+              <div v-else class="agent-trace-empty">暂无轨迹</div>
+            </div>
+          </Transition>
         </div>
 
+        <div v-if="getAgentJumpFeedback" class="agent-jump-feedback">
+          {{ getAgentJumpFeedback }}
+        </div>
         <div class="agent-input-row">
           <input
             v-model="inputText"
@@ -122,6 +182,7 @@
 </template>
 
 <script>
+import { mapGetters } from 'vuex'
 import { postAgentQuery } from '@/api/agent.js'
 
 export default {
@@ -133,6 +194,9 @@ export default {
       type: Object,
       default: () => ({}),
     },
+  },
+  computed: {
+    ...mapGetters(['getAgentJumpFeedback']),
   },
   data() {
     return {
@@ -155,7 +219,12 @@ export default {
       resizeStartY: 0,
       resizeStartW: 0,
       resizeStartH: 0,
+      revealTimerId: null,
+      expandedTraceStepIndex: null,
     }
+  },
+  beforeUnmount() {
+    this.clearRevealTimer()
   },
   computed: {
     panelStyle() {
@@ -181,16 +250,62 @@ export default {
     },
   },
   methods: {
+    revealPhase(msg) {
+      if (msg.role !== 'assistant') return 5
+      const p = msg.revealPhase
+      return p === undefined ? 5 : p
+    },
+    summaryStatusText(summary) {
+      if (!summary || !summary.overall_status) return ''
+      const s = summary.overall_status
+      if (s === 'complete') return '已完成分析'
+      if (s === 'partial') return '部分完成'
+      if (s === 'failed') return '分析失败'
+      if (s === 'empty') return '暂无执行结果'
+      return s
+    },
+    startRevealTimer(msgIndex) {
+      this.clearRevealTimer()
+      this.revealTimerId = setInterval(() => {
+        const msg = this.messages[msgIndex]
+        if (!msg || msg.role !== 'assistant') {
+          this.clearRevealTimer()
+          return
+        }
+        const next = (msg.revealPhase ?? 0) + 1
+        if (next >= 5) this.clearRevealTimer()
+        this.messages[msgIndex].revealPhase = Math.min(next, 5)
+      }, 320)
+    },
+    clearRevealTimer() {
+      if (this.revealTimerId) {
+        clearInterval(this.revealTimerId)
+        this.revealTimerId = null
+      }
+    },
     visualLinkLabel(link) {
+      if (link.label) return link.label
       const view = link.view || 'View'
       const p = link.params
-      const parts = [view]
-      if (p && p.knowledge) parts.push(`（${p.knowledge}）`)
-      if (p && p.student_ids) parts.push(`（学生）`)
-      return parts.join(' ')
+      const viewNames = {
+        QuestionView: '题目分布',
+        WeekView: '周趋势',
+        StudentView: '建议关注学生',
+        ScatterView: '散点分布',
+        PortraitView: '画像',
+      }
+      const name = viewNames[view] || view
+      let suffix = ''
+      if (p && p.knowledge) suffix = `（${p.knowledge}）`
+      else if (p && p.cluster_id != null) suffix = `（cluster ${p.cluster_id}）`
+      else if (p && Array.isArray(p.student_ids) && p.student_ids.length) suffix = '（学生）'
+      return `查看${name}${suffix}`
     },
     onVisualLinkClick(link) {
       this.$emit('visual-link-click', { view: link.view, params: link.params || {} })
+    },
+    toggleTraceStep(stepIndex) {
+      this.expandedTraceStepIndex = this.expandedTraceStepIndex === stepIndex ? null : stepIndex
     },
     startDrag(e) {
       if (!this.$refs.panel) return
@@ -246,11 +361,13 @@ export default {
     async send() {
       const text = (this.inputText || '').trim()
       if (!text || this.loading) return
+      this.clearRevealTimer()
       this.inputText = ''
       this.messages.push({ role: 'user', text })
       this.loading = true
       try {
         const res = await postAgentQuery(text, this.context)
+        const idx = this.messages.length
         this.messages.push({
           role: 'assistant',
           answer: res.answer || '',
@@ -258,9 +375,14 @@ export default {
           actions: res.actions || [],
           visual_links: res.visual_links || [],
           trace: res.trace,
+          goal_check: res.goal_check || null,
+          summary: res.summary || null,
+          revealPhase: 0,
         })
         this.traceOpen = !!res.trace
+        this.expandedTraceStepIndex = null
         this.$nextTick(() => {
+          this.startRevealTimer(idx)
           const el = this.$refs.messagesEl
           if (el) el.scrollTop = el.scrollHeight
         })
@@ -272,6 +394,9 @@ export default {
           actions: [],
           visual_links: [],
           trace: null,
+          goal_check: null,
+          summary: null,
+          revealPhase: 5,
         })
       } finally {
         this.loading = false
@@ -426,6 +551,48 @@ export default {
   font-size: 15px;
 }
 
+.agent-status-block {
+  margin: 10px 0;
+  padding: 8px 10px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  font-size: 14px;
+}
+.agent-goal-check {
+  color: #856404;
+  margin-bottom: 4px;
+}
+.agent-goal-check--satisfied {
+  color: #155724;
+}
+.agent-goal-check-reason {
+  color: #666;
+  font-size: 12px;
+}
+.agent-summary-status {
+  color: #666;
+  margin-bottom: 6px;
+}
+.agent-key-findings,
+.agent-unresolved {
+  margin-top: 6px;
+  font-size: 13px;
+}
+.agent-key-findings-label,
+.agent-unresolved-label {
+  font-weight: 600;
+  color: #333;
+}
+.agent-unresolved ul {
+  color: #721c24;
+  margin: 2px 0 0;
+  padding-left: 18px;
+}
+.agent-key-findings ul {
+  margin: 2px 0 0;
+  padding-left: 18px;
+}
+
 .agent-section-label {
   font-size: 13px;
   color: #666;
@@ -475,6 +642,46 @@ export default {
 .agent-loading {
   color: #666;
   font-size: 15px;
+  animation: agent-pulse 1.4s ease-in-out infinite;
+}
+.agent-loading-dots-anim {
+  display: inline-block;
+  animation: agent-dots 1.2s steps(4, end) infinite;
+}
+@keyframes agent-pulse {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+@keyframes agent-dots {
+  0%, 20% { opacity: 0; }
+  40%, 100% { opacity: 1; }
+}
+
+.agent-reveal {
+  animation: agent-fade-in 0.35s ease-out forwards;
+}
+.agent-stagger {
+  animation: agent-fade-in 0.3s ease-out backwards;
+}
+@keyframes agent-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.trace-fade-enter-active,
+.trace-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.trace-fade-enter-from,
+.trace-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .agent-trace {
@@ -500,28 +707,101 @@ export default {
 .agent-trace-content {
   font-size: 13px;
   color: #666;
-  max-height: 140px;
+  max-height: 220px;
   overflow-y: auto;
   margin-top: 6px;
 }
 
 .agent-trace-step {
-  display: block;
-  padding: 6px 0;
   border-bottom: 1px solid #eee;
   &:last-child {
     border-bottom: none;
   }
 }
 
-.agent-trace-tool {
-  color: #377eb8;
-  margin-right: 8px;
+.agent-trace-step-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  width: 100%;
+  padding: 6px 0;
+  border: none;
+  background: none;
+  text-align: left;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+  &:hover {
+    background: #f0f0f0;
+    border-radius: 4px;
+  }
 }
 
-.agent-trace-params {
-  margin-right: 8px;
+.agent-trace-tool {
+  color: #377eb8;
+  font-weight: 600;
+}
+
+.agent-trace-summary-inline {
+  flex: 1;
+  min-width: 0;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-trace-status {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #e9ecef;
+  color: #495057;
+}
+.agent-trace-status--ok {
+  background: #d4edda;
+  color: #155724;
+}
+.agent-trace-status--fail {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.agent-trace-duration {
+  font-size: 11px;
+  color: #999;
+}
+
+.agent-trace-expand-icon {
+  font-size: 10px;
+  color: #999;
+}
+
+.agent-trace-step-detail {
+  padding: 8px 0 8px 12px;
+  margin-left: 8px;
+  border-left: 2px solid #dee2e6;
+  font-size: 12px;
+  color: #555;
+}
+
+.agent-trace-detail-row {
+  margin-bottom: 4px;
+}
+.agent-trace-detail-label {
+  font-weight: 600;
+  margin-right: 6px;
+  color: #333;
+}
+.agent-trace-detail-error {
+  color: #721c24;
+}
+.agent-trace-params-pre {
+  margin: 2px 0 0;
+  font-size: 11px;
   word-break: break-all;
+  white-space: pre-wrap;
 }
 
 .agent-trace-empty {
@@ -530,6 +810,13 @@ export default {
   font-size: 13px;
 }
 
+.agent-jump-feedback {
+  padding: 8px 14px;
+  font-size: 12px;
+  color: #0a7ea4;
+  background: #e8f4f8;
+  border-top: 1px solid #c5e3ed;
+}
 .agent-input-row {
   display: flex;
   gap: 10px;

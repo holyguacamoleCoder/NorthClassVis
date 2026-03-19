@@ -1,7 +1,8 @@
 <template>
-  <div class="scrollBarWrap" id="student-view" data-simplebar ref="scrollContainer">
+  <div class="scrollBarWrap" id="student-view" data-simplebar ref="scrollContainer" :class="{ 'agent-highlight': highlighted }">
     <div class="title">
       <span>Student View</span>
+      <span v-if="isAgentTarget" class="agent-target-badge">来自 Agent 推荐</span>
       <select class="filter-input" v-model="selectedMajor" @change="applyFilter">
         <option value="">All</option>
         <option v-for="major in uniqueMajors" :key="major">{{ major }}</option>
@@ -49,12 +50,27 @@ export default {
       visibleIndices: new Set(), // 可见的学生索引集合
       expandedIndices: new Set(), // 展开的学生索引集合
       batchSize: 20, // 每次加载的数量
-      uniqueMajors: [] // 唯一的专业列表
+      uniqueMajors: [], // 唯一的专业列表
+      highlightTick: 0,
     }
+  },
+  mounted() {
+    this._highlightInterval = setInterval(() => { this.highlightTick = Date.now() }, 400)
+  },
+  beforeUnmount() {
+    if (this._highlightInterval) clearInterval(this._highlightInterval)
   },
   computed: {
     ...mapState(['configLoaded']),
-    ...mapGetters(['getStudentClusterInfo','getSelectedIds', 'getSelectedData','getColors', 'getAgentSuggestedStudentIds']),
+    ...mapGetters(['getStudentClusterInfo','getSelectedIds', 'getSelectedData','getColors', 'getAgentSuggestedStudentIds', 'getAgentVisualLink', 'getAgentHighlightAt']),
+    highlighted() {
+      const link = this.getAgentVisualLink
+      if (!link || link.view !== 'StudentView') return false
+      return (this.highlightTick - (this.getAgentHighlightAt || 0)) < 2500
+    },
+    isAgentTarget() {
+      return this.getAgentVisualLink?.view === 'StudentView'
+    },
     filteredTreeData() {
       if (!this.selectedMajor) return this.treeData
       return this.treeData.filter(student => student.major === this.selectedMajor)
@@ -316,9 +332,14 @@ export default {
       this.visibleIndices.clear() // 清空可见索引集合并重新加载
       this.expandedIndices.clear() // 清空展开索引集合并重新加载
       this.$refs.visualizationStu.innerHTML = '' // 清空现有内容
-      if(render){
-        await this.getTreeData(this.getSelectedIds) // 初始化时获取学生数据
-        this.loadInitialBatch() // 重新加载初始批次的数据
+      if (render) {
+        // 若当前是 Agent 推荐跳转且有待展示的推荐学生，用推荐 id 拉列表；否则用当前选中学生
+        const ids =
+          this.getAgentVisualLink?.view === 'StudentView' && this.getAgentSuggestedStudentIds?.length
+            ? this.getAgentSuggestedStudentIds
+            : (this.getSelectedIds || [])
+        await this.getTreeData(ids)
+        this.loadInitialBatch()
       }
       this.loading = false
     }
@@ -336,8 +357,24 @@ export default {
         return
       }
       this.isWaiting = false
-      this.loadData() 
-    }
+      this.loadData()
+    },
+    // 点击图表入口跳转到学生视图时，用 Agent 推荐 id 拉列表，无需先点「应用到选择」
+    getAgentVisualLink: {
+      handler(link) {
+        if (link?.view === 'StudentView' && this.getAgentSuggestedStudentIds?.length) {
+          this.isWaiting = false
+          this.loadData()
+        }
+      },
+      deep: true,
+    },
+    getAgentSuggestedStudentIds(ids) {
+      if (this.getAgentVisualLink?.view === 'StudentView' && ids?.length) {
+        this.isWaiting = false
+        this.loadData()
+      }
+    },
   }
 }
 </script>
@@ -347,6 +384,17 @@ export default {
   width: 100%;
   min-width: 0;
   height: 100%;
+  transition: box-shadow 0.2s ease;
+  &.agent-highlight {
+    box-shadow: 0 0 0 2px #0a7ea4;
+    border-radius: 6px;
+  }
+  .agent-target-badge {
+    font-size: 12px;
+    color: #0a7ea4;
+    margin-left: 10px;
+    font-weight: normal;
+  }
   display: flex;
   flex-direction: column;
   overflow: hidden;

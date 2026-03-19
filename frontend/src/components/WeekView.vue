@@ -1,7 +1,8 @@
 <template>
-  <div id="week-view">
+  <div id="week-view" :class="{ 'agent-highlight': highlighted }">
     <div class="title">
       <span>Week View</span>
+      <span v-if="isAgentTarget" class="agent-target-badge">来自 Agent 推荐</span>
       <div class="view-mode-switch">
         <span class="mode-label">Mode: {{showPeakView ? 'p' : 'r'}}</span>
         <label class="switch">
@@ -52,15 +53,30 @@ export default {
       isWaiting: true,
       WeekData: [],
       PeakData:[],
-      selectedKind: '',
+      selectedKind: 'All kinds',
       showPeakView: false,
       selectedDay: 5,
       lastAppliedAgentLink: null,
+      highlightTick: 0,
     }
+  },
+  mounted() {
+    this._highlightInterval = setInterval(() => { this.highlightTick = Date.now() }, 400)
+  },
+  beforeUnmount() {
+    if (this._highlightInterval) clearInterval(this._highlightInterval)
   },
   computed: {
     ...mapState(['configLoaded']),
-    ...mapGetters(['getStudentClusterInfo','getSelectedIds', 'getSelectedData','getColors', 'getAgentVisualLink']),
+    ...mapGetters(['getStudentClusterInfo','getSelectedIds', 'getSelectedData','getColors', 'getAgentVisualLink', 'getAgentHighlightAt']),
+    highlighted() {
+      const link = this.getAgentVisualLink
+      if (!link || link.view !== 'WeekView') return false
+      return (this.highlightTick - (this.getAgentHighlightAt || 0)) < 2500
+    },
+    isAgentTarget() {
+      return this.getAgentVisualLink?.view === 'WeekView'
+    },
     filteredWeekData() {
       const students = this.WeekData?.students
       if (!students || !Array.isArray(students)) return []
@@ -577,6 +593,8 @@ export default {
         this.selectedKind = num
         this.updateKind()
       }
+      this.isWaiting = false
+      this.loadData()
     },
   }
 }
@@ -584,6 +602,17 @@ export default {
 
 <style scoped lang="less">
 #week-view {
+  transition: box-shadow 0.2s ease;
+  &.agent-highlight {
+    box-shadow: 0 0 0 2px #0a7ea4;
+    border-radius: 6px;
+  }
+  .agent-target-badge {
+    font-size: 12px;
+    color: #0a7ea4;
+    margin-left: 10px;
+    font-weight: normal;
+  }
   .title {
     border-bottom: 1px solid #ccc;
     width: 100%;

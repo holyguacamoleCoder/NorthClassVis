@@ -1,7 +1,8 @@
 <template>
-  <div id="question-view">
+  <div id="question-view" :class="{ 'agent-highlight': highlighted }">
     <div class="title">
       <span>Question View</span>
+      <span v-if="isAgentTarget" class="agent-target-badge">来自 Agent 推荐</span>
       <!-- 困难度排序按钮 -->
       <div class="filter difficulty" @click="toggleSortOrder">Difficulty Order:{{ this.sortAscending ? " ↑" : " ↓" }}</div>
       <!-- 下拉菜单筛选知识点 -->
@@ -97,6 +98,7 @@ export default {
       sortAscending: true, // 默认按升序排序
       difficultyIndex: null,
       lastAppliedAgentLink: null, // 避免 watch 重复应用
+      highlightTick: 0,
       // 提交数量和平均分的最大最小值，用于标准化
       submissionMin: null,
       submissionMax: null,
@@ -106,10 +108,22 @@ export default {
   },
   async mounted() {
     this.getQuestionData()
+    this._highlightInterval = setInterval(() => { this.highlightTick = Date.now() }, 400)
+  },
+  beforeUnmount() {
+    if (this._highlightInterval) clearInterval(this._highlightInterval)
   },
   computed: {
     ...mapState(['configLoaded']),
-    ...mapGetters(['getAgentVisualLink']),
+    ...mapGetters(['getAgentVisualLink', 'getAgentHighlightAt']),
+    highlighted() {
+      const link = this.getAgentVisualLink
+      if (!link || link.view !== 'QuestionView') return false
+      return (this.highlightTick - (this.getAgentHighlightAt || 0)) < 2500
+    },
+    isAgentTarget() {
+      return this.getAgentVisualLink?.view === 'QuestionView'
+    },
     displayButton() {
       if (this.selectAllKnowledge) return 'All'
       const selectedCount = Object.values(this.selectedKnowledge).filter(Boolean).length
@@ -571,12 +585,15 @@ export default {
         this.loadData()
       }
     },
-    getAgentVisualLink(newLink) {
+    async getAgentVisualLink(newLink) {
       if (!newLink || newLink.view !== 'QuestionView' || !newLink.params || !newLink.params.knowledge) return
       if (JSON.stringify(newLink) === JSON.stringify(this.lastAppliedAgentLink)) return
-      if (!this.uniqueKnowledge || this.uniqueKnowledge.length === 0) return
       const knowledge = newLink.params.knowledge
-      if (!this.uniqueKnowledge.includes(knowledge)) return
+      if (!this.uniqueKnowledge || this.uniqueKnowledge.length === 0) {
+        await this.loadData()
+        await this.$nextTick()
+      }
+      if (!this.uniqueKnowledge || !this.uniqueKnowledge.includes(knowledge)) return
       this.lastAppliedAgentLink = { ...newLink }
       Object.keys(this.selectedKnowledge).forEach(k => { this.selectedKnowledge[k] = false })
       this.selectedKnowledge[knowledge] = true
@@ -592,6 +609,17 @@ export default {
 <style scoped lang="less">
 #question-view {
   margin-left: 5px;
+  transition: box-shadow 0.2s ease;
+  &.agent-highlight {
+    box-shadow: 0 0 0 2px #0a7ea4;
+    border-radius: 6px;
+  }
+  .agent-target-badge {
+    font-size: 12px;
+    color: #0a7ea4;
+    margin-left: 10px;
+    font-weight: normal;
+  }
   .title {
     border-bottom: 1px solid #ccc; 
     width: 100%;

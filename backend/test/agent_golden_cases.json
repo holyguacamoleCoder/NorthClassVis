@@ -1,0 +1,44 @@
+[
+  {
+    "id": "trend_overall_recent2w",
+    "mode": "compiler_v1",
+    "question": "最近两周班级整体表现如何？",
+    "context": {},
+    "expect_trace_tools_any_of": ["trend_analyze"],
+    "expect_answer_contains_any_of": ["趋势", "当前数据不足以支持该结论"]
+  },
+  {
+    "id": "knowledge_linked_list",
+    "mode": "compiler_v1",
+    "question": "链表知识点表现如何？",
+    "context": {},
+    "expect_trace_tools_any_of": ["knowledge_analyze"],
+    "expect_answer_contains_any_of": ["链表", "当前数据不足以支持该结论"]
+  },
+  {
+    "id": "student_need_ids",
+    "mode": "compiler_v1",
+    "question": "请做学生个体诊断",
+    "context": {},
+    "expect_trace_tools_any_of": [],
+    "expect_answer_contains_any_of": ["student_ids", "当前数据不足以支持该结论"]
+  },
+  {
+    "id": "submission_with_selected_student",
+    "mode": "compiler_v1",
+    "question": "这个学生的提交情况怎么样？",
+    "context": {
+      "selected_student_ids": ["10001"]
+    },
+    "expect_trace_tools_any_of": ["submission_analyze"],
+    "expect_answer_contains_any_of": ["提交", "当前数据不足以支持该结论"]
+  },
+  {
+    "id": "cluster_overview",
+    "mode": "compiler_v1",
+    "question": "班级群体分层如何？",
+    "context": {},
+    "expect_trace_tools_any_of": ["cluster_analyze"],
+    "expect_answer_contains_any_of": ["聚类", "当前数据不足以支持该结论"]
+  }
+]
