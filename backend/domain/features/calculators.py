@@ -7,7 +7,6 @@ from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
 
 # 提交「完全正确」状态，用于加成/扣减判断
 CORRECT_SUBMISSION_STATE = "Absolutely_Correct"
@@ -134,7 +133,7 @@ class FinalFeatureCalculator:
 
     def __init__(self, df, group_apply):
         # group_apply: ['student_ID'] | ['student_ID','knowledge'] | ['student_ID','week','knowledge']
-        self.df = df.copy()
+        self.df = df  # 不 copy：calc_final_features 只读 groupby，不修改 df
         self.group_apply = group_apply
         self.result = self.calc_final_features()
 
@@ -167,15 +166,19 @@ class FinalFeatureCalculator:
         for col in final_scores.columns:
             if not pd.api.types.is_numeric_dtype(final_scores[col]):
                 final_scores[col] = pd.to_numeric(final_scores[col], errors="coerce")
-        log_transformed_scores = np.log1p(final_scores)
-        quantile_scaler = MinMaxScaler()
-        quantile_normalized_scores = pd.DataFrame(
-            quantile_scaler.fit_transform(log_transformed_scores),
-            index=log_transformed_scores.index,
-            columns=log_transformed_scores.columns,
-        )
-        quantile_normalized_scores.rename(columns=FEATURE_LABEL_MAP, inplace=True)
-        return quantile_normalized_scores
+        # 内存友好：float32 + 单数组复用，减少 pivot/log/缩放 的中间大对象
+        index = final_scores.index
+        columns = final_scores.columns
+        X = np.log1p(final_scores.values).astype(np.float32)
+        del final_scores  # 尽早释放，便于 GC
+        min_ = X.min(axis=0)
+        max_ = X.max(axis=0)
+        den = np.where(max_ - min_ == 0, 1, max_ - min_)
+        X -= min_
+        X /= den
+        result = pd.DataFrame(X, index=index, columns=columns)
+        result.rename(columns=FEATURE_LABEL_MAP, inplace=True)
+        return result
 
     def get_result(self):
         return self.result

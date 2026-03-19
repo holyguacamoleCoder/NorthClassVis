@@ -1,5 +1,4 @@
 from config.app_config import Config
-from domain.features.factory import FeatureFactory
 from routes.nav_routes import NavRoutes
 from routes.scatter_routes import ScatterRoutes
 from routes.portrait_routes import PortraitRoutes
@@ -41,6 +40,7 @@ class LazyFeatureFactory:
             self._initializing = True
 
         try:
+            from domain.features.factory import FeatureFactory
             factory = FeatureFactory(self.config)
         except Exception:
             with self._condition:

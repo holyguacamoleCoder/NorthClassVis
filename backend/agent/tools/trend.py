@@ -128,6 +128,7 @@ def run_get_week_data(
         return "筛选后无数据", {"tool": "get_week_data", "params": dict(params or {}), "summary": "筛选后无数据", "coverage": {"covered": False, "reason": "样本不足"}}
     start_date = df["time"].min()
     df["week"] = df["time"].apply(lambda v: week_service.calculate_week_of_year(v, start_date=start_date))
+    df = week_service.filter_to_recent_weeks(df)
     pre_calculator = PreliminaryFeatureCalculator(df)
     pre_df = pre_calculator.get_features()
     final_calculator = FinalFeatureCalculator(pre_df, ["student_ID", "week", "knowledge"])

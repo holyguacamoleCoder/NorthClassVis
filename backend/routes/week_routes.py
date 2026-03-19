@@ -31,6 +31,7 @@ class WeekRoutes:
         df['week'] = df['time'].apply(
             lambda value: week_service.calculate_week_of_year(value, start_date=start_date)
         )
+        df = week_service.filter_to_recent_weeks(df)
         pre_calculator = PreliminaryFeatureCalculator(df)
         pre_calc_submit_records = pre_calculator.get_features()
 

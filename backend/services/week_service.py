@@ -2,6 +2,20 @@ from datetime import datetime
 
 import pandas as pd
 
+# 限制 pivot 维度，避免超大宽表（周数 × 知识点）
+MAX_WEEKS_FOR_PIVOT = 16
+
+
+def filter_to_recent_weeks(df, max_weeks=MAX_WEEKS_FOR_PIVOT, week_col="week"):
+    """仅保留最近 max_weeks 周的数据，降低 pivot 列数。"""
+    if week_col not in df.columns:
+        return df
+    unique_weeks = sorted(df[week_col].dropna().unique())
+    if len(unique_weeks) <= max_weeks:
+        return df
+    recent_weeks = set(unique_weeks[-max_weeks:])
+    return df[df[week_col].isin(recent_weeks)]
+
 
 def _normalize_to_timestamp(value):
     if isinstance(value, (pd.Timestamp, datetime)):
