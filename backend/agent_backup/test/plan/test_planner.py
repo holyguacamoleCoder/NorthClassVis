@@ -49,6 +49,16 @@ def test_build_task_graph_class_trend():
     assert "query_class" in tools
 
 
+def test_build_task_graph_class_detail():
+    goal = GoalSpec(subject=["class"], mode=["detail"])
+    graph = build_task_graph(goal)
+    assert len(graph.tasks) >= 1
+    # class/detail 应落到 query_class(mode=detail)
+    task = next(iter(graph.tasks.values()))
+    assert task.required_tools == ["query_class"]
+    assert task.tool_params.get("mode") == "detail"
+
+
 def test_build_task_graph_student_portrait():
     goal = GoalSpec(subject=["student"], mode=["portrait"], student_ids=["s1"])
     graph = build_task_graph(goal)

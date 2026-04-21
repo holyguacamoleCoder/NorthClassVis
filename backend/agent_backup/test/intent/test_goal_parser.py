@@ -46,3 +46,16 @@ def test_parse_goal_context_inherits_student_ids(empty_context):
     ctx = normalize_context({"selected_student_ids": ["s001"]})
     goal = parse_goal("学生画像", ctx)
     assert goal.student_ids == ["s001"]
+
+
+def test_parse_goal_rules_promote_detail_for_class_when_question_has_detail_keywords(empty_context):
+    goal = parse_goal("请给我班级趋势的详细数据", empty_context)
+    assert "class" in goal.subject
+    assert "detail" in goal.mode
+
+
+def test_parse_goal_rules_question_detail_requires_title_id_clarification(empty_context):
+    goal = parse_goal("请给我题目明细", empty_context)
+    assert "question" in goal.subject
+    assert "detail" in goal.mode
+    assert goal.needs_clarification is True

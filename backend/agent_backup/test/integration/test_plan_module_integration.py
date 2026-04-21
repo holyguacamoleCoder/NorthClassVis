@@ -63,6 +63,26 @@ def test_plan_pipeline_for_class_trend():
     assert [s.to_dict() for s in result["steps_from_compile"]] == [s.to_dict() for s in result["steps_from_plan"]]
 
 
+def test_plan_pipeline_for_class_detail():
+    """class/detail 应落到 query_class(mode=detail)，并完整经历建图、校验、调度、编译。"""
+    result = _run_plan_pipeline(GoalSpec(subject=["class"], mode=["detail"]))
+
+    graph = result["graph"]
+    assert len(graph.tasks) == 1
+    task = next(iter(graph.tasks.values()))
+    assert task.required_tools == ["query_class"]
+    assert task.tool_params == {"mode": "detail"}
+
+    assert result["validation"].is_valid is True
+    assert len(result["execution_plan"].batches) == 1
+    assert result["execution_plan"].batches[0].task_ids == [task.task_id]
+
+    assert len(result["steps_from_plan"]) == 1
+    assert result["steps_from_plan"][0].tool == "query_class"
+    assert result["steps_from_plan"][0].params == {"mode": "detail"}
+    assert [s.to_dict() for s in result["steps_from_compile"]] == [s.to_dict() for s in result["steps_from_plan"]]
+
+
 def test_plan_pipeline_for_student_detail_with_two_steps():
     """student/detail 应生成两个子任务，并在同一并行批次中展平为两个步骤。"""
     result = _run_plan_pipeline(GoalSpec(subject=["student"], mode=["detail"], student_ids=["s1"]))

@@ -168,3 +168,63 @@ def test_parse_goal_rule_overrides_llm_out_of_domain(monkeypatch):
 
     goal = parse_goal("今天天气怎么样？", normalize_context({}))
     assert goal.is_out_of_domain is True
+
+
+@pytest.mark.llm
+def test_parse_goal_llm_prefers_explicit_classes_over_context(monkeypatch):
+    fake_client = _FakeLLMClient(
+        json.dumps(
+            {
+                "intent_type": "trend",
+                "subject": ["class"],
+                "mode": ["trend"],
+                "scope": "all",
+                "metric": "weekly_score",
+                "knowledge": None,
+                "title_id": None,
+                "student_ids": [],
+                "classes": ["class2"],
+                "majors": ["math"],
+                "time_window": "recent_2w",
+                "needs_clarification": False,
+                "clarification_question": "",
+                "is_out_of_domain": False,
+            },
+            ensure_ascii=False,
+        )
+    )
+    monkeypatch.setattr("agent.intent.goal_parser.get_default_llm_client", lambda: fake_client)
+    ctx = normalize_context({"classes": ["Part"], "majors": ["All"]})
+    goal = parse_goal("看下class2趋势", ctx)
+    assert goal.classes == ["class2"]
+    assert goal.majors == ["math"]
+
+
+@pytest.mark.llm
+def test_parse_goal_llm_clears_context_student_ids_for_non_student_subject(monkeypatch):
+    fake_client = _FakeLLMClient(
+        json.dumps(
+            {
+                "intent_type": "trend",
+                "subject": ["class"],
+                "mode": ["trend"],
+                "scope": "all",
+                "metric": "weekly_score",
+                "knowledge": None,
+                "title_id": None,
+                "student_ids": [],
+                "classes": [],
+                "majors": [],
+                "time_window": "recent_2w",
+                "needs_clarification": False,
+                "clarification_question": "",
+                "is_out_of_domain": False,
+            },
+            ensure_ascii=False,
+        )
+    )
+    monkeypatch.setattr("agent.intent.goal_parser.get_default_llm_client", lambda: fake_client)
+    ctx = normalize_context({"selected_student_ids": ["s001"]})
+    goal = parse_goal("班级趋势怎么样", ctx)
+    assert goal.subject == ["class"]
+    assert goal.student_ids == []

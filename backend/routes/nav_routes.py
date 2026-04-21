@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 
-from core import data_loader
+from services import nav_service
+
 
 class NavRoutes:
     def __init__(self, config):
@@ -33,41 +34,22 @@ class NavRoutes:
 
         # 检查是否接收到有效的数据
         if not data or 'classes' not in data or 'majors' not in data:
-            return jsonify({'error': 'No classes or majors provided'}), 400
+            return self._error_response("No classes or majors provided", "INVALID_CONFIG_PAYLOAD", 400)
 
         # 获取班级列表和专业列表
         classes = data['classes']
         majors = data['majors']
-
-        # 获取对应的DataFrame并合并
-        contacted_df = data_loader.load_submissions_by_classes(data_loader.SUBMISSIONS_DIR, classes)
-
-        merged_df = data_loader.merge_dataframes_or_files(
-            left_df=contacted_df,
-            right_path=data_loader.STUDENT_INFO_PATH,
-            on="student_ID",
-            right_columns=["student_ID", "major"],
-        )
-
-        # 根据majors参数筛选对应majors数据
-        filtered_df = merged_df[merged_df['major'].isin(majors)]
-
-        # 更新配置
-        self.config.set_class_list(classes)
-        self.config.set_majors(majors)
-        self.config.set_submissions_df(filtered_df)
-        self.config.set_submissions_with_knowledge_df(self.config.merge_submissions_with_titles())
-
-        week_range = data.get("week_range")
-        if week_range is not None and isinstance(week_range, list) and len(week_range) >= 2:
-            start_w, end_w = int(week_range[0]), int(week_range[1])
-            min_w, max_w = self.config.get_week_extent()
-            if start_w <= end_w and min_w <= start_w and end_w <= max_w:
-                self.config.set_week_range(start_w, end_w)
-            else:
-                self.config.set_week_range(None, None)
-        
-        # 通知 FeatureFactory 重新初始化依赖对象
-        self.config.notify_observers()
+        try:
+            nav_service.apply_nav_config(
+                config=self.config,
+                classes=classes,
+                majors=majors,
+                week_range=data.get("week_range"),
+            )
+        except Exception as exc:
+            return self._error_response(f"Failed to apply nav config: {exc}", "NAV_CONFIG_APPLY_FAILED", 500)
 
         return jsonify({'message': 'Classes have been successfully processed and filtered.'}), 200
+
+    def _error_response(self, message, code, status):
+        return jsonify({"error": message, "code": code}), status

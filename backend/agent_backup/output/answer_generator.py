@@ -1,8 +1,11 @@
 from agent.common import AnswerContract
+from agent.common import ensure_agent_logger
 from agent.common import extract_first_json_object
 from agent.common import get_compiler_answer_system_prompt
 from agent.common import get_default_llm_client
 import json
+
+_agent_logger = ensure_agent_logger()
 
 
 def _build_template_answer(question, intent, tool_call_results):
@@ -24,8 +27,25 @@ def _build_template_answer(question, intent, tool_call_results):
         answer = "当前数据不足以支持该结论。缺失维度：" + "；".join(reasons)
     else:
         answer = "；".join(summaries[:2]) or "根据当前数据已完成分析。"
-    actions = ["可在运行轨迹中查看能力调用与覆盖度。", "点击可视化入口核验结论。"]
+    actions = _build_adaptive_actions(tool_call_results)
     return AnswerContract(answer=answer, actions=actions)
+
+
+def _build_adaptive_actions(tool_call_results):
+    actions = []
+    tools = [str((r.tool or "")).strip() for r in (tool_call_results or [])]
+    has_week = any(t in ("query_class", "query_weekly_trend") for t in tools)
+    has_question = any(t == "query_question" for t in tools)
+    has_student = any(t == "query_student" for t in tools)
+
+    if has_week:
+        actions.append("可在周趋势图查看知识点变化与风险学生。")
+    if has_question:
+        actions.append("如需题目级结论，请补充 title_id 后继续分析。")
+    if has_student:
+        actions.append("可继续追问该学生的薄弱知识点和提升建议。")
+    actions.append("可在运行轨迹中查看能力调用与覆盖度。")
+    return actions[:3]
 
 
 def _build_llm_messages(question, intent, tool_call_results):
@@ -54,18 +74,32 @@ class AnswerGenerator:
 
     def generate_answer(self, question, intent, tool_call_results, allow_llm=True):
         template = _build_template_answer(question, intent, tool_call_results)
+        _agent_logger.info(
+            "Answer generate: allow_llm=%s tool_results=%d",
+            bool(allow_llm),
+            len(tool_call_results or []),
+        )
         if not allow_llm:
+            _agent_logger.info("Answer generate: fallback=template reason=llm_disabled")
             return template
 
-        text = self._client().chat_text_only_content(
-            _build_llm_messages(question, intent, tool_call_results),
-            max_tokens=400,
-        )
+        try:
+            text = self._client().chat_text_only_content(
+                _build_llm_messages(question, intent, tool_call_results),
+                max_tokens=400,
+            )
+        except Exception as e:
+            _agent_logger.warning("Answer generate: fallback=template reason=llm_exception err=%s", e)
+            return template
+        _agent_logger.debug("Answer generate: llm_text_len=%d", len(text or ""))
         obj = extract_first_json_object(text)
         if not obj:
+            _agent_logger.info("Answer generate: fallback=template reason=json_parse_failed")
             return template
         answer = obj.get("answer") if isinstance(obj.get("answer"), str) else template.answer
-        actions = obj.get("actions") if isinstance(obj.get("actions"), list) else template.actions
+        actions = obj.get("actions") if isinstance(obj.get("actions"), list) else _build_adaptive_actions(tool_call_results)
+        if not isinstance(obj.get("actions"), list):
+            _agent_logger.info("Answer generate: actions_fallback=adaptive reason=invalid_actions")
         return AnswerContract(answer=answer, actions=actions)
 
 

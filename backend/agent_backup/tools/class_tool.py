@@ -12,7 +12,7 @@ from agent.tools.cluster import run_get_cluster_everyone
 from agent.tools.cluster import run_get_scatter
 
 
-VALID_MODES = ("trend", "cluster")
+VALID_MODES = ("trend", "detail", "cluster")
 
 
 def _merge_steps(
@@ -54,16 +54,16 @@ def _merge_steps(
 
 
 class QueryClassTool(BaseTool):
-    """query_class：班级维度厚工具，mode=trend|cluster 各合并两次 run_* 为单个 ToolResult。"""
+    """query_class：班级维度厚工具，mode=trend|detail|cluster 各合并两次 run_* 为单个 ToolResult。"""
 
     name = "query_class"
-    description = "班级维度分析：周趋势+峰值(trend)、聚类+散点(cluster)。"
+    description = "班级维度分析：周趋势+峰值(trend)、精细趋势(detail)、聚类+散点(cluster)。"
     parameters = param_schema(
         properties={
             "mode": {
                 "type": "string",
                 "enum": list(VALID_MODES),
-                "description": "trend=周趋势与峰值 | cluster=聚类与散点",
+                "description": "trend=周趋势与峰值 | detail=精细趋势与峰值明细 | cluster=聚类与散点",
             },
         },
         required=["mode"],
@@ -99,6 +99,10 @@ class QueryClassTool(BaseTool):
             # 全量周趋势（不传 student_ids）+ 峰值（默认 day=1）
             summary1, step1 = run_get_week_data({}, config, None)
             summary2, step2 = run_get_peak_data({"day": 1}, config, None)
+        elif mode == "detail":
+            # 精细趋势：打开 trend/raw 的更深层数值（风险学生的薄弱知识点等）+ 峰值明细
+            summary1, step1 = run_get_week_data({"detail_level": 1}, config, None)
+            summary2, step2 = run_get_peak_data({"day": 1, "detail_level": 1}, config, None)
         elif mode == "cluster":
             summary1, step1 = run_get_cluster_everyone({}, config, feature_factory)
             summary2, step2 = run_get_scatter({}, config, feature_factory)

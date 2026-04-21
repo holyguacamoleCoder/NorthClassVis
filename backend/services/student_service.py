@@ -1,6 +1,4 @@
 # ------------学生服务部分----------------
-
-
 def build_student_tree(df, student_info):
     root = {"name": "Root", "children": []}
     students = df["student_ID"].unique()

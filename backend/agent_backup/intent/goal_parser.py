@@ -19,6 +19,7 @@ VALID_MODES = {"trend", "portrait", "cluster", "detail"}
 
 INTENT_MATCHERS = [
     (["周", "每周", "趋势", "最近", "两周", "week"], "trend", "weekly_score", "recent_2w"),
+    (["题目", "题号", "title"], "question", "question_score", ""),
     (["知识点", "链表", "递归", "树", "图"], "knowledge", "knowledge_score", ""),
     (["学生", "个体", "画像", "诊断"], "student", "student_profile", ""),
     (["提交", "提交记录", "attempt"], "submission", "submission_count", ""),
@@ -26,7 +27,9 @@ INTENT_MATCHERS = [
 ]
 KNOWLEDGE_TOKENS = ["链表", "递归", "树", "图", "哈希", "排序", "动态规划"]
 STUDENT_CLARIFICATION = "你希望分析哪些学生？请提供 student_ids 或先在界面框选学生。"
+QUESTION_DETAIL_CLARIFICATION = "请提供要分析的题目编号（title_id），我再给出该题目的详细时间线和分布。"
 MAX_TOKENS = 1024
+_DETAIL_HINT_TOKENS = ("详细", "精细", "细致", "明细", "具体数据", "逐项", "逐个", "精确")
 
 def _derive_scope(goal: GoalSpec) -> str:
     """根据 student_ids / title_id 推导 scope；classes/majors 仅作筛选上下文，不强制 selected。"""
@@ -51,6 +54,58 @@ def _rule_detect_out_of_domain(question: str) -> bool:
     has_ood = any(k in q for k in _OOD_KEYWORDS)
     has_learning = any(k in q for k in _LEARNING_KEYWORDS)
     return bool(has_ood and not has_learning)
+
+
+def _normalize_list(v):
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return [str(x).strip() for x in v if str(x).strip()]
+    s = str(v).strip()
+    return [s] if s else []
+
+
+def _pick_list_slot(obj: dict, key: str, ctx: dict, ctx_key: str) -> list:
+    explicit = _normalize_list((obj or {}).get(key))
+    if explicit:
+        return explicit
+    return list(ctx.get(ctx_key) or [])
+
+
+def _maybe_promote_detail_mode(question: str, goal: GoalSpec) -> None:
+    """规则增强：当用户明确要求“详细/精细/明细”时，优先将 class/question 升级为 detail。"""
+    q = (question or "").strip()
+    if not q:
+        return
+    if not any(tok in q for tok in _DETAIL_HINT_TOKENS):
+        return
+    subjects = list(goal.subject or [])
+    modes = list(goal.mode or [])
+    if ("class" in subjects or "question" in subjects) and "detail" not in modes:
+        goal.mode = ["detail"]
+        for sg in (goal.sub_goals or []):
+            s = sg.get("subject") or []
+            if "class" in s or "question" in s:
+                sg["mode"] = ["detail"]
+
+
+def _maybe_clear_context_student_ids(goal: GoalSpec, explicit_student_ids: list) -> str:
+    """
+    清洗历史上下文残留的 student_ids：
+    - 当前主体不含 student
+    - 且没有 title_id（不是题目个体）
+    - 且本轮 LLM 未显式给 student_ids
+    """
+    if "student" in (goal.subject or []):
+        return "student_subject"
+    if goal.title_id and str(goal.title_id).strip():
+        return "title_id_individual"
+    if explicit_student_ids:
+        return "llm_student_ids"
+    if goal.student_ids:
+        goal.student_ids = []
+        return "context_student_ids_cleared"
+    return "no_student_ids"
 
 
 def _validate_one_phase(phase: dict) -> bool:
@@ -184,6 +239,7 @@ def _parse_goal_with_llm(question: str, context=None) -> GoalSpec:
                 for x in m:
                     if x not in modes_ordered:
                         modes_ordered.append(x)
+            explicit_student_ids = _normalize_list(obj.get("student_ids"))
             goal = GoalSpec(
                 intent_type=obj.get("intent_type") or "overview",
                 subject=subjects_ordered if subjects_ordered else ["class"],
@@ -194,9 +250,9 @@ def _parse_goal_with_llm(question: str, context=None) -> GoalSpec:
                 metric=obj.get("metric") or "",
                 knowledge=next((p.get("knowledge") for p in sub_goals if p.get("knowledge") is not None), None),
                 title_id=next((p.get("title_id") for p in sub_goals if p.get("title_id") is not None), obj.get("title_id")),
-                student_ids=list(ctx.get("selected_student_ids") or []),
-                classes=list(ctx.get("classes") or []),
-                majors=list(ctx.get("majors") or []),
+                student_ids=explicit_student_ids or list(ctx.get("selected_student_ids") or []),
+                classes=_pick_list_slot(obj, "classes", ctx, "classes"),
+                majors=_pick_list_slot(obj, "majors", ctx, "majors"),
                 time_window=obj.get("time_window") or (sub_goals[0].get("time_window") if sub_goals else ""),
                 needs_clarification=bool(obj.get("needs_clarification", False)),
                 clarification_question=(obj.get("clarification_question") or "").strip(),
@@ -215,6 +271,7 @@ def _parse_goal_with_llm(question: str, context=None) -> GoalSpec:
                 phase["knowledge"] = knowledge_str
             if obj.get("time_window"):
                 phase["time_window"] = obj.get("time_window", "") or ""
+            explicit_student_ids = _normalize_list(obj.get("student_ids"))
             goal = GoalSpec(
                 intent_type=obj.get("intent_type") or "overview",
                 subject=s,
@@ -225,13 +282,18 @@ def _parse_goal_with_llm(question: str, context=None) -> GoalSpec:
                 metric=obj.get("metric") or "",
                 knowledge=knowledge_str,
                 title_id=obj.get("title_id"),
-                student_ids=list(ctx.get("selected_student_ids") or []),
-                classes=list(ctx.get("classes") or []),
-                majors=list(ctx.get("majors") or []),
+                student_ids=explicit_student_ids or list(ctx.get("selected_student_ids") or []),
+                classes=_pick_list_slot(obj, "classes", ctx, "classes"),
+                majors=_pick_list_slot(obj, "majors", ctx, "majors"),
                 time_window=obj.get("time_window") or "",
                 needs_clarification=bool(obj.get("needs_clarification", False)),
                 clarification_question=(obj.get("clarification_question") or "").strip(),
             )
+        scope_source = _maybe_clear_context_student_ids(goal, explicit_student_ids)
+        _maybe_promote_detail_mode(question, goal)
+        if "question" in goal.subject and "detail" in goal.mode and not (goal.title_id and str(goal.title_id).strip()):
+            goal.needs_clarification = True
+            goal.clarification_question = goal.clarification_question or QUESTION_DETAIL_CLARIFICATION
         goal.scope = _derive_scope(goal)
         if "student" in goal.subject and not goal.student_ids:
             goal.needs_clarification = True
@@ -239,8 +301,8 @@ def _parse_goal_with_llm(question: str, context=None) -> GoalSpec:
         if _rule_detect_out_of_domain(question):
             goal.is_out_of_domain = True
         _agent_logger.info(
-            "Goal parse LLM 解析通过 subject=%s mode=%s sub_goals=%d is_out_of_domain=%s",
-            goal.subject, goal.mode, len(goal.sub_goals), goal.is_out_of_domain,
+            "Goal parse LLM 解析通过 subject=%s mode=%s sub_goals=%d is_out_of_domain=%s scope_source=%s classes=%s majors=%s",
+            goal.subject, goal.mode, len(goal.sub_goals), goal.is_out_of_domain, scope_source, goal.classes, goal.majors,
         )
         return goal
     _agent_logger.warning(
@@ -257,6 +319,9 @@ def _fill_subject_mode_scope(goal: GoalSpec) -> None:
     if it == "trend":
         goal.subject = ["class"]
         goal.mode = ["trend"]
+    elif it == "question":
+        goal.subject = ["question"]
+        goal.mode = ["portrait"]
     elif it == "knowledge":
         goal.subject = ["knowledge"]
         goal.mode = ["portrait"]
@@ -301,6 +366,10 @@ def _parse_goal_by_rules(question: str, context=None) -> GoalSpec:
         goal.needs_clarification = True
         goal.clarification_question = STUDENT_CLARIFICATION
     _fill_subject_mode_scope(goal)
+    _maybe_promote_detail_mode(text, goal)
+    if "question" in goal.subject and "detail" in goal.mode and not (goal.title_id and str(goal.title_id).strip()):
+        goal.needs_clarification = True
+        goal.clarification_question = QUESTION_DETAIL_CLARIFICATION
     goal.sub_goals = [{"subject": list(goal.subject), "mode": list(goal.mode)}]
     return goal
 

@@ -17,6 +17,16 @@ def _build_title_payload(merged_data, title_row):
     }
 
 
+def get_title_data_by_id(merged_data, title_id):
+    title_rows = merged_data[
+        merged_data["title_ID"].astype(str) == str(title_id)
+    ][["title_ID", "knowledge"]].drop_duplicates()
+    if title_rows.empty:
+        return None
+    title_row = title_rows.iloc[0]
+    return _build_title_payload(merged_data, title_row)
+
+
 def process_timeline_data(merged_data, title_id):
     timeline_data = _filter_by_title_id(merged_data, title_id)
     timeline_data["time"] = pd.to_datetime(timeline_data["time"], unit="s")

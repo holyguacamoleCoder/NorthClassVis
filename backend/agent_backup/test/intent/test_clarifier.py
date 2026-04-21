@@ -38,3 +38,10 @@ def test_apply_clarification_sets_question():
     assert goal.needs_clarification is True
     assert goal.clarification_question
     assert "知识点" in goal.clarification_question
+
+
+def test_question_detail_without_title_id_needs_clarification():
+    goal = GoalSpec(subject=["question"], mode=["detail"], title_id=None)
+    assert needs_clarification(goal) is True
+    q = build_clarification_question(goal)
+    assert "title_id" in q or "题目编号" in q

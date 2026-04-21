@@ -50,6 +50,9 @@ INTENT_PLAN_MAP = {
     ("class", "trend"): [
         _spec("query_class", {"mode": "trend"}, ["class_trend_data"], [], "status==ok", "data is not None", "获取班级趋势数据"),
     ],
+    ("class", "detail"): [
+        _spec("query_class", {"mode": "detail"}, ["class_detail_data"], [], "status==ok", "data is not None", "获取班级细粒度趋势数据"),
+    ],
     ("class", "cluster"): [
         _spec("query_class", {"mode": "cluster"}, ["class_cluster_data"], [], "status==ok", "data is not None", "获取班级聚类数据"),
     ],
