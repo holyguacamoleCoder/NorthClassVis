@@ -4486,3 +4486,33 @@ try {
 我也检查了 lint：无新增问题。
 
 如果你愿意，下一步我可以再把 `ConfigPanel.vue` / `PortraitView.vue` 里的 `console.error` 升级成基于 `err.code` 的用户提示文案（例如 `TITLE_NOT_FOUND`、`INVALID_CONFIG_PAYLOAD` 显示更友好的提示）。
+
+---
+
+_**User**_
+
+先不用了，你给出我这个代码优化的commit我做一次提交
+
+---
+
+_**Agent (default)**_
+
+可以，建议你这次用一个“分层优化 + 错误规范化”的提交信息。
+
+**推荐 commit message：**
+
+`refactor(routes,services): 下沉业务逻辑并统一 API 错误返回格式`
+
+**推荐提交说明（body）：**
+
+- 将 `question/nav/portrait` 路由中的业务处理下沉到 service 层，routes 仅保留参数校验与响应封装  
+- 新增 `nav_service`、`portrait_service`，补充 `question_service.get_title_data_by_id` 聚合入口  
+- 统一后端错误结构为 `{ error, code }`，并在前端 `request` 拦截器中标准化为 `ApiError`  
+- `question_routes` 改为每次请求从 `config` 读取数据，避免使用陈旧缓存
+
+---
+
+如果你想按 Conventional Commits 再“更细分”一点，也可以拆成两个提交：
+
+1. `refactor(routes,services): 下沉 question/nav/portrait 业务逻辑到 service`
+2. `feat(api,frontend): 统一错误返回(error/code)并前端标准化 ApiError`
