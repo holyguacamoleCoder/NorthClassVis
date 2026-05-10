@@ -4,6 +4,7 @@ data/Data_SubmitRecord/*.csv
 data/*.docx
 
 /plan
+.specstory/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

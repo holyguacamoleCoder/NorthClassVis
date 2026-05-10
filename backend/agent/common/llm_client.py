@@ -1,5 +1,6 @@
 # 封装 OpenAI 兼容 SDK：面向类的 LLM 配置与调用，统一 chat 入口。
 
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -12,6 +13,11 @@ except Exception:
 if load_dotenv:
     BACKEND_DIR = Path(__file__).resolve().parents[2]
     load_dotenv(dotenv_path=BACKEND_DIR / ".env", override=False)
+
+from common.logger import get_logger, log_event, truncate_for_log
+
+_llm_log = get_logger("llm")
+
 
 class LLMConfig:
     """LLM 连接与模型配置，可从环境变量加载。"""
@@ -128,9 +134,14 @@ class LLMClient:
                     if isinstance(content, str):
                         user_preview = content[:500]
                     break
-            print(
-                "=== LLM 请求 === messages=%s, tools=%s\nuser_content (前500字): %s"
-                % (len(request_messages), len(tools) if tools else 0, user_preview)
+            log_event(
+                _llm_log,
+                logging.DEBUG,
+                "llm_request",
+                model=self._config.model,
+                messages_count=len(request_messages),
+                tools_count=len(tools) if tools else 0,
+                user_preview=truncate_for_log(user_preview),
             )
             request_kwargs = {
                 "model": self._config.model,
@@ -143,26 +154,34 @@ class LLMClient:
                 request_kwargs["parallel_tool_calls"] = parallel_tool_calls
             resp = client.chat.completions.create(**request_kwargs)
 
-            # 调试看的一个信息
             if resp and resp.choices:
                 msg = resp.choices[0].message
                 content = getattr(msg, "content", None) or ""
                 tool_calls = getattr(msg, "tool_calls", None) or []
-                content_preview = (content if isinstance(content, str) else str(content))[:800]
+                content_raw = content if isinstance(content, str) else str(content)
                 if tool_calls:
                     names = [
                         (t.function.name if hasattr(t, "function") and hasattr(t.function, "name") else getattr(t, "name", ""))
                         for t in tool_calls
                     ]
-                    print(
-                        "=== LLM 返回 === tool_calls=%s 个: %s\nassistant_content (前800字): %s"
-                        % (len(tool_calls), names, content_preview)
+                    log_event(
+                        _llm_log,
+                        logging.DEBUG,
+                        "llm_response",
+                        tool_calls_count=len(tool_calls),
+                        tool_names=names,
+                        assistant_preview=truncate_for_log(content_raw, max_len=800),
                     )
                 else:
-                    print("=== LLM 返回 ===\n%s" % content_preview[:2000])
+                    log_event(
+                        _llm_log,
+                        logging.DEBUG,
+                        "llm_response",
+                        assistant_preview=truncate_for_log(content_raw, max_len=2000),
+                    )
             return resp
         except Exception as e:
-            print("LLM 调用异常: %s" % e)
+            log_event(_llm_log, logging.ERROR, "llm_error", error=str(e))
             return None
 
     @staticmethod
