@@ -71,8 +71,29 @@ BASE_TOOLS = [
     },
 ]
 
+COMPACT_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "compact",
+        "description": (
+            "Summarize earlier conversation so work can continue in a smaller context. "
+            "Use when the thread is long or you need to refocus."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "focus": {
+                    "type": "string",
+                    "description": "Optional focus to preserve in the summary.",
+                },
+            },
+        },
+    },
+}
+
 from .todo_write import TODO_MANAGER_SCHEMA
 
 TOOLS = BASE_TOOLS + [
     TODO_MANAGER_SCHEMA,
+    COMPACT_TOOL_SCHEMA,
 ]

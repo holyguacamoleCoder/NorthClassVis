@@ -1,11 +1,19 @@
+import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List
 
 from common.llm_client import LLMClient
 from common.logger import get_logger, log_event, truncate_for_log
 from common.message import normalize_message
+from context import (
+    CompactState,
+    DEFAULT_CONFIG,
+    compact_history,
+    estimate_context_size,
+    micro_compact_messages,
+)
 from tools import TOOLS, execute_tool_calls
 from tools.todo_write import get_todo_reminder, mark_round_without_todo_update
 
@@ -17,7 +25,7 @@ DATA_DIR = BASE_DIR / "data"
 @dataclass
 class LoopState:
     messages: List[Dict[str, Any]]
-    # loop_config: AgentLoopConfig
+    compact: CompactState = field(default_factory=CompactState)
     messages_count: int = 1
     turn_count: int = 1
     continue_reason: str | None = None
@@ -27,18 +35,51 @@ SYSTEM_PROMPT = f"""
 You are a helpful assistant that can help with tasks.
 Environment is Windows cmd and your workdir is {DATA_DIR}.
 Use todo_write to track multi-step tasks and keep it updated when progress changes.
+If the conversation grows long, use the compact tool or rely on automatic compaction to keep working.
 """
 
 MAX_TOKENS = 8192
 
 
 class AgentLoop:
-    def __init__(self, loop_state: LoopState, llm_client: LLMClient | None = None):
+    def __init__(
+        self,
+        loop_state: LoopState,
+        llm_client: LLMClient | None = None,
+        compact_config=DEFAULT_CONFIG,
+    ):
         self.llm_client = llm_client or LLMClient()
         self.loop_state = loop_state or LoopState(messages=[])
+        self.compact_config = compact_config
+
+    def _apply_pre_turn_compaction(self) -> None:
+        # 每轮自动压缩context
+        if not self.compact_config.enabled:
+            return
+        micro_compact_messages(self.loop_state.messages, config=self.compact_config)
+        if estimate_context_size(self.loop_state.messages) <= self.compact_config.context_limit:
+            return
+        self.loop_state.messages = compact_history(
+            self.loop_state.messages,
+            self.llm_client,
+            self.loop_state.compact,
+            config=self.compact_config,
+            reason="auto",
+        )
+
+    def _apply_manual_compaction(self, focus: str | None) -> None:
+        # 手动压缩context
+        self.loop_state.messages = compact_history(
+            self.loop_state.messages,
+            self.llm_client,
+            self.loop_state.compact,
+            focus=focus,
+            config=self.compact_config,
+            reason="manual",
+        )
 
     def run_turn(self):
-        
+        self._apply_pre_turn_compaction()
 
         log_event(
             _log,
@@ -95,8 +136,22 @@ class AgentLoop:
             count=len(tool_calls),
             names=[c.get("name") for c in tool_calls],
         )
-        tool_results = execute_tool_calls(tool_calls)
-        
+        tool_results = execute_tool_calls(
+            tool_calls,
+            compact_state=self.loop_state.compact,
+        )
+
+        compact_calls = [c for c in tool_calls if c.get("name") == "compact"]
+        compact_focus = None
+        if compact_calls:
+            args = compact_calls[0].get("arguments") or {}
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args) if args else {}
+                except (TypeError, ValueError):
+                    args = {}
+            compact_focus = args.get("focus") if isinstance(args, dict) else None
+
         # 处理 todo_write 工具调用
         has_todo_write_call = any(c.get("name") == "todo_write" for c in tool_calls)
         if not has_todo_write_call:
@@ -123,6 +178,9 @@ class AgentLoop:
 
         # 将工具调用结果添加到messages中（Tool）
         self.loop_state.messages.extend(tool_results)
+        if compact_calls and self.compact_config.enabled:
+            self._apply_manual_compaction(compact_focus)
+
         self.loop_state.messages_count += (1 + len(tool_results))
         self.loop_state.turn_count += 1
         self.loop_state.continue_reason = "tool_calls_executed"

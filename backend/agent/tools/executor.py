@@ -3,6 +3,9 @@ import logging
 from typing import Any
 
 from common.logger import get_logger, log_event, truncate_for_log
+from context import maybe_persist_output, track_recent_file
+from context.config import DEFAULT_CONFIG
+from context.state import CompactState
 
 from .registry import TOOL_DISPATCHER
 
@@ -20,7 +23,14 @@ def _parse_args(raw_args: Any) -> dict[str, Any]:
     return {}
 
 
-def execute_tool_calls(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+_PATH_TOOLS = frozenset({"read_file", "list_files"})
+
+
+def execute_tool_calls(
+    tool_calls: list[dict[str, Any]],
+    *,
+    compact_state: CompactState | None = None,
+) -> list[dict[str, Any]]:
     tool_results = []
     # 处理每一个调用
     for call in tool_calls:
@@ -70,6 +80,17 @@ def execute_tool_calls(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]
                 }
             )
             continue
+
+        if compact_state and tool_name in _PATH_TOOLS:
+            path_arg = parsed_args.get("path") or "."
+            track_recent_file(
+                compact_state,
+                str(path_arg),
+                max_files=DEFAULT_CONFIG.max_recent_files,
+            )
+
+        if call_id and isinstance(tool_result, str):
+            tool_result = maybe_persist_output(call_id, tool_result)
 
         log_event(
             _log,

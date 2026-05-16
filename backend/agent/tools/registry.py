@@ -1,6 +1,7 @@
 from typing import Callable
 
 from .base_tool import run_bash, run_edit_file, run_list_files, run_read_file, run_write_file
+from .compact import run_compact
 from .todo_write import run_todo_write
 
 CONCURRENCY_LIMIT = 10
@@ -22,4 +23,5 @@ TOOL_DISPATCHER: dict[str, Callable[..., str]] = {
         kwargs.get("new_text"),
     ),
     "todo_write": lambda **kwargs: run_todo_write(kwargs.get("items")),
+    "compact": lambda **kwargs: run_compact(kwargs.get("focus")),
 }

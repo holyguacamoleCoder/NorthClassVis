@@ -1,10 +1,13 @@
 # 取消对巨量数据的提交
+data/.transcripts/
+data/.task_outputs/
 data/*.csv
 data/Data_SubmitRecord/*.csv
 data/*.docx
 
 /plan
 .specstory/
+.vscode/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
