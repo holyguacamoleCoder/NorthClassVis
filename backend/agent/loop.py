@@ -14,6 +14,7 @@ from context import (
     estimate_context_size,
     micro_compact_messages,
 )
+from permission import PermissionManager, filter_tools
 from tools import TOOLS, execute_tool_calls
 from tools.todo_write import get_todo_reminder, mark_round_without_todo_update
 
@@ -26,6 +27,7 @@ DATA_DIR = BASE_DIR / "data"
 class LoopState:
     messages: List[Dict[str, Any]]
     compact: CompactState = field(default_factory=CompactState)
+    permission: PermissionManager | None = None
     messages_count: int = 1
     turn_count: int = 1
     continue_reason: str | None = None
@@ -34,6 +36,8 @@ class LoopState:
 SYSTEM_PROMPT = f"""
 You are a helpful assistant that can help with tasks.
 Environment is Windows cmd and your workdir is {DATA_DIR}.
+For read_file, write_file, edit_file, and list_files always use paths relative to data/
+(e.g. reports/foo.md or Data_StudentInfo.csv), never absolute paths like H:\\...\\data\\...
 Use todo_write to track multi-step tasks and keep it updated when progress changes.
 If the conversation grows long, use the compact tool or rely on automatic compaction to keep working.
 """
@@ -47,10 +51,20 @@ class AgentLoop:
         loop_state: LoopState,
         llm_client: LLMClient | None = None,
         compact_config=DEFAULT_CONFIG,
+        permission: PermissionManager | None = None,
     ):
         self.llm_client = llm_client or LLMClient()
         self.loop_state = loop_state or LoopState(messages=[])
         self.compact_config = compact_config
+        self.permission = permission or loop_state.permission or PermissionManager()
+
+    def _system_prompt(self) -> str:
+        mode = self.permission.mode.value
+        return (
+            f"{SYSTEM_PROMPT}\n"
+            f"Current capability mode: {mode}. "
+            "Some tool calls may be denied; suggest alternatives when blocked."
+        )
 
     def _apply_pre_turn_compaction(self) -> None:
         # 每轮自动压缩context
@@ -88,10 +102,11 @@ class AgentLoop:
             turn=self.loop_state.turn_count,
             messages=len(self.loop_state.messages),
         )
+        visible_tools = filter_tools(TOOLS, self.permission.mode)
         raw_response = self.llm_client.create_completion(
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=self._system_prompt(),
             messages=normalize_message(self.loop_state.messages),
-            tools=TOOLS,
+            tools=visible_tools,
             max_tokens=MAX_TOKENS
         )
         if not raw_response or not getattr(raw_response, "choices", None):
@@ -139,6 +154,7 @@ class AgentLoop:
         tool_results = execute_tool_calls(
             tool_calls,
             compact_state=self.loop_state.compact,
+            permission=self.permission,
         )
 
         compact_calls = [c for c in tool_calls if c.get("name") == "compact"]

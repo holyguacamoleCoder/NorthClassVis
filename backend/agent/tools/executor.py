@@ -11,6 +11,8 @@ from .registry import TOOL_DISPATCHER
 
 _log = get_logger("tools")
 
+from permission import PermissionManager
+
 
 def _parse_args(raw_args: Any) -> dict[str, Any]:
     if isinstance(raw_args, str):
@@ -30,6 +32,7 @@ def execute_tool_calls(
     tool_calls: list[dict[str, Any]],
     *,
     compact_state: CompactState | None = None,
+    permission: "PermissionManager | None" = None,
 ) -> list[dict[str, Any]]:
     tool_results = []
     # 处理每一个调用
@@ -37,6 +40,53 @@ def execute_tool_calls(
         tool_name = call.get("name")
         call_id = call.get("id")
         parsed_args = _parse_args(call.get("arguments", {}))
+
+        if permission is not None:
+            decision = permission.check(tool_name, parsed_args)
+            behavior = decision.get("behavior")
+            if behavior == "deny":
+                reason = decision.get("reason", "denied")
+                log_event(
+                    _log,
+                    logging.INFO,
+                    "tool_denied",
+                    tool=tool_name,
+                    tool_call_id=call_id,
+                    mode=getattr(permission.mode, "value", permission.mode),
+                    reason=reason,
+                )
+                tool_results.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "content": f"Permission denied: {reason}",
+                    }
+                )
+                continue
+            if behavior == "ask":
+                reason = decision.get("reason", "approval required")
+                if not permission.ask_user(tool_name, parsed_args, reason):
+                    log_event(
+                        _log,
+                        logging.INFO,
+                        "tool_denied_user",
+                        tool=tool_name,
+                        tool_call_id=call_id,
+                        mode=getattr(permission.mode, "value", permission.mode),
+                        reason=reason,
+                    )
+                    content = (
+                        f"Permission denied for {tool_name}: {reason}. "
+                        "Approval was not granted (use an interactive client or adjust rules/mode)."
+                    )
+                    tool_results.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call_id,
+                            "content": content,
+                        }
+                    )
+                    continue
 
         # 是一个不存在的工具调用
         if tool_name not in TOOL_DISPATCHER:

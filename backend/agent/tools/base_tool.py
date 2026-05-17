@@ -5,6 +5,9 @@ BASE_DIR = Path(__file__).resolve().parents[3]  # NorthClassVision
 DATA_DIR = BASE_DIR / "data"
 MAX_OUTPUT_LENGTH = 50000
 BLOCKED_WRITE_PATTERNS = ("out-file", "set-content", "add-content", ">")
+WORKSPACE_PATH_ERROR = (
+    "Error: Path must stay within data workspace (use paths relative to data/ only)."
+)
 
 
 def _safe_path(path: str) -> Path:
@@ -12,6 +15,14 @@ def _safe_path(path: str) -> Path:
     if not resolved.is_relative_to(DATA_DIR):
         raise ValueError(f"Path {resolved} escape from DATA_DIR workspace")
     return resolved
+
+
+def _format_tool_error(exc: Exception, path: str | None = None) -> str:
+    if isinstance(exc, ValueError) and "escape from DATA_DIR" in str(exc):
+        return WORKSPACE_PATH_ERROR
+    if path:
+        return f"Error: {exc} ({path})"
+    return f"Error: {exc}"
 
 
 def run_bash(command: str) -> str:
@@ -62,8 +73,10 @@ def run_read_file(path: str, limit: int | None = None) -> str:
         return f"Error: File not found: {path}"
     except UnicodeDecodeError:
         return f"Error: File is not valid UTF-8: {path}"
+    except ValueError as e:
+        return _format_tool_error(e, path)
     except Exception as e:
-        return f"Error: {e}"
+        return _format_tool_error(e, path)
 
 
 def run_list_files(path: str = ".", recursive: bool = False, limit: int = 200) -> str:
@@ -90,8 +103,10 @@ def run_list_files(path: str = ".", recursive: bool = False, limit: int = 200) -
             shown.append(f"... ({len(entries) - limit} more entries)")
             entries = shown
         return "\n".join(entries) if entries else "(empty directory)"
+    except ValueError as e:
+        return _format_tool_error(e, path)
     except Exception as e:
-        return f"Error: {e}"
+        return _format_tool_error(e, path)
 
 
 def run_write_file(path: str, content: str) -> str:
@@ -100,8 +115,10 @@ def run_write_file(path: str, content: str) -> str:
         fp.parent.mkdir(parents=True, exist_ok=True)
         fp.write_text(content, encoding="utf-8", newline="\n")
         return f"Wrote {len(content)} bytes to {path}"
+    except ValueError as e:
+        return _format_tool_error(e, path)
     except Exception as e:
-        return f"Error: {e}"
+        return _format_tool_error(e, path)
 
 
 def run_edit_file(path: str, old_text: str, new_text: str) -> str:
@@ -114,5 +131,7 @@ def run_edit_file(path: str, old_text: str, new_text: str) -> str:
         return f"Edited {path}"
     except UnicodeDecodeError:
         return f"Error: File is not valid UTF-8: {path}"
+    except ValueError as e:
+        return _format_tool_error(e, path)
     except Exception as e:
-        return f"Error: {e}"
+        return _format_tool_error(e, path)
