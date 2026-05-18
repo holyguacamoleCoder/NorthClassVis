@@ -93,7 +93,29 @@ COMPACT_TOOL_SCHEMA = {
 
 from .todo_write import TODO_MANAGER_SCHEMA
 
+LOAD_SKILL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "load_skill",
+        "description": (
+            "Load the full instructions for a named skill into the current context. "
+            "Use before generating reports, analyzing CSV data, or other specialized work."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Skill name from the available skills list in the system prompt.",
+                },
+            },
+            "required": ["name"],
+        },
+    },
+}
+
 TOOLS = BASE_TOOLS + [
     TODO_MANAGER_SCHEMA,
     COMPACT_TOOL_SCHEMA,
+    LOAD_SKILL_SCHEMA,
 ]

@@ -7,7 +7,7 @@ class CapabilityMode(str, Enum):
     PRODUCE = "produce"
 
 
-READ_ONLY_TOOLS = frozenset({"read_file", "list_files"})
+READ_ONLY_TOOLS = frozenset({"read_file", "list_files", "load_skill"})
 SESSION_TOOLS = frozenset({"todo_write", "compact"})
 WRITE_TOOLS = frozenset({"write_file", "edit_file"})
 

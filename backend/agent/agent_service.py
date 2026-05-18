@@ -2,6 +2,7 @@ from loop import AgentLoop, LoopState
 from common.llm_client import LLMClient
 from hooks import HookManager
 from permission import CapabilityMode, CliApprovalHandler, PermissionManager
+from skills import get_registry
 
 MODE_HELP = "consult | analyze | produce"
 
@@ -32,11 +33,17 @@ def pipeline():
     if session_context:
         print("[SessionStart: data catalog injected into agent context]")
 
+    skill_registry = get_registry()
+    if skill_registry.documents:
+        names = ", ".join(sorted(skill_registry.documents))
+        print(f"[Skills: {len(skill_registry.documents)} from {skill_registry.skills_dir.name}/ ({names})]")
+
     loop_state = LoopState(
         messages=[],
         permission=perms,
         hooks=hooks,
         session_context=session_context,
+        skills=skill_registry,
     )
     llm_client = LLMClient()
 

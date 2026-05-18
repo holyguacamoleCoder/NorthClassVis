@@ -16,6 +16,7 @@ from context import (
 )
 from hooks import HookManager
 from permission import PermissionManager, filter_tools
+from skills import SkillRegistry, get_registry
 from tools import TOOLS, execute_tool_calls
 from tools.todo_write import get_todo_reminder, mark_round_without_todo_update
 
@@ -31,6 +32,7 @@ class LoopState:
     permission: PermissionManager | None = None
     hooks: HookManager | None = None
     session_context: list[str] = field(default_factory=list)
+    skills: SkillRegistry | None = None
     messages_count: int = 1
     turn_count: int = 1
     continue_reason: str | None = None
@@ -43,6 +45,7 @@ For read_file, write_file, edit_file, and list_files always use paths relative t
 (e.g. reports/foo.md or Data_StudentInfo.csv), never absolute paths like H:\\...\\data\\...
 Use todo_write to track multi-step tasks and keep it updated when progress changes.
 If the conversation grows long, use the compact tool or rely on automatic compaction to keep working.
+Before generating reports or analyzing CSV structures, call load_skill with the matching skill name.
 """
 
 MAX_TOKENS = 8192
@@ -73,6 +76,11 @@ class AgentLoop:
         if self.loop_state.session_context:
             block = "\n\n".join(self.loop_state.session_context)
             prompt += f"\n\n--- Session context (hooks) ---\n{block}\n"
+        registry = self.loop_state.skills or get_registry()
+        prompt += (
+            "\n\n--- Available skills (use load_skill to load full instructions) ---\n"
+            f"{registry.describe_available()}\n"
+        )
         return prompt
 
     def _apply_pre_turn_compaction(self) -> None:

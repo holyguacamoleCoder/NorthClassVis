@@ -94,12 +94,14 @@ def test_filter_tools_excludes_write_in_consult():
     assert "write_file" not in names
     assert "edit_file" not in names
     assert "read_file" in names
+    assert "load_skill" in names
 
 
 def test_filter_tools_includes_session_in_analyze():
     names = {t["function"]["name"] for t in filter_tools(TOOLS, CapabilityMode.ANALYZE)}
     assert "todo_write" in names
     assert "compact" in names
+    assert "load_skill" in names
     assert "write_file" not in names
 
 
