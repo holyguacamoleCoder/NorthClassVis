@@ -1,6 +1,8 @@
 # 取消对巨量数据的提交
 data/.transcripts/
 data/.task_outputs/
+data/.agent_audit/
+data/exports/manifest.jsonl
 data/*.csv
 data/Data_SubmitRecord/*.csv
 data/*.docx

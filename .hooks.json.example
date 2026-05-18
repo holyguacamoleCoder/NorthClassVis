@@ -1,0 +1,21 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "command": "python scripts/hooks/session_start.py"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "read_file",
+        "command": "python scripts/hooks/audit_read.py"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "write_file",
+        "command": "python scripts/hooks/export_manifest.py"
+      }
+    ]
+  }
+}

@@ -14,6 +14,7 @@ from context import (
     estimate_context_size,
     micro_compact_messages,
 )
+from hooks import HookManager
 from permission import PermissionManager, filter_tools
 from tools import TOOLS, execute_tool_calls
 from tools.todo_write import get_todo_reminder, mark_round_without_todo_update
@@ -28,6 +29,8 @@ class LoopState:
     messages: List[Dict[str, Any]]
     compact: CompactState = field(default_factory=CompactState)
     permission: PermissionManager | None = None
+    hooks: HookManager | None = None
+    session_context: list[str] = field(default_factory=list)
     messages_count: int = 1
     turn_count: int = 1
     continue_reason: str | None = None
@@ -52,19 +55,25 @@ class AgentLoop:
         llm_client: LLMClient | None = None,
         compact_config=DEFAULT_CONFIG,
         permission: PermissionManager | None = None,
+        hooks: HookManager | None = None,
     ):
         self.llm_client = llm_client or LLMClient()
         self.loop_state = loop_state or LoopState(messages=[])
         self.compact_config = compact_config
         self.permission = permission or loop_state.permission or PermissionManager()
+        self.hooks = hooks if hooks is not None else loop_state.hooks
 
     def _system_prompt(self) -> str:
         mode = self.permission.mode.value
-        return (
+        prompt = (
             f"{SYSTEM_PROMPT}\n"
             f"Current capability mode: {mode}. "
             "Some tool calls may be denied; suggest alternatives when blocked."
         )
+        if self.loop_state.session_context:
+            block = "\n\n".join(self.loop_state.session_context)
+            prompt += f"\n\n--- Session context (hooks) ---\n{block}\n"
+        return prompt
 
     def _apply_pre_turn_compaction(self) -> None:
         # 每轮自动压缩context
@@ -155,6 +164,7 @@ class AgentLoop:
             tool_calls,
             compact_state=self.loop_state.compact,
             permission=self.permission,
+            hooks=self.hooks,
         )
 
         compact_calls = [c for c in tool_calls if c.get("name") == "compact"]

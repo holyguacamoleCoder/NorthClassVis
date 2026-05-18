@@ -1,5 +1,6 @@
 from loop import AgentLoop, LoopState
 from common.llm_client import LLMClient
+from hooks import HookManager
 from permission import CapabilityMode, CliApprovalHandler, PermissionManager
 
 MODE_HELP = "consult | analyze | produce"
@@ -20,7 +21,23 @@ def pipeline():
     perms = PermissionManager(mode=mode, approval=CliApprovalHandler())
     print(f"[Permission mode: {mode.value}]")
 
-    loop_state = LoopState(messages=[], permission=perms)
+    hooks = HookManager()
+    if any(hooks.hooks[e] for e in hooks.hooks):
+        print("[Hooks: loaded from .hooks.json]")
+    session_result = hooks.run_hooks(
+        "SessionStart",
+        {"tool_name": "", "tool_input": {}},
+    )
+    session_context: list[str] = list(session_result.messages)
+    if session_context:
+        print("[SessionStart: data catalog injected into agent context]")
+
+    loop_state = LoopState(
+        messages=[],
+        permission=perms,
+        hooks=hooks,
+        session_context=session_context,
+    )
     llm_client = LLMClient()
 
     while True:
@@ -57,7 +74,12 @@ def pipeline():
             "content": query,
         })
 
-        agent_loop = AgentLoop(loop_state, llm_client=llm_client, permission=perms)
+        agent_loop = AgentLoop(
+            loop_state,
+            llm_client=llm_client,
+            permission=perms,
+            hooks=hooks,
+        )
         agent_loop.run_loop()
 
         last = loop_state.messages[-1] if loop_state.messages else None
