@@ -1,24 +1,36 @@
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
-BASE_DIR = Path(__file__).resolve().parents[3]  # NorthClassVision
-DATA_DIR = BASE_DIR / "data"
+from common.paths import DATA_DIR
+from permission.paths import resolve_data_relative_path
+
 MAX_OUTPUT_LENGTH = 50000
 BLOCKED_WRITE_PATTERNS = ("out-file", "set-content", "add-content", ">")
 WORKSPACE_PATH_ERROR = (
     "Error: Path must stay within data workspace (use paths relative to data/ only)."
 )
+HIDDEN_PATH_ERROR = (
+    "Error: Hidden or agent-governance paths under data/ are not accessible via tools."
+)
 
 
 def _safe_path(path: str) -> Path:
-    resolved = (DATA_DIR / path).resolve()
-    if not resolved.is_relative_to(DATA_DIR):
+    normalized = resolve_data_relative_path(path)
+    for part in PurePosixPath(normalized).parts:
+        if part.startswith(".") or part == ".agent":
+            raise ValueError("hidden or governance path segment")
+    resolved = (DATA_DIR / normalized).resolve()
+    if not resolved.is_relative_to(DATA_DIR.resolve()):
         raise ValueError(f"Path {resolved} escape from DATA_DIR workspace")
     return resolved
 
 
 def _format_tool_error(exc: Exception, path: str | None = None) -> str:
-    if isinstance(exc, ValueError) and "escape from DATA_DIR" in str(exc):
+    if isinstance(exc, ValueError) and "governance path segment" in str(exc):
+        return HIDDEN_PATH_ERROR
+    if isinstance(exc, ValueError) and (
+        "escape from DATA_DIR" in str(exc) or "outside data workspace" in str(exc)
+    ):
         return WORKSPACE_PATH_ERROR
     if path:
         return f"Error: {exc} ({path})"
@@ -90,11 +102,16 @@ def run_list_files(path: str = ".", recursive: bool = False, limit: int = 200) -
         entries: list[str] = []
         if recursive:
             for p in target_dir.rglob("*"):
+                rel_parts = p.relative_to(target_dir).parts
+                if any(part.startswith(".") for part in rel_parts):
+                    continue
                 rel = p.relative_to(target_dir).as_posix()
                 entries.append(f"{rel}/" if p.is_dir() else rel)
         else:
             for p in target_dir.iterdir():
                 name = p.name
+                if name.startswith("."):
+                    continue
                 entries.append(f"{name}/" if p.is_dir() else name)
 
         entries.sort()

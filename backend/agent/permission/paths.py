@@ -3,7 +3,7 @@
 from fnmatch import fnmatch
 from pathlib import Path, PurePosixPath
 
-DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+from common.paths import DATA_DIR, DATA_GOVERNANCE_DENY_PATTERNS, strip_data_prefix
 
 WRITABLE_SUBDIRS = ("reports", "exports")
 
@@ -13,16 +13,15 @@ WRITE_DENY_PATTERNS = ("Data_*.csv",)
 
 
 def normalize_path(path: str | None) -> str:
-    raw = str(path or "").strip().replace("\\", "/").lstrip("./")
-    if raw.startswith("data/"):
-        raw = raw[5:]
-    return raw
+    return strip_data_prefix(path or "")
 
 
-def to_data_relative_path(path: str | None) -> str:
+def resolve_data_relative_path(path: str | None) -> str:
     """
-    Normalize tool path for permission checks: relative to data/, forward slashes.
-    Accepts reports/foo, data/reports/foo, or absolute .../data/reports/foo.
+  Resolve a tool path to a stable location relative to data/.
+
+  Rejects paths outside the data workspace (including backend/.agent) and
+  normalizes ``..`` so ``reports/../.sessions`` cannot bypass policy.
     """
     raw = str(path or "").strip()
     if not raw:
@@ -30,13 +29,30 @@ def to_data_relative_path(path: str | None) -> str:
 
     candidate = Path(raw)
     if candidate.is_absolute():
-        try:
-            rel = candidate.resolve().relative_to(DATA_DIR.resolve())
-            return rel.as_posix()
-        except ValueError:
-            return normalize_path(raw)
+        resolved = candidate.resolve()
+    else:
+        resolved = (DATA_DIR / normalize_path(raw)).resolve()
 
-    return normalize_path(raw)
+    try:
+        rel = resolved.relative_to(DATA_DIR.resolve())
+    except ValueError as exc:
+        raise ValueError("path outside data workspace") from exc
+
+    return rel.as_posix()
+
+
+def to_data_relative_path(path: str | None) -> str:
+    """
+    Normalize tool path for permission checks: relative to data/, forward slashes.
+    Falls back to non-resolving normalize only when resolution is impossible.
+    """
+    raw = str(path or "").strip()
+    if not raw:
+        return ""
+    try:
+        return resolve_data_relative_path(raw)
+    except ValueError:
+        return normalize_path(raw)
 
 
 def path_matches_pattern(path: str, pattern: str) -> bool:
@@ -72,4 +88,26 @@ def writable_path_denial_reason(path: str) -> str:
     return (
         f"produce mode: cannot write to {path!r}; "
         "use a path under data/reports/ or data/exports/"
+    )
+
+
+def is_governance_data_path(path: str) -> bool:
+    """True for legacy agent runtime dirs that must not live under data/."""
+    try:
+        normalized = resolve_data_relative_path(path)
+    except ValueError:
+        # Absolute paths to backend/.agent etc. are outside data/.
+        return True
+    if not normalized:
+        return False
+    parts = PurePosixPath(normalized).parts
+    if any(part.startswith(".") or part == ".agent" for part in parts):
+        return True
+    return any(path_matches_pattern(normalized, pat) for pat in DATA_GOVERNANCE_DENY_PATTERNS)
+
+
+def governance_path_denial_reason(path: str) -> str:
+    return (
+        f"Path {path!r} is agent runtime state, not part of the data plane. "
+        "Use reports/ or exports/ under data/ for deliverables."
     )

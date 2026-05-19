@@ -2,8 +2,14 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parents[3]
-DATA_DIR = BASE_DIR / "data"
+from common.paths import (
+    DATA_DIR,
+    TRANSCRIPTS_DIR,
+    TOOL_RESULTS_DIR,
+    bootstrap_agent_paths,
+)
+
+bootstrap_agent_paths()
 
 
 @dataclass(frozen=True)
@@ -17,8 +23,8 @@ class ContextCompactConfig:
     summary_max_tokens: int = 2_000
     summary_input_chars: int = 80_000
     max_recent_files: int = 5
-    transcript_dir: Path = DATA_DIR / ".transcripts"
-    tool_results_dir: Path = DATA_DIR / ".task_outputs" / "tool-results"
+    transcript_dir: Path = TRANSCRIPTS_DIR
+    tool_results_dir: Path = TOOL_RESULTS_DIR
     enabled: bool = True
 
     @classmethod
@@ -29,6 +35,10 @@ class ContextCompactConfig:
                 return default
             return int(raw)
 
+        def _path(name: str, default: Path) -> Path:
+            raw = os.environ.get(name, "").strip()
+            return Path(raw) if raw else default
+
         enabled_raw = os.environ.get("CONTEXT_COMPACT_ENABLED", "true").strip().lower()
         enabled = enabled_raw not in ("0", "false", "no", "off")
         return cls(
@@ -37,6 +47,8 @@ class ContextCompactConfig:
             preview_chars=_int("PREVIEW_CHARS", 2_000),
             keep_recent_tool_results=_int("KEEP_RECENT_TOOL_RESULTS", 3),
             enabled=enabled,
+            transcript_dir=_path("AGENT_TRANSCRIPTS_DIR", TRANSCRIPTS_DIR),
+            tool_results_dir=_path("AGENT_TOOL_RESULTS_DIR", TOOL_RESULTS_DIR),
         )
 
 

@@ -105,6 +105,11 @@ COMPACT_FOCUS_SUFFIX = "\n\n下一轮请优先保留：{focus}"
 
 COMPACT_RECENT_FILES_SUFFIX = "\n\n近期涉及的文件（必要时可重新打开）：\n{files}"
 
+OUTPUT_CONTINUATION_MESSAGE = (
+    "输出已达到长度上限。请从上次中断处直接继续，不要复述、不要总结前文；"
+    "若句子未写完，从中途接着写即可。"
+)
+
 
 # ---------------------------------------------------------------------------
 # Format helpers (dynamic sections)

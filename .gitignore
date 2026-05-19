@@ -1,10 +1,16 @@
-# Agent persistent memories (local, per machine)
+# Agent runtime / governance (local, per machine; under backend/)
+backend/.agent/
+.agent/
 .memory/
+backend/agent/.memory/
 
-# 取消对巨量数据的提交
+# Legacy agent dirs under data/ (pre .agent/ migration)
+data/.sessions/
 data/.transcripts/
 data/.task_outputs/
 data/.agent_audit/
+
+# 取消对巨量数据的提交
 data/exports/manifest.jsonl
 data/*.csv
 data/Data_SubmitRecord/*.csv

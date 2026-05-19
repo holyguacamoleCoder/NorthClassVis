@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from common.logger import get_logger, log_event
-from common.paths import MEMORY_DIR, PROJECT_ROOT
+from common.paths import LEGACY_MEMORY_DIRS, MEMORY_DIR, PROJECT_ROOT, bootstrap_agent_paths
 from common.prompts import (
     SECTION_MEMORY_TITLE,
     format_memory_entry_header,
@@ -26,6 +26,8 @@ class MemoryManager:
     """Load, build, and save persistent memories across sessions."""
 
     def __init__(self, memory_dir: Path | None = None):
+        if memory_dir is None:
+            bootstrap_agent_paths()
         self.memory_dir = memory_dir or MEMORY_DIR
         self.memories: dict[str, dict] = {}
 
@@ -33,7 +35,12 @@ class MemoryManager:
         """Load all memory files. Returns count loaded."""
         self.memories = {}
         if not self.memory_dir.exists():
-            return 0
+            for legacy in LEGACY_MEMORY_DIRS:
+                if legacy.is_dir() and any(legacy.glob("*.md")):
+                    self.memory_dir = legacy
+                    break
+            else:
+                return 0
         for md_file in sorted(self.memory_dir.glob("*.md")):
             if md_file.name == "MEMORY.md":
                 continue

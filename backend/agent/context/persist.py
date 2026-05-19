@@ -1,6 +1,5 @@
-from pathlib import Path
-
-from .config import ContextCompactConfig, DATA_DIR, DEFAULT_CONFIG
+from .config import ContextCompactConfig, DEFAULT_CONFIG
+from common.paths import agent_state_display_path
 
 PERSISTED_MARKER_START = "<persisted-output>"
 COMPACTED_TOOL_PLACEHOLDER = (
@@ -24,14 +23,11 @@ def maybe_persist_output(
         stored_path.write_text(output, encoding="utf-8")
 
     preview = output[: config.preview_chars]
-    try:
-        rel_path = stored_path.relative_to(DATA_DIR)
-    except ValueError:
-        rel_path = stored_path
+    rel_path = agent_state_display_path(stored_path)
 
     return (
         f"{PERSISTED_MARKER_START}\n"
-        f"Full output saved to: {rel_path.as_posix()}\n"
+        f"Full output saved to: {rel_path}\n"
         "Preview:\n"
         f"{preview}\n"
         "</persisted-output>"

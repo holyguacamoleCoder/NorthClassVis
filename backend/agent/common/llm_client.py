@@ -19,6 +19,39 @@ from common.logger import get_logger, log_event, truncate_for_log
 _llm_log = get_logger("llm")
 
 
+class LLMCallError(Exception):
+    """Raised when an LLM API call fails; carries optional recovery classification."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        cause: BaseException | None = None,
+        recovery_action: "RecoveryActionLike | None" = None,
+    ):
+        super().__init__(message)
+        self.cause = cause
+        self.recovery_action = recovery_action or _classify_for_llm_error(cause or self)
+
+
+# Avoid circular import at runtime; recovery.classify is the source of truth.
+RecoveryActionLike = Any
+
+
+def _classify_for_llm_error(exc: BaseException):
+    try:
+        from recovery.classify import RecoveryAction, classify_exception
+
+        return classify_exception(exc)
+    except Exception:
+        from enum import Enum
+
+        class _Fallback(str, Enum):
+            FATAL = "fatal"
+
+        return _Fallback.FATAL
+
+
 class LLMConfig:
     """LLM 连接与模型配置，可从环境变量加载。"""
 
@@ -114,7 +147,7 @@ class LLMClient:
         # 返回raw响应
         client = self.get_client()
         if not client:
-            return None
+            raise LLMCallError("LLM client not configured (missing API key or SDK)")
         try:
             request_messages = list(messages or [])
             if system_prompt:
@@ -182,7 +215,7 @@ class LLMClient:
             return resp
         except Exception as e:
             log_event(_llm_log, logging.ERROR, "llm_error", error=str(e))
-            return None
+            raise LLMCallError(str(e), cause=e) from e
 
     @staticmethod
     def extract_tool_calls(response: Any) -> List[Dict[str, Any]]:

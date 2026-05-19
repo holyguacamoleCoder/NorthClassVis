@@ -29,6 +29,28 @@ def test_consult_allows_read():
     assert decision["behavior"] == "allow"
 
 
+def test_consult_denies_governance_paths():
+    pm = PermissionManager(mode=CapabilityMode.CONSULT)
+    for path in (".sessions/index.json", ".agent_audit/read.jsonl", ".task_outputs/x.txt"):
+        decision = pm.check("read_file", {"path": path})
+        assert decision["behavior"] == "deny", path
+
+
+def test_consult_denies_path_traversal_to_governance():
+    pm = PermissionManager(mode=CapabilityMode.CONSULT)
+    decision = pm.check("read_file", {"path": "reports/../.sessions/index.json"})
+    assert decision["behavior"] == "deny"
+
+
+def test_consult_denies_absolute_agent_state_path():
+    from common.paths import AGENT_STATE_DIR
+
+    pm = PermissionManager(mode=CapabilityMode.CONSULT)
+    path = str(AGENT_STATE_DIR / "sessions" / "index.json")
+    decision = pm.check("read_file", {"path": path})
+    assert decision["behavior"] == "deny"
+
+
 def test_analyze_blocks_write():
     pm = PermissionManager(mode=CapabilityMode.ANALYZE)
     decision = pm.check("write_file", {"path": "reports/a.md"})
@@ -111,10 +133,12 @@ def test_filter_tools_includes_write_in_produce():
 
 
 def test_safe_path_error_message():
-    from tools.base_tool import WORKSPACE_PATH_ERROR, run_read_file
+    from tools.base_tool import HIDDEN_PATH_ERROR, WORKSPACE_PATH_ERROR, run_read_file
 
-    out = run_read_file("../backend/agent/loop.py")
-    assert out == WORKSPACE_PATH_ERROR
+    out_escape = run_read_file("../backend/agent/loop.py")
+    assert out_escape in (WORKSPACE_PATH_ERROR, HIDDEN_PATH_ERROR)
+    out_gov = run_read_file("reports/../.sessions/index.json")
+    assert out_gov == HIDDEN_PATH_ERROR
 
 
 if __name__ == "__main__":
@@ -122,6 +146,9 @@ if __name__ == "__main__":
         test_path_matches_nested_reports,
         test_consult_blocks_write,
         test_consult_allows_read,
+        test_consult_denies_governance_paths,
+        test_consult_denies_path_traversal_to_governance,
+        test_consult_denies_absolute_agent_state_path,
         test_analyze_blocks_write,
         test_analyze_allows_todo_write,
         test_produce_allows_reports,

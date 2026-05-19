@@ -1,7 +1,7 @@
 # Paths are relative to data/ (sandbox: tools.base_tool._safe_path).
 # Write path policy lives here; mode_check only gates tool + capability mode.
 
-from .paths import WRITE_ALLOW_PATTERNS, WRITE_DENY_PATTERNS
+from .paths import DATA_GOVERNANCE_DENY_PATTERNS, WRITE_ALLOW_PATTERNS, WRITE_DENY_PATTERNS
 
 _DEFAULT_WRITE_ALLOW = [
     {"tool": tool, "path": pattern, "behavior": "allow"}
@@ -15,7 +15,14 @@ _DEFAULT_WRITE_DENY = [
     for pattern in WRITE_DENY_PATTERNS
 ]
 
+_GOVERNANCE_DENY = [
+    {"tool": tool, "path": pattern, "behavior": "deny"}
+    for tool in ("read_file", "write_file", "edit_file", "list_files")
+    for pattern in DATA_GOVERNANCE_DENY_PATTERNS
+]
+
 DEFAULT_RULES: list[dict] = [
+    *_GOVERNANCE_DENY,
     *_DEFAULT_WRITE_DENY,
     *_DEFAULT_WRITE_ALLOW,
     {"tool": "read_file", "path": "*", "behavior": "allow"},

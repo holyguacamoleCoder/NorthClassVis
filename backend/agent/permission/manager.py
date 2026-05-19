@@ -7,9 +7,11 @@ from .modes import (
     MODE_TOOL_ALLOWLIST,
 )
 from .paths import (
+    governance_path_denial_reason,
+    is_governance_data_path,
     is_writable_path,
     path_matches_pattern,
-    to_data_relative_path,
+    resolve_data_relative_path,
     writable_path_denial_reason,
 )
 from .rules import DEFAULT_RULES
@@ -37,8 +39,27 @@ class PermissionManager:
     def check(self, tool_name: str, tool_input: dict) -> dict:
         """Returns: {"behavior": "allow"|"deny"|"ask", "reason": str}"""
         tool_input = dict(tool_input or {})
-        if "path" in tool_input and tool_input["path"] is not None:
-            tool_input["path"] = to_data_relative_path(str(tool_input["path"]))
+        raw_path = str(tool_input.get("path") or "") if tool_input.get("path") is not None else ""
+        if raw_path and tool_name in (
+            "read_file",
+            "write_file",
+            "edit_file",
+            "list_files",
+        ):
+            try:
+                tool_input["path"] = resolve_data_relative_path(raw_path)
+            except ValueError:
+                return {
+                    "behavior": "deny",
+                    "reason": governance_path_denial_reason(raw_path),
+                }
+            if is_governance_data_path(raw_path):
+                return {
+                    "behavior": "deny",
+                    "reason": governance_path_denial_reason(raw_path),
+                }
+
+        path_for_policy = str(tool_input.get("path") or "")
 
         for rule in self.rules:
             if rule.get("behavior") != "deny":

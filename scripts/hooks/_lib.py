@@ -10,13 +10,33 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"
-AUDIT_DIR = DATA_DIR / ".agent_audit"
+
+
 def _env_path(name: str, default: Path) -> Path:
     raw = os.environ.get(name, "").strip()
     return Path(raw) if raw else default
 
 
+AGENT_STATE_DIR = Path(
+    os.environ.get("AGENT_STATE_DIR", str(ROOT / "backend" / ".agent"))
+).resolve()
+AUDIT_DIR = _env_path("AGENT_AUDIT_DIR", AGENT_STATE_DIR / "audit")
 READ_AUDIT_LOG = _env_path("AGENT_READ_AUDIT_LOG", AUDIT_DIR / "read.jsonl")
+
+# Migrate legacy audit dir on hook import (hooks run in separate processes).
+_LEGACY_AUDIT = DATA_DIR / ".agent_audit"
+if _LEGACY_AUDIT.is_dir() and _LEGACY_AUDIT != AUDIT_DIR and not (AUDIT_DIR / "read.jsonl").exists():
+    try:
+        import shutil
+
+        AUDIT_DIR.parent.mkdir(parents=True, exist_ok=True)
+        if not AUDIT_DIR.exists():
+            shutil.move(str(_LEGACY_AUDIT), str(AUDIT_DIR))
+        elif not any(AUDIT_DIR.iterdir()):
+            shutil.rmtree(AUDIT_DIR, ignore_errors=True)
+            shutil.move(str(_LEGACY_AUDIT), str(AUDIT_DIR))
+    except OSError:
+        pass
 EXPORT_MANIFEST = _env_path(
     "AGENT_EXPORT_MANIFEST", DATA_DIR / "exports" / "manifest.jsonl"
 )
@@ -47,7 +67,9 @@ def hook_tool_input() -> dict:
 
 
 def normalize_data_path(path: str) -> str:
-    raw = str(path or "").strip().replace("\\", "/").lstrip("./")
+    raw = str(path or "").strip().replace("\\", "/")
+    while raw.startswith("./"):
+        raw = raw[2:]
     if raw.startswith("data/"):
         raw = raw[5:]
     return raw

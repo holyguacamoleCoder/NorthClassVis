@@ -16,8 +16,10 @@ from context import (
 )
 from hooks import HookManager
 from permission import PermissionManager, filter_tools
+from recovery import DEFAULT_RECOVERY_CONFIG, RecoveryHandler, RecoveryState
 from skills import SkillRegistry, get_registry
 from tools import TOOLS, execute_tool_calls
+from session.turns import resolve_loop_turn_count
 from tools.todo_write import get_todo_reminder, mark_round_without_todo_update
 
 _log = get_logger("loop")
@@ -30,9 +32,11 @@ class LoopState:
     hooks: HookManager | None = None
     session_context: list[str] = field(default_factory=list)
     skills: SkillRegistry | None = None
+    session_id: str | None = None
     messages_count: int = 1
     turn_count: int = 1
     continue_reason: str | None = None
+    recovery: RecoveryState = field(default_factory=RecoveryState)
 
 
 MAX_TOKENS = 8192
@@ -46,6 +50,7 @@ class AgentLoop:
         compact_config=DEFAULT_CONFIG,
         permission: PermissionManager | None = None,
         hooks: HookManager | None = None,
+        recovery_config=DEFAULT_RECOVERY_CONFIG,
     ):
         self.llm_client = llm_client or LLMClient()
         self.loop_state = loop_state or LoopState(messages=[])
@@ -53,6 +58,11 @@ class AgentLoop:
         self.permission = permission or loop_state.permission or PermissionManager()
         self.hooks = hooks if hooks is not None else loop_state.hooks
         self._prompt_builder = SystemPromptBuilder()
+        self._recovery = RecoveryHandler(
+            self.llm_client,
+            config=recovery_config,
+            state=self.loop_state.recovery,
+        )
 
     def _system_prompt(self) -> str:
         registry = self.loop_state.skills or get_registry()
@@ -90,6 +100,17 @@ class AgentLoop:
             reason="manual",
         )
 
+    def _apply_recovery_compaction(self) -> None:
+        if not self.compact_config.enabled:
+            return
+        self.loop_state.messages = compact_history(
+            self.loop_state.messages,
+            self.llm_client,
+            self.loop_state.compact,
+            config=self.compact_config,
+            reason="recovery",
+        )
+
     def run_turn(self):
         self._apply_pre_turn_compaction()
 
@@ -101,30 +122,41 @@ class AgentLoop:
             messages=len(self.loop_state.messages),
         )
         visible_tools = filter_tools(TOOLS, self.permission.mode)
-        raw_response = self.llm_client.create_completion(
+        raw_response, failure_reason = self._recovery.request_completion(
             system_prompt=self._system_prompt(),
-            messages=normalize_message(self.loop_state.messages),
+            messages=self.loop_state.messages,
             tools=visible_tools,
-            max_tokens=MAX_TOKENS
+            max_tokens=MAX_TOKENS,
+            normalize_fn=normalize_message,
+            compact_fn=self._apply_recovery_compaction,
         )
         if not raw_response or not getattr(raw_response, "choices", None):
-            self.loop_state.continue_reason = "llm_no_response"
-            log_event(_log, logging.WARNING, "llm_no_response", turn=self.loop_state.turn_count)
+            self.loop_state.continue_reason = failure_reason or "llm_no_response"
+            log_event(
+                _log,
+                logging.WARNING,
+                "llm_no_response",
+                turn=self.loop_state.turn_count,
+                recovery_reason=failure_reason,
+            )
             self.loop_state.messages.append({
                 "role": "assistant",
-                "content": "LLM 调用失败：未返回有效响应（请检查 API Key、模型配置或网络连接）。",
+                "content": _recovery_failure_message(failure_reason),
             })
             return False
         response = raw_response.choices[0]
 
-        # 将LLM的响应添加到messages中（Assistant）
-        assistant_message = {
-            "role": "assistant",
-            "content": response.message.content or "",
-        }
-        if getattr(response.message, "tool_calls", None):
-            assistant_message["tool_calls"] = response.message.tool_calls
-        self.loop_state.messages.append(assistant_message)
+        # 将LLM的响应添加到messages中（Assistant）；截断续写时 handler 已追加
+        if self.loop_state.messages and self.loop_state.messages[-1].get("role") == "assistant":
+            assistant_message = self.loop_state.messages[-1]
+        else:
+            assistant_message = {
+                "role": "assistant",
+                "content": response.message.content or "",
+            }
+            if getattr(response.message, "tool_calls", None):
+                assistant_message["tool_calls"] = response.message.tool_calls
+            self.loop_state.messages.append(assistant_message)
 
         # 如果LLM没有工具调用，则结束循环
         if response.finish_reason != "tool_calls":
@@ -209,8 +241,21 @@ class AgentLoop:
         )
         return True
 
+    def _align_turn_count_for_user_round(self) -> None:
+        """Continue turn index after restart / new user message (not reset to 1)."""
+        self.loop_state.turn_count = resolve_loop_turn_count(
+            self.loop_state.messages,
+            stored_user_turn_count=self.loop_state.turn_count,
+        )
+
     def run_loop(self):
-        log_event(_log, logging.INFO, "loop_begin")
+        self._align_turn_count_for_user_round()
+        log_event(
+            _log,
+            logging.INFO,
+            "loop_begin",
+            turn=self.loop_state.turn_count,
+        )
         while self.run_turn():
             pass
         log_event(
@@ -221,3 +266,19 @@ class AgentLoop:
             turn=self.loop_state.turn_count,
             messages=len(self.loop_state.messages),
         )
+
+
+def _recovery_failure_message(reason: str | None) -> str:
+    if reason == "output_truncated_exhausted":
+        return (
+            "LLM 输出多次达到长度上限，已无法自动续写。"
+            "请缩小任务范围、要求分步输出，或使用 compact 压缩上下文后重试。"
+        )
+    if reason == "context_overflow_exhausted":
+        return (
+            "LLM 上下文过长，自动压缩后仍无法完成调用。"
+            "请使用 compact 工具或开启新会话后重试。"
+        )
+    if reason == "transient_error_exhausted":
+        return "LLM 调用因网络或限流多次失败，请稍后重试。"
+    return "LLM 调用失败：未返回有效响应（请检查 API Key、模型配置或网络连接）。"

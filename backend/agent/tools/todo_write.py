@@ -87,6 +87,36 @@ class TodoManager:
 todo_manager = TodoManager()
 
 
+def reset_todo_state() -> None:
+    todo_manager.state = PlaningState()
+
+
+def export_todo_snapshot() -> tuple[list[dict[str, str]], int]:
+    items: list[dict[str, str]] = []
+    for item in todo_manager.state.items:
+        row: dict[str, str] = {
+            "content": item.content,
+            "status": item.status,
+        }
+        if item.active_form:
+            row["active_form"] = item.active_form
+        items.append(row)
+    return items, todo_manager.state.round_since_update
+
+
+def apply_todo_snapshot(items: list[dict[str, str]], round_since_update: int = 0) -> None:
+    reset_todo_state()
+    if not items:
+        todo_manager.state.round_since_update = round_since_update
+        return
+    try:
+        todo_manager.update(items)
+    except ValueError:
+        todo_manager.state.round_since_update = round_since_update
+        return
+    todo_manager.state.round_since_update = round_since_update
+
+
 def run_todo_write(items: list) -> str:
     return todo_manager.update(items)
 
