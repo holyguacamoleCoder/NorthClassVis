@@ -114,8 +114,43 @@ LOAD_SKILL_SCHEMA = {
     },
 }
 
+SAVE_MEMORY_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "save_memory",
+        "description": "Save a persistent memory that survives across sessions.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Short identifier (e.g. prefer_tabs, report_style)",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "One-line summary of what this memory captures",
+                },
+                "type": {
+                    "type": "string",
+                    "enum": ["user", "feedback", "project", "reference"],
+                    "description": (
+                        "user=preferences, feedback=corrections, "
+                        "project=non-obvious conventions, reference=external pointers"
+                    ),
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Full memory content (multi-line OK)",
+                },
+            },
+            "required": ["name", "description", "type", "content"],
+        },
+    },
+}
+
 TOOLS = BASE_TOOLS + [
     TODO_MANAGER_SCHEMA,
     COMPACT_TOOL_SCHEMA,
     LOAD_SKILL_SCHEMA,
+    SAVE_MEMORY_SCHEMA,
 ]

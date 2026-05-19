@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,7 +20,9 @@ READ_AUDIT_LOG = _env_path("AGENT_READ_AUDIT_LOG", AUDIT_DIR / "read.jsonl")
 EXPORT_MANIFEST = _env_path(
     "AGENT_EXPORT_MANIFEST", DATA_DIR / "exports" / "manifest.jsonl"
 )
-DATA_CATALOG = DATA_DIR / "reports" / "data_file_structure_report.md"
+DATA_CATALOG = _env_path(
+    "AGENT_DATA_CATALOG", DATA_DIR / "meta" / "data_catalog.md"
+)
 
 
 def utc_now() -> str:
@@ -62,6 +65,11 @@ def is_sensitive_source(path: str) -> bool:
     if name.startswith("Data_") and name.endswith(".csv"):
         return True
     return False
+
+
+def write_json_stdout(payload: dict) -> None:
+    """Emit hook JSON on stdout as UTF-8 (Windows default console encoding may be GBK)."""
+    sys.stdout.buffer.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
 
 
 def append_jsonl(path: Path, record: dict) -> None:

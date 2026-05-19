@@ -3,15 +3,14 @@
 
 from __future__ import annotations
 
-import json
-import sys
-
-from _lib import DATA_CATALOG, ROOT
+from _lib import DATA_CATALOG, ROOT, write_json_stdout
 
 POLICY = (
-    "Analysis policy: use paths under data/ (e.g. reports/foo.md, Data_StudentInfo.csv). "
-    "Prefer read_file with a limit on large Data_*.csv files. "
-    "Do not modify raw Data_*.csv; write outputs to data/reports/ or data/exports/ in produce mode."
+    "Analysis policy: paths are relative to data/ (e.g. reports/foo.md, Data_StudentInfo.csv, "
+    "Data_SubmitRecord/SubmitRecord-Class1.csv). "
+    "Catalog source of truth: meta/data_catalog.md (injected summary below; not a report deliverable). "
+    "Use read_file with limit on Data_*.csv and Data_SubmitRecord/*.csv. "
+    "Do not modify raw datasets; write outputs only to reports/ or exports/ in produce mode."
 )
 
 
@@ -34,7 +33,7 @@ def build_context() -> str:
 
 def main() -> None:
     payload = {"additionalContext": build_context()}
-    sys.stdout.write(json.dumps(payload, ensure_ascii=False))
+    write_json_stdout(payload)
 
 
 if __name__ == "__main__":

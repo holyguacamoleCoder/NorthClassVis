@@ -8,7 +8,7 @@ class CapabilityMode(str, Enum):
 
 
 READ_ONLY_TOOLS = frozenset({"read_file", "list_files", "load_skill"})
-SESSION_TOOLS = frozenset({"todo_write", "compact"})
+SESSION_TOOLS = frozenset({"todo_write", "compact", "save_memory"})
 WRITE_TOOLS = frozenset({"write_file", "edit_file"})
 
 MODE_TOOL_ALLOWLIST: dict[CapabilityMode, frozenset[str]] = {

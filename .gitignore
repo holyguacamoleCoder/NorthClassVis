@@ -1,3 +1,6 @@
+# Agent persistent memories (local, per machine)
+.memory/
+
 # 取消对巨量数据的提交
 data/.transcripts/
 data/.task_outputs/

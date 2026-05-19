@@ -1,5 +1,6 @@
 from loop import AgentLoop, LoopState
 from common.llm_client import LLMClient
+from common.memory import get_memory_manager
 from hooks import HookManager
 from permission import CapabilityMode, CliApprovalHandler, PermissionManager
 from skills import get_registry
@@ -32,6 +33,12 @@ def pipeline():
     session_context: list[str] = list(session_result.messages)
     if session_context:
         print("[SessionStart: data catalog injected into agent context]")
+
+    mem_count = get_memory_manager().load_all()
+    if mem_count:
+        print(f"[Memories: {mem_count} loaded from .memory/]")
+    else:
+        print("[Memories: none yet — agent can create them with save_memory]")
 
     skill_registry = get_registry()
     if skill_registry.documents:
@@ -70,6 +77,15 @@ def pipeline():
                 print(f"Usage: /mode <{MODE_HELP}>")
             continue
         
+        if query.strip() == "/memories":
+            mgr = get_memory_manager()
+            if mgr.memories:
+                for name, mem in mgr.memories.items():
+                    print(f"  [{mem['type']}] {name}: {mem['description']}")
+            else:
+                print("  (no memories)")
+            continue
+
         # 处理/rules命令
         if query.strip() == "/rules":
             for i, rule in enumerate(perms.rules):
