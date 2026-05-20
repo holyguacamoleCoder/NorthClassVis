@@ -95,4 +95,4 @@
 
 ## 7. 学业分析契约（Agent）
 
-> CSV 只读不变。契约共 **4 处**：`meta/analysis_ontology.yaml`（含个体六章）、`meta/visual_link_contract.yaml`、`meta/metrics/_index.yaml`、`backend/agent/contracts/tabular_result.schema.json`。Phase 表见 `docs/plans/agentic-analysis-roadmap.md`。
+> CSV 只读不变。契约共 **4 处**：`meta/analysis_ontology.yaml`（含个体六章）、`meta/visual_link_contract.yaml`、`meta/metrics/_index.yaml`、`backend/agent/contracts/tabular_result.schema.json`。逻辑资源注册表：**`meta/resource_registry.yaml`**（Phase 1，`backend/agent/data/registry.py` 加载）。Phase 表见 `docs/plans/agentic-analysis-roadmap.md`。

@@ -16,7 +16,7 @@
 | Ph | 分支 | 要点 |
 |----|------|------|
 | 0 | `feat/analysis-contracts` | 上表契约；无 query_data / 新 LLM tool |
-| 1 | `feat/data-resource-registry` | `resource` id → 路径/loader；依赖 Phase 0 的 resource 字符串 |
+| 1 | `feat/data-resource-registry` | `resource` id → 路径/loader；注册表 `data/meta/resource_registry.yaml`；库 `backend/agent/data/` |
 | 2 | `feat/tabular-query-primitive` | query/aggregate → tabular_result + result_ref |
 | 3 | `feat/generic-agent-tools` | inspect_schema、filter_context；停增业务名 tool |
 | 4 | `feat/metrics-runtime` | 按 metrics 定义计算并写入 evidence |
@@ -27,3 +27,22 @@
 各 `feat/*` 合入 `epic/agentic-analysis`。Phase 1 不改 archetype 语义，冲突先改契约再写代码。
 
 参考：`backend/test/test_agent_contract.py`、`frontend/src/App.vue`、`data/meta/data_catalog.md` §7
+
+## Phase 1 验收（`feat/data-resource-registry`）
+
+- [x] `data/meta/resource_registry.yaml` — `student_info`、`title_info`、`submit_record`、`submit_record_joined`、`week_aggregation`
+- [x] `backend/agent/data/` — `resolve`、`loaders`、`derived`、`limits`、`tabular`、`FilterContext`
+- [x] `backend/test/test_resource_registry.py` — join / series / truncated / 异常
+- [x] metrics `_index.yaml` 引用的 resource id 均可 `resolve`
+- [ ] 无新增 LLM TOOLS（本 Phase 不注册 tool schema）
+
+**Phase 2 调用示例**（`feat/tabular-query-primitive`）：
+
+```python
+# sys.path: backend + backend/agent
+from data import resolve, default_limits, dataframe_to_tabular
+
+resolved = resolve("submit_record_joined", classes=["Class1"])
+df = resolved.load()
+tabular = dataframe_to_tabular(df, resolved.resource_id, limits=default_limits())
+```

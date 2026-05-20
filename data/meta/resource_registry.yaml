@@ -1,0 +1,97 @@
+# NorthClassVision 逻辑数据资源注册表（Phase 1）
+# 解析：backend/agent/data/registry.py
+# 与 metrics/_index.yaml 中 resource 字段一致。
+
+version: "0.1.0"
+updated: "2026-05-20"
+description: |
+  逻辑 resource id → 物理路径或 derived loader。
+  Join 键：student_ID（提交↔学生）、title_ID（提交↔题目）、class（提交）、major（学生）。
+
+defaults:
+  limits:
+    max_rows: 5000
+    max_bytes: 1048576
+    timeout_sec: 60
+
+join_keys:
+  student_ID:
+    description: 学生唯一标识
+    links: [submit_record, student_info, submit_record_joined, week_aggregation]
+  title_ID:
+    description: 题目唯一标识
+    links: [submit_record, title_info, submit_record_joined]
+  class:
+    description: 班级名（与 SubmitRecord 文件名一致，如 Class1）
+    links: [submit_record, submit_record_joined]
+  major:
+    description: 专业代码（Data_StudentInfo.major）
+    links: [student_info, submit_record_joined]
+
+resources:
+  student_info:
+    id: student_info
+    kind: csv
+    path_pattern: "data/Data_StudentInfo.csv"
+    join_keys: [student_ID, major]
+    columns: [index, student_ID, sex, age, major]
+
+  title_info:
+    id: title_info
+    kind: csv
+    path_pattern: "data/Data_TitleInfo.csv"
+    join_keys: [title_ID]
+    columns: [index, title_ID, score, knowledge, sub_knowledge]
+
+  submit_record:
+    id: submit_record
+    kind: csv
+    path_pattern: "data/Data_SubmitRecord/SubmitRecord-{class}.csv"
+    join_keys: [student_ID, title_ID, class]
+    params:
+      class:
+        required: true
+        description: 单个班级名，如 Class1
+    columns:
+      - index
+      - class
+      - time
+      - state
+      - score
+      - title_ID
+      - method
+      - memory
+      - timeconsume
+      - student_ID
+
+  submit_record_joined:
+    id: submit_record_joined
+    kind: derived
+    loader: build_submit_record_joined
+    depends_on: [submit_record, title_info, student_info]
+    join_keys: [student_ID, title_ID, class, major, knowledge]
+    params:
+      classes:
+        required: true
+        description: 班级名列表，如 ["Class1"]
+      majors:
+        required: false
+        description: 可选专业过滤（Data_StudentInfo.major）
+
+  week_aggregation:
+    id: week_aggregation
+    kind: derived
+    loader: build_week_aggregation
+    depends_on: [submit_record_joined]
+    join_keys: [student_ID, week_index]
+    params:
+      classes:
+        required: true
+      majors:
+        required: false
+      student_ids:
+        required: false
+      week_range:
+        required: false
+        description: "[start_week, end_week]；缺省为最近 16 周"
+    output_columns: [student_ID, week_index, peak_value, direction]
