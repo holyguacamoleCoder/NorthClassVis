@@ -1,0 +1,42 @@
+# visual_links[]：{ view, params [, label] } → App.vue setAgentVisualLink → 各 View watch
+# HTTP 顶层字段见 backend/test/test_agent_contract.py；mock 见 frontend/src/api/agent.js
+
+version: "0.1.0"
+view_enum: [WeekView, QuestionView, StudentView, PortraitView, ScatterView]
+
+view_params:
+  WeekView:
+    # WeekView.vue：params.kind (1-3) 或 params.cluster (0-2) → selectedKind
+    kind: { type: integer, enum: [1, 2, 3], optional: true }
+    cluster: { type: integer, enum: [0, 1, 2], optional: true, maps_to: "kind = cluster + 1" }
+    example: { view: WeekView, params: { kind: 1 } }
+
+  QuestionView:
+    # QuestionView.vue：params.knowledge 必填
+    knowledge: { type: string, required: true }
+    example: { view: QuestionView, params: { knowledge: 链表 } }
+
+  StudentView:
+    # App.vue 写入 setAgentSuggestedStudentIds；StudentView 拉树高亮
+    student_ids: { type: array, items: string, required: true, minItems: 1 }
+    example:
+      view: StudentView
+      params:
+        student_ids: [8b6d1125760bd3939b6e, 63eef37311aaac915a45]
+
+  PortraitView:
+    # 前端 handler 待实现；标签支持 cluster_id
+    cluster_id: { type: integer, enum: [0, 1, 2], optional: true }
+    student_ids: { type: array, items: string, optional: true }
+    example: { view: PortraitView, params: { cluster_id: 2 } }
+
+  ScatterView:
+    cluster_id: { type: integer, enum: [0, 1, 2], optional: true }
+    student_ids: { type: array, items: string, optional: true }
+    example: { view: ScatterView, params: { cluster_id: 1 } }
+
+archetype_minimum_links:
+  trend_decline: [WeekView, QuestionView, StudentView]
+  knowledge_weakness: [QuestionView, StudentView]
+  student_diagnosis: [WeekView, StudentView, QuestionView, PortraitView, ScatterView]
+  class_overview: [WeekView, QuestionView]

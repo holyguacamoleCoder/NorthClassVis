@@ -1,0 +1,21 @@
+{
+  "schema": [
+    { "name": "class", "type": "string", "description": "班级" },
+    { "name": "knowledge", "type": "string", "description": "知识点" },
+    { "name": "correct_rate", "type": "number", "description": "正确率 0-1" },
+    { "name": "submission_count", "type": "integer", "description": "提交次数" }
+  ],
+  "rows": [
+    ["Class1", "链表", 0.62, 1840],
+    ["Class1", "图遍历", 0.78, 2105],
+    ["Class1", "排序", 0.85, 1950]
+  ],
+  "meta": {
+    "resource": "submit_record_joined",
+    "truncated": false,
+    "result_ref": "session:b9ad9e00bf96:tabular:001",
+    "granularity_hint": "class",
+    "lens_hint": "question",
+    "rows_scanned": 5895
+  }
+}

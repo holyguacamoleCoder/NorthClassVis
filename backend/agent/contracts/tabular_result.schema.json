@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://northclassvision.local/schemas/tabular_result.json",
+  "title": "TabularResult",
+  "description": "L4 通用 query/aggregate 工具返回的表格化结果（Phase 0 契约）",
+  "type": "object",
+  "required": ["schema", "rows", "meta"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "type": "array",
+      "description": "列定义，顺序与 rows 中每行数组一致",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "type"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": ["string", "integer", "number", "boolean", "timestamp"]
+          },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "rows": {
+      "type": "array",
+      "description": "行数据；每行为与 schema 等长的值数组",
+      "items": {
+        "type": "array"
+      }
+    },
+    "meta": {
+      "type": "object",
+      "required": ["resource"],
+      "additionalProperties": true,
+      "properties": {
+        "resource": {
+          "type": "string",
+          "description": "逻辑资源 id（Phase 1 registry 解析为物理路径/加载器）"
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "rows 是否因行数上限被截断"
+        },
+        "result_ref": {
+          "type": "string",
+          "description": "大块结果引用，如 backend/.agent/... 路径或会话内 id"
+        },
+        "granularity_hint": {
+          "type": "string",
+          "enum": ["student", "class", "major"]
+        },
+        "lens_hint": {
+          "type": "string",
+          "enum": ["week", "question", "student", "portrait", "scatter"]
+        },
+        "rows_scanned": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "扫描的原始行数（含被过滤未返回的行）"
+        }
+      }
+    }
+  }
+}

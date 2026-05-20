@@ -1,0 +1,270 @@
+# NorthClassVision 学业分析本体（Phase 0 冻结）
+# 解析：Python yaml.safe_load；业务语义供 L3 规划器 / L2 skills 引用，不在 tool 名中暴露。
+
+version: "0.1.0"
+updated: "2026-05-20"
+description: |
+  双轴学业分析契约：Granularity（student / class / major）× Lens（五视图）。
+  工具层只执行通用原语；问题类型（archetype）与章节要求定义在此。
+  个体分析必须厚报告：五视图联动，Student 树仅为 Student Lens 一章。
+  交叉引用：visual_link_contract.yaml、metrics/_index.yaml、docs/plans/agentic-analysis-roadmap.md
+
+# ---------------------------------------------------------------------------
+# Granularity（分析主体粒度）
+# ---------------------------------------------------------------------------
+granularities:
+  student:
+    label_zh: 学生个体
+    description: 以一名或多名 student_ID 为分析主体；需 class/major 过滤上下文。
+    default_aggregation_key: student_ID
+    join_keys: [student_ID, class, major]
+    default_filter_context: [classes, majors, selected_student_ids]
+    notes: 个体诊断禁止仅输出 StudentView 跳转；须覆盖 week_trend + question_anchors 等章节。
+
+  class:
+    label_zh: 班级
+    description: 以 SubmitRecord 中 class 字段（如 Class1）为聚合单元。
+    default_aggregation_key: class
+    join_keys: [class, student_ID, title_ID]
+    default_filter_context: [classes]
+
+  major:
+    label_zh: 专业
+    description: 以 Data_StudentInfo.major 为聚合单元，常跨班。
+    default_aggregation_key: major
+    join_keys: [major, student_ID]
+    default_filter_context: [majors, classes]
+
+# ---------------------------------------------------------------------------
+# Lens（可视化 / 叙述视角，对齐 update-peak4 五视图）
+# ---------------------------------------------------------------------------
+lenses:
+  week:
+    label_zh: 周趋势
+    view: WeekView
+    description: 时间轴上的 peak/活跃度与 kind 分层；班级或个体周趋势。
+  question:
+    label_zh: 题目分布
+    view: QuestionView
+    description: 按 knowledge 筛选题目卡片、提交时间线与得分分布。
+  student:
+    label_zh: 学生结构
+    view: StudentView
+    description: 学生树：knowledge → state → score；可高亮 agent 推荐学生。
+  portrait:
+    label_zh: 画像
+    view: PortraitView
+    description: 聚类画像：知识点环 + 雷达维度（Enthusiasm、Rank、Score 等）。
+  scatter:
+    label_zh: 散点聚类
+    view: ScatterView
+    optional: true
+    description: 全体学生在特征空间的 cluster 分布；个体报告的 peer_context 支撑。
+
+# ---------------------------------------------------------------------------
+# Granularity × Lens 优先级矩阵（3×4，scatter 列单独标注 optional）
+# primary = 该粒度下默认必须先覆盖的 lens
+# secondary = 建议联动、证据可补强
+# n/a = 非该粒度的主路径（仍可作 drill-down）
+# ---------------------------------------------------------------------------
+matrix:
+  student:
+    week: primary
+    question: primary
+    student: primary
+    portrait: secondary
+    scatter: secondary
+  class:
+    week: primary
+    question: primary
+    student: secondary
+    portrait: secondary
+    scatter: n/a
+  major:
+    week: primary
+    question: secondary
+    student: n/a
+    portrait: secondary
+    scatter: n/a
+
+# ---------------------------------------------------------------------------
+# 个体厚报告：scope → week_trend → student_structure → question_anchors → peer_context → actions
+# HTTP answer 按序用小标题；Markdown 报告用 ## <id>；禁止仅 StudentView 一跳
+# ---------------------------------------------------------------------------
+student_report_sections:
+  - id: scope
+    lens: null
+    visual_views: []
+    description: 班级/专业/student_ID、时间窗、抽样说明。
+  - id: week_trend
+    lens: week
+    visual_views: [WeekView]
+    description: peak 走势、近 k 周对比、是否下滑。
+  - id: student_structure
+    lens: student
+    visual_views: [StudentView]
+    description: 知识树薄弱枝、错误 state 模式。
+  - id: question_anchors
+    lens: question
+    visual_views: [QuestionView]
+    description: 锚定知识点/题目的得分与提交峰。
+  - id: peer_context
+    lens: scatter
+    visual_views: [ScatterView, PortraitView]
+    description: cluster 位置、雷达维度、同伴对比。
+  - id: actions
+    lens: null
+    visual_views: []
+    description: 教学建议；映射 HTTP actions[]。
+
+student_report_rules:
+  anti_patterns:
+    - 仅 StudentView visual_link 却声称完整个体诊断
+    - 无 week_trend 证据却断言「最近变差」
+    - 无 student_ID 仍走 student_diagnosis（应澄清或降为 class_overview）
+  archetype_sections:
+    student_diagnosis: [scope, week_trend, student_structure, question_anchors, peer_context, actions]
+    trend_decline_student: [scope, week_trend, student_structure, question_anchors, peer_context, actions]
+    trend_decline_class: [scope, week_trend, question_anchors, actions]
+
+# ---------------------------------------------------------------------------
+# Question archetypes（自然语言意图 → 规划约束）
+# ---------------------------------------------------------------------------
+question_archetypes:
+  trend_decline:
+    label_zh: 趋势下滑
+    description: |
+      如「变差」「下滑」「最近两周表现下降」。以时间序列为首要证据，
+      并落到具体学生结构与题目锚点。
+    example_questions:
+      - 最近两周班级整体是不是变差了？
+      - 这名学生最近表现下滑吗？
+    primary_lens: week
+    granularity_default: class
+    granularity_allowed: [class, student]
+    required_sections:
+      - scope
+      - week_trend
+      - question_anchors
+    required_sections_student:
+      - scope
+      - week_trend
+      - student_structure
+      - question_anchors
+      - peer_context
+      - actions
+    required_visual_links:
+      - view: WeekView
+        params_hint: "{ kind: 1|2|3 } 或 { cluster: 0|1|2 }"
+      - view: QuestionView
+        params_hint: "{ knowledge: <知识点名> }"
+      - view: StudentView
+        params_hint: "{ student_ids: [<id>, ...] }"
+    optional_visual_links:
+      - view: PortraitView
+        params_hint: "{ cluster_id: 0|1|2 }"
+      - view: ScatterView
+        params_hint: "{ cluster_id: 0|1|2 }"
+    min_evidence_count: 3
+    suggested_metrics: [week_peak_trend, correct_rate, knowledge_error_share]
+
+  knowledge_weakness:
+    label_zh: 知识点薄弱
+    description: |
+      如「链表薄弱」「某知识点错误率高」。以 Question + Student 结构为主。
+    example_questions:
+      - 班级在链表相关题目上表现如何？
+      - 哪些学生在图遍历知识点上最弱？
+    primary_lens: question
+    granularity_default: class
+    granularity_allowed: [class, student, major]
+    required_sections:
+      - scope
+      - question_anchors
+    required_sections_student:
+      - scope
+      - question_anchors
+      - student_structure
+      - actions
+    required_visual_links:
+      - view: QuestionView
+        params_hint: "{ knowledge: <知识点> }"
+      - view: StudentView
+        params_hint: "{ student_ids: [...] } 当 granularity=student"
+    optional_visual_links:
+      - view: WeekView
+        params_hint: "{ kind: <int> }"
+      - view: PortraitView
+        params_hint: "{ cluster_id: <int> }"
+    min_evidence_count: 2
+    suggested_metrics: [knowledge_error_share, correct_rate]
+
+  student_diagnosis:
+    label_zh: 个体诊断
+    description: |
+      厚个体报告：必须提供 student_ID（或 context.selected_student_ids），
+      五视图联动，不得仅 StudentView 一跳了之。
+    example_questions:
+      - 请诊断学生 8b6d1125760bd3939b6e 的学业问题
+      - 给我这名学生的全面学业分析
+    primary_lens: student
+    granularity_default: student
+    granularity_allowed: [student]
+    requires_student_id: true
+    required_sections:
+      - scope
+      - week_trend
+      - student_structure
+      - question_anchors
+      - peer_context
+      - actions
+    required_visual_links:
+      - view: WeekView
+        params_hint: "{ kind: <int> }"
+      - view: StudentView
+        params_hint: "{ student_ids: [<target_id>] }"
+      - view: QuestionView
+        params_hint: "{ knowledge: <薄弱知识点> }"
+      - view: PortraitView
+        params_hint: "{ cluster_id: <学生所在 cluster> }"
+      - view: ScatterView
+        params_hint: "{ cluster_id: <int>, student_ids: [<id>] }"
+    optional_visual_links: []
+    min_evidence_count: 4
+    suggested_metrics: [correct_rate, week_peak_trend, knowledge_error_share]
+
+  class_overview:
+    label_zh: 班级整体
+    description: |
+      班级层总览：周趋势 + 题目结构为主；个体仅作 secondary drill-down。
+    example_questions:
+      - 最近两周 Class1 整体表现如何？
+      - 这个班哪些知识点最薄弱？
+    primary_lens: week
+    granularity_default: class
+    granularity_allowed: [class, major]
+    required_sections:
+      - scope
+      - week_trend
+      - question_anchors
+      - actions
+    required_visual_links:
+      - view: WeekView
+        params_hint: "{ kind: 1 } 或默认全班"
+      - view: QuestionView
+        params_hint: "{ knowledge: <optional> }"
+    optional_visual_links:
+      - view: StudentView
+        params_hint: "{ student_ids: [...] } 建议关注名单"
+      - view: PortraitView
+        params_hint: "{ cluster_id: <int> }"
+    min_evidence_count: 2
+    suggested_metrics: [correct_rate, week_peak_trend, knowledge_error_share]
+
+# ---------------------------------------------------------------------------
+# HTTP 交付层交叉引用（实现见 backend/test/test_agent_contract.py）
+# ---------------------------------------------------------------------------
+http_delivery_contract:
+  top_level_fields: [answer, evidence, actions, visual_links, trace]
+  evidence_item: { tool: string, summary: string }
+  visual_link_item_ref: meta/visual_link_contract.yaml

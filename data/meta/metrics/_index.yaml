@@ -1,0 +1,30 @@
+# 学业指标（Phase 0，指标少时集中在此文件；增多后再拆 <id>.yaml）
+version: "0.1.0"
+updated: "2026-05-20"
+
+definitions:
+  correct_rate:
+    description: 指定 filter_context 下正答（默认 Absolutely_Correct）占比。
+    resource: submit_record_joined
+    formula_hint: "count(state in POSITIVE) / count(*) 按 student_ID|class|major 分组"
+    granularity_allowed: [student, class, major]
+    lens: [week, question, student]
+    output: { type: scalar, unit: ratio_0_1 }
+
+  week_peak_trend:
+    description: 周 peak 强度序列，用于 trend_decline / class_overview。
+    resource: week_aggregation
+    formula_hint: "slope(peak) 或 compare(last_k vs prior_k weeks)；class 层取 median"
+    granularity_allowed: [student, class]
+    lens: [week]
+    output: { type: series, fields: [week_index, peak_value, direction] }
+
+  knowledge_error_share:
+    description: 某 knowledge 下非正答提交占比。
+    resource: submit_record_joined
+    formula_hint: "join TitleInfo；error_share(k)=errors@k / total@k"
+    granularity_allowed: [student, class, major]
+    lens: [question, student]
+    parameters:
+      knowledge: { required: true }
+    output: { type: scalar, unit: ratio_0_1 }
