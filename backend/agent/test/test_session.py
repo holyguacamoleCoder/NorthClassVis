@@ -10,7 +10,7 @@ if str(AGENT_DIR) not in sys.path:
 from context.state import CompactState
 from session import FileSessionStore, SessionManager
 from session.models import ChatSession
-from tools.todo_write import export_todo_snapshot, reset_todo_state, run_todo_write
+from tools.handlers.todo_write import export_todo_snapshot, reset_todo_state, run_todo_write
 
 
 @pytest.fixture

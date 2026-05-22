@@ -8,13 +8,13 @@ if str(AGENT_ROOT) not in sys.path:
     sys.path.insert(0, str(AGENT_ROOT))
 
 from permission.modes import MODE_TOOL_ALLOWLIST, CapabilityMode
-from tools.tool_repair import (
+from tools.runtime.repair import (
     apply_arg_repairs,
     normalize_tool_name,
     repair_tool_call,
     resolve_tool_name,
 )
-from tools.tool_specs import TOOL_SPECS, build_tool_specs
+from tools.runtime.specs import TOOL_SPECS, build_tool_specs
 
 
 ANALYZE_ALLOWED = MODE_TOOL_ALLOWLIST[CapabilityMode.ANALYZE]

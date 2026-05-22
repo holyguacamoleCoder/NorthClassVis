@@ -18,7 +18,7 @@ from common.system_prompt import SystemPromptBuilder, SystemPromptContext
 from permission import CapabilityMode, filter_tools
 from permission.modes import MODE_TOOL_ALLOWLIST
 from skills import SkillRegistry
-from tools.schemas import TOOLS
+from tools.definitions.schemas import TOOLS
 
 
 def test_memory_save_and_prompt_section(tmp_path=None):

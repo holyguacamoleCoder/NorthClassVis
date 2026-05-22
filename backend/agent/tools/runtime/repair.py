@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from .tool_specs import TOOL_SPECS, ToolSpec
+from .specs import TOOL_SPECS, ToolSpec
 
 GLOBAL_ARG_ALIASES: dict[str, str] = {
     "file_path": "path",
@@ -37,7 +37,6 @@ class ToolRepairResult:
 
     @property
     def was_repaired(self) -> bool:
-        """True only when something visible changed (notes), not on clean canonical calls."""
         return bool(self.notes)
 
 
@@ -63,7 +62,6 @@ def resolve_tool_name(
     *,
     allowed_names: frozenset[str],
 ) -> tuple[str | None, str | None, list[str], list[str]]:
-    """Return (canonical_name, confidence, notes, suggestions)."""
     notes: list[str] = []
     original = (raw or "").strip() or None
     if not original:
@@ -135,7 +133,6 @@ def repair_tool_call(
     allowed_names: frozenset[str],
     dispatcher_keys: frozenset[str] | None = None,
 ) -> ToolRepairResult:
-    """Repair tool name and args; only auto-resolve names within allowed_names."""
     parsed_args = dict(args or {})
     original_name = (tool_name or "").strip() or None
 

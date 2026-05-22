@@ -1,14 +1,15 @@
+import runtime_bootstrap  # noqa: F401
+
 import json
 import logging
-from dataclasses import dataclass, field
+from collections import deque
 from typing import Any, Dict, List
 
 from common.llm_client import LLMClient
 from common.logger import get_logger, log_event, truncate_for_log
-from common.message import normalize_message
+from common.message import coerce_tool_calls_for_api, normalize_message
 from common.system_prompt import SystemPromptBuilder, SystemPromptContext
 from context import (
-    CompactState,
     DEFAULT_CONFIG,
     compact_history,
     estimate_context_size,
@@ -16,31 +17,29 @@ from context import (
 )
 from hooks import HookManager
 from permission import PermissionManager, filter_tools
-from recovery import DEFAULT_RECOVERY_CONFIG, RecoveryHandler, RecoveryState
+from loop_state import LoopState
+from recovery import DEFAULT_RECOVERY_CONFIG, RecoveryHandler
 from skills import SkillRegistry, get_registry
 from tools import TOOLS, execute_tool_calls
+from tools.runtime.dedupe import dedupe_tool_calls
 from session.turns import resolve_loop_turn_count
-from tools.todo_write import get_todo_reminder, mark_round_without_todo_update
+from tools.handlers.todo_write import get_todo_reminder, mark_round_without_todo_update
 
 _log = get_logger("loop")
 
-@dataclass
-class LoopState:
-    messages: List[Dict[str, Any]]
-    compact: CompactState = field(default_factory=CompactState)
-    permission: PermissionManager | None = None
-    hooks: HookManager | None = None
-    session_context: list[str] = field(default_factory=list)
-    skills: SkillRegistry | None = None
-    session_id: str | None = None
-    messages_count: int = 1
-    turn_count: int = 1
-    continue_reason: str | None = None
-    recovery: RecoveryState = field(default_factory=RecoveryState)
-
-
 MAX_TOKENS = 8192
+TOOL_LOOP_WINDOW = 6
+_LOOPING_TOOLS = frozenset({"inspect_schema", "load_skill"})
+_PRODUCTIVE_DATA_TOOLS = frozenset({"query_data", "aggregate_data"})
+ERROR_LOOP_WINDOW = 4
+_AGGREGATE_INPUT_ERROR_MARKERS = (
+    "aggregate_data 需要 input",
+    "input is required",
+)
 
+
+# AgentLoop 声明周期（loop层级）
+# request -> 预算检查 ->  compact -> LLM Call -> 响应构建
 
 class AgentLoop:
     def __init__(
@@ -63,6 +62,9 @@ class AgentLoop:
             config=recovery_config,
             state=self.loop_state.recovery,
         )
+        self._recent_tool_batches: deque[tuple[str, ...]] = deque(maxlen=TOOL_LOOP_WINDOW)
+        self._recent_tool_error_signatures: deque[tuple[str, ...]] = deque(maxlen=ERROR_LOOP_WINDOW)
+        self._recent_aggregate_input_errors: deque[bool] = deque(maxlen=ERROR_LOOP_WINDOW)
 
     def _system_prompt(self) -> str:
         registry = self.loop_state.skills or get_registry()
@@ -121,6 +123,7 @@ class AgentLoop:
             turn=self.loop_state.turn_count,
             messages=len(self.loop_state.messages),
         )
+        
         visible_tools = filter_tools(TOOLS, self.permission.mode)
         raw_response, failure_reason = self._recovery.request_completion(
             system_prompt=self._system_prompt(),
@@ -146,7 +149,7 @@ class AgentLoop:
             return False
         response = raw_response.choices[0]
 
-        # 将LLM的响应添加到messages中（Assistant）；截断续写时 handler 已追加
+        # 将LLM的响应添加到 messages（Assistant）；截断续写时 handler 可能已追加一条 assistant
         if self.loop_state.messages and self.loop_state.messages[-1].get("role") == "assistant":
             assistant_message = self.loop_state.messages[-1]
         else:
@@ -154,9 +157,16 @@ class AgentLoop:
                 "role": "assistant",
                 "content": response.message.content or "",
             }
-            if getattr(response.message, "tool_calls", None):
-                assistant_message["tool_calls"] = response.message.tool_calls
             self.loop_state.messages.append(assistant_message)
+
+        if getattr(response.message, "tool_calls", None):
+            assistant_message["tool_calls"] = coerce_tool_calls_for_api(
+                response.message.tool_calls
+            )
+            if not (assistant_message.get("content") or "").strip():
+                assistant_message["content"] = None
+        elif response.message.content:
+            assistant_message["content"] = response.message.content
 
         # 如果LLM没有工具调用，则结束循环
         if response.finish_reason != "tool_calls":
@@ -173,20 +183,58 @@ class AgentLoop:
             return False
 
         # 如果LLM有工具调用，则执行工具调用
-        tool_calls = self.llm_client.extract_tool_calls(raw_response)
+        tool_calls = dedupe_tool_calls(self.llm_client.extract_tool_calls(raw_response))
+        if self._should_break_tool_loop(tool_calls):
+            self.loop_state.continue_reason = "tool_loop_guard"
+            guard_hint = (
+                "检测到工具调用在 inspect_schema/load_skill 上反复循环，已自动停止本轮。"
+                "若你要做统计（计数/均值/分组），请切换到 /mode analyze 并使用 "
+                "query_data / aggregate_data。"
+            )
+            self.loop_state.messages.append({"role": "assistant", "content": guard_hint})
+            log_event(
+                _log,
+                logging.WARNING,
+                "tool_loop_guard_triggered",
+                turn=self.loop_state.turn_count,
+                mode=self.permission.mode.value,
+                batches=list(self._recent_tool_batches),
+            )
+            return False
         log_event(
             _log,
             logging.INFO,
             "tool_batch_begin",
             count=len(tool_calls),
             names=[c.get("name") for c in tool_calls],
+            args_preview=self._tool_args_preview(tool_calls),
         )
         tool_results = execute_tool_calls(
             tool_calls,
             compact_state=self.loop_state.compact,
             permission=self.permission,
             hooks=self.hooks,
+            analysis_context=self.loop_state.analysis_context,
         )
+
+        # 错误响应防护
+        if self._should_break_error_loop(tool_calls, tool_results):
+            self.loop_state.continue_reason = "tool_error_loop_guard"
+            guard_hint = (
+                "检测到工具调用连续报错并重复，已自动停止本轮，避免空转。"
+                "请检查工具参数：aggregate_data 需要 input/result_ref；"
+                "如为统计问题，先 query_data 再 aggregate_data。"
+            )
+            self.loop_state.messages.append({"role": "assistant", "content": guard_hint})
+            log_event(
+                _log,
+                logging.WARNING,
+                "tool_error_loop_guard_triggered",
+                turn=self.loop_state.turn_count,
+                mode=self.permission.mode.value,
+                error_signatures=list(self._recent_tool_error_signatures),
+            )
+            return False
 
         compact_calls = [c for c in tool_calls if c.get("name") == "compact"]
         compact_focus = None
@@ -240,6 +288,116 @@ class AgentLoop:
             next_turn=self.loop_state.turn_count,
         )
         return True
+
+    def _should_break_tool_loop(self, tool_calls: list[dict[str, Any]]) -> bool:
+        names = tuple(sorted(str(c.get("name") or "") for c in tool_calls if c.get("name")))
+        if not names:
+            self._recent_tool_batches.clear()
+            return False
+
+        name_set = set(names)
+        if name_set & _PRODUCTIVE_DATA_TOOLS:
+            self._recent_tool_batches.clear()
+            return False
+
+        if name_set.issubset(_LOOPING_TOOLS):
+            self._recent_tool_batches.append(names)
+        else:
+            self._recent_tool_batches.clear()
+            return False
+
+        if len(self._recent_tool_batches) < TOOL_LOOP_WINDOW:
+            return False
+
+        # Break only when all recent batches are low-value inspection loops.
+        return all(set(batch).issubset(_LOOPING_TOOLS) for batch in self._recent_tool_batches)
+
+    def _tool_args_preview(self, tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        preview: list[dict[str, Any]] = []
+        for call in tool_calls:
+            raw_args = call.get("arguments", {})
+            args = raw_args
+            if isinstance(raw_args, str):
+                try:
+                    args = json.loads(raw_args) if raw_args else {}
+                except (TypeError, ValueError):
+                    args = {"_raw": truncate_for_log(raw_args, max_len=200)}
+            if not isinstance(args, dict):
+                args = {"_value": str(args)}
+            preview.append(
+                {
+                    "name": call.get("name"),
+                    "id": call.get("id"),
+                    "args": {
+                        k: (truncate_for_log(str(v), max_len=120) if isinstance(v, str) else v)
+                        for k, v in args.items()
+                    },
+                }
+            )
+        return preview
+
+    def _should_break_error_loop(
+        self,
+        tool_calls: list[dict[str, Any]],
+        tool_results: list[dict[str, Any]],
+    ) -> bool:
+        if not tool_calls or not tool_results:
+            self._recent_tool_error_signatures.clear()
+            self._recent_aggregate_input_errors.clear()
+            return False
+
+        if self._should_break_aggregate_input_loop(tool_calls, tool_results):
+            return True
+
+        by_call_id = {c.get("id"): c.get("name") for c in tool_calls if c.get("id")}
+        signature_parts: list[str] = []
+        all_error = True
+        for result in tool_results:
+            content = result.get("content") or ""
+            if not isinstance(content, str) or not content.startswith("Error:"):
+                all_error = False
+                break
+            tool_name = by_call_id.get(result.get("tool_call_id"), "unknown")
+            short_err = truncate_for_log(content, max_len=120)
+            signature_parts.append(f"{tool_name}:{short_err}")
+
+        if not all_error or not signature_parts:
+            self._recent_tool_error_signatures.clear()
+            return False
+
+        signature = tuple(sorted(signature_parts))
+        self._recent_tool_error_signatures.append(signature)
+        if len(self._recent_tool_error_signatures) < ERROR_LOOP_WINDOW:
+            return False
+        return all(s == signature for s in self._recent_tool_error_signatures)
+
+    def _should_break_aggregate_input_loop(
+        self,
+        tool_calls: list[dict[str, Any]],
+        tool_results: list[dict[str, Any]],
+    ) -> bool:
+        """Stop when aggregate_data keeps failing for missing input (even if query_data succeeds)."""
+        by_call_id = {c.get("id"): c.get("name") for c in tool_calls if c.get("id")}
+        had_aggregate_input_error = False
+        for result in tool_results:
+            tool_name = by_call_id.get(result.get("tool_call_id"), "")
+            if tool_name != "aggregate_data":
+                continue
+            content = result.get("content") or ""
+            if not isinstance(content, str):
+                continue
+            if any(marker in content for marker in _AGGREGATE_INPUT_ERROR_MARKERS):
+                had_aggregate_input_error = True
+                break
+
+        if had_aggregate_input_error:
+            self._recent_aggregate_input_errors.append(True)
+        else:
+            self._recent_aggregate_input_errors.clear()
+
+        if len(self._recent_aggregate_input_errors) < ERROR_LOOP_WINDOW:
+            return False
+        return all(self._recent_aggregate_input_errors)
 
     def _align_turn_count_for_user_round(self) -> None:
         """Continue turn index after restart / new user message (not reset to 1)."""

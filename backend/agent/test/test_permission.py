@@ -1,14 +1,16 @@
 import sys
 from pathlib import Path
 
-AGENT_ROOT = Path(__file__).resolve().parents[1]
-if str(AGENT_ROOT) not in sys.path:
-    sys.path.insert(0, str(AGENT_ROOT))
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+AGENT_ROOT = BACKEND_ROOT / "agent"
+for path in (BACKEND_ROOT, AGENT_ROOT):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 from permission import CapabilityMode, PermissionManager, filter_tools
 from permission.approval import DenyAskApprovalHandler
 from permission.paths import path_matches_pattern
-from tools.schemas import TOOLS
+from tools.definitions.schemas import TOOLS
 
 
 def test_path_matches_nested_reports():
@@ -23,10 +25,20 @@ def test_consult_blocks_write():
     assert decision["behavior"] == "deny"
 
 
-def test_consult_allows_read():
+def test_consult_has_no_read_file_tool():
     pm = PermissionManager(mode=CapabilityMode.CONSULT)
-    decision = pm.check("read_file", {"path": "Data_StudentInfo.csv"})
-    assert decision["behavior"] == "allow"
+    decision = pm.check("read_file", {"path": "meta/data_catalog.md"})
+    assert decision["behavior"] == "deny"
+    assert "not allowed" in decision["reason"] or "allowlist" in decision["reason"]
+
+
+def test_analyze_denies_submit_record_csv():
+    pm = PermissionManager(mode=CapabilityMode.ANALYZE)
+    decision = pm.check(
+        "read_file", {"path": "Data_SubmitRecord/SubmitRecord-Class1.csv"}
+    )
+    assert decision["behavior"] == "deny"
+    assert "query_data" in decision["reason"]
 
 
 def test_consult_denies_governance_paths():
@@ -115,8 +127,12 @@ def test_filter_tools_excludes_write_in_consult():
     names = {t["function"]["name"] for t in filter_tools(TOOLS, CapabilityMode.CONSULT)}
     assert "write_file" not in names
     assert "edit_file" not in names
-    assert "read_file" in names
+    assert "read_file" not in names
     assert "load_skill" in names
+    assert "inspect_schema" in names
+    assert "list_files" in names
+    assert "query_data" not in names
+    assert "aggregate_data" not in names
 
 
 def test_filter_tools_includes_session_in_analyze():
@@ -124,6 +140,8 @@ def test_filter_tools_includes_session_in_analyze():
     assert "todo_write" in names
     assert "compact" in names
     assert "load_skill" in names
+    assert "query_data" in names
+    assert "aggregate_data" in names
     assert "write_file" not in names
 
 
@@ -133,7 +151,7 @@ def test_filter_tools_includes_write_in_produce():
 
 
 def test_safe_path_error_message():
-    from tools.base_tool import HIDDEN_PATH_ERROR, WORKSPACE_PATH_ERROR, run_read_file
+    from tools.handlers.base_tool import HIDDEN_PATH_ERROR, WORKSPACE_PATH_ERROR, run_read_file
 
     out_escape = run_read_file("../backend/agent/loop.py")
     assert out_escape in (WORKSPACE_PATH_ERROR, HIDDEN_PATH_ERROR)
@@ -145,7 +163,8 @@ if __name__ == "__main__":
     tests = [
         test_path_matches_nested_reports,
         test_consult_blocks_write,
-        test_consult_allows_read,
+        test_consult_has_no_read_file_tool,
+        test_analyze_denies_submit_record_csv,
         test_consult_denies_governance_paths,
         test_consult_denies_path_traversal_to_governance,
         test_consult_denies_absolute_agent_state_path,

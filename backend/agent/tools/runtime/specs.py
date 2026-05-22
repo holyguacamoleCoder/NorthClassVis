@@ -1,13 +1,12 @@
-"""Tool parameter specs derived from OpenAI function schemas in tools.schemas."""
+"""Tool parameter specs derived from OpenAI function schemas."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
 
-from .schemas import TOOLS
+from ..definitions.schemas import TOOLS
 
-# Defaults implemented in registry lambdas but absent from JSON Schema.
 RUNTIME_DEFAULTS: dict[str, dict[str, Any]] = {
     "list_files": {"path": ".", "recursive": False, "limit": 200},
 }

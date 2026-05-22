@@ -1,17 +1,29 @@
 from typing import Callable
 
-from .base_tool import run_bash, run_edit_file, run_list_files, run_read_file, run_write_file
-from .compact import run_compact
-from .load_skill import run_load_skill
-from .save_memory import run_save_memory
-from .todo_write import run_todo_write
+from ..handlers.base_tool import (
+    run_bash,
+    run_edit_file,
+    run_list_files,
+    run_read_file,
+    run_write_file,
+)
+from ..handlers.compact import run_compact
+from ..handlers.data_tools import run_aggregate_data, run_inspect_schema, run_query_data
+from ..handlers.load_skill import run_load_skill
+from ..handlers.save_memory import run_save_memory
+from ..handlers.todo_write import run_todo_write
 
 CONCURRENCY_LIMIT = 10
-CONCURRENCY_SAFE_TOOL = {"read_file", "list_files"}
+CONCURRENCY_SAFE_TOOL = {
+    "read_file",
+    "list_files",
+    "inspect_schema",
+    "query_data",
+    "aggregate_data",
+}
 CONCURRENCY_UNSAFE_TOOL = {"write_file", "edit_file"}
 
 TOOL_DISPATCHER: dict[str, Callable[..., str]] = {
-    # "bash": lambda **kwargs: run_bash(kwargs.get("command")),
     "read_file": lambda **kwargs: run_read_file(kwargs.get("path"), kwargs.get("limit")),
     "list_files": lambda **kwargs: run_list_files(
         kwargs.get("path", "."),
@@ -33,4 +45,7 @@ TOOL_DISPATCHER: dict[str, Callable[..., str]] = {
         kwargs.get("type"),
         kwargs.get("content"),
     ),
+    "inspect_schema": lambda **kwargs: run_inspect_schema(**kwargs),
+    "query_data": lambda **kwargs: run_query_data(**kwargs),
+    "aggregate_data": lambda **kwargs: run_aggregate_data(**kwargs),
 }

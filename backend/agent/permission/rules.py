@@ -1,4 +1,4 @@
-# Paths are relative to data/ (sandbox: tools.base_tool._safe_path).
+# Paths are relative to data/ (sandbox: tools.handlers.base_tool._safe_path).
 # Write path policy lives here; mode_check only gates tool + capability mode.
 
 from .paths import DATA_GOVERNANCE_DENY_PATTERNS, WRITE_ALLOW_PATTERNS, WRITE_DENY_PATTERNS

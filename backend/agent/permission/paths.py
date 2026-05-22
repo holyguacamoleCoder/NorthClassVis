@@ -1,4 +1,4 @@
-"""Path policy for permission rules (sandbox: tools.base_tool._safe_path)."""
+"""Path policy for permission rules (sandbox: tools.handlers.base_tool._safe_path)."""
 
 from fnmatch import fnmatch
 from pathlib import Path, PurePosixPath
@@ -73,6 +73,32 @@ def path_matches_pattern(path: str, pattern: str) -> bool:
         return fnmatch(normalized, pat.replace("**", "*"))
 
     return fnmatch(normalized, pat)
+
+
+def is_raw_dataset_path(path: str) -> bool:
+    """True for canonical raw CSV datasets (use inspect_schema / query_data instead of read_file)."""
+    normalized = to_data_relative_path(path)
+    if not normalized:
+        return False
+    if path_matches_pattern(normalized, "Data_StudentInfo.csv"):
+        return True
+    if path_matches_pattern(normalized, "Data_TitleInfo.csv"):
+        return True
+    if normalized.startswith("Data_SubmitRecord/"):
+        return True
+    return False
+
+
+def raw_dataset_read_denial_reason(mode: str) -> str:
+    if mode == "consult":
+        return (
+            "原始学业 CSV 请用 inspect_schema（resource id 见 data/meta/resource_registry.yaml），"
+            "勿 read_file。统计与筛选请切换到 analyze 模式后使用 query_data / aggregate_data。"
+        )
+    return (
+        "原始学业 CSV 请用 query_data / aggregate_data（resource id 见 resource_registry），"
+        "勿 read_file。可先 inspect_schema 查看字段。"
+    )
 
 
 def is_writable_path(path: str) -> bool:

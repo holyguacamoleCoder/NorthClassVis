@@ -9,9 +9,9 @@ from permission import CapabilityMode, filter_tools
 from permission.modes import MODE_TOOL_ALLOWLIST
 from skills import SkillRegistry, reset_registry
 from skills.registry import _parse_frontmatter
-from tools.load_skill import run_load_skill
-from tools.registry import TOOL_DISPATCHER
-from tools.schemas import TOOLS
+from tools.definitions.registry import TOOL_DISPATCHER
+from tools.definitions.schemas import TOOLS
+from tools.handlers.load_skill import run_load_skill
 
 
 def test_parse_frontmatter():
@@ -54,6 +54,7 @@ def test_load_skill_tool_with_registry(tmp_path):
     reset_registry(SkillRegistry(skills_dir=tmp_path))
     try:
         assert "Alpha body." in run_load_skill("alpha")
+        assert "already loaded" in run_load_skill("alpha")
         assert "Error" in run_load_skill("")
         assert "Unknown skill" in run_load_skill("nope")
         assert "load_skill" in TOOL_DISPATCHER

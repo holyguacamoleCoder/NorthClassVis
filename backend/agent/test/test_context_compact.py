@@ -11,10 +11,12 @@ if str(AGENT_DIR) not in sys.path:
 
 from context.config import ContextCompactConfig
 from context.macro_compact import build_compacted_messages, compact_history, extract_tail_messages
-from context.micro_compact import micro_compact_messages
+from context.micro_compact import compact_tool_content, micro_compact_messages
+from context.persist import COMPACTED_TOOL_PLACEHOLDER
 from context.persist import maybe_persist_output
 from context.state import CompactState, track_recent_file
-from tools.executor import execute_tool_calls
+from tools.runtime.dedupe import dedupe_tool_calls
+from tools.runtime.executor import execute_tool_calls
 
 
 @pytest.fixture
@@ -112,15 +114,15 @@ def test_build_compacted_messages_includes_focus_and_recent_files():
 
 def test_execute_tool_calls_persists_large_output(compact_config, monkeypatch):
     monkeypatch.setattr(
-        "tools.executor.maybe_persist_output",
+        "tools.runtime.postprocess.maybe_persist_output",
         lambda call_id, content: maybe_persist_output(call_id, content, config=compact_config),
     )
     monkeypatch.setattr(
-        "tools.executor.DEFAULT_CONFIG",
+        "tools.runtime.postprocess.DEFAULT_CONFIG",
         compact_config,
     )
     monkeypatch.setattr(
-        "tools.executor.TOOL_DISPATCHER",
+        "tools.runtime.executor.TOOL_DISPATCHER",
         {"read_file": lambda **kwargs: "z" * 500},
     )
     results = execute_tool_calls(
@@ -128,3 +130,32 @@ def test_execute_tool_calls_persists_large_output(compact_config, monkeypatch):
         compact_state=CompactState(),
     )
     assert "<persisted-output>" in results[0]["content"]
+
+
+def test_micro_compact_preserves_tabular_summary(compact_config):
+    payload = json.dumps(
+        {
+            "resource": "submit_record_joined",
+            "rows": [],
+            "meta": {
+                "result_ref": "query-results/abc.json",
+                "rows_scanned": 100,
+                "truncated": True,
+            },
+        },
+        ensure_ascii=False,
+    )
+    compacted = compact_tool_content(payload)
+    assert COMPACTED_TOOL_PLACEHOLDER in compacted
+    assert "result_ref=query-results/abc.json" in compacted
+    assert "rows_scanned=100" in compacted
+
+
+def test_dedupe_tool_calls_drops_identical():
+    calls = [
+        {"id": "a", "name": "query_data", "arguments": {"resource": "x", "class": "Class1"}},
+        {"id": "b", "name": "query_data", "arguments": {"resource": "x", "class": "Class1"}},
+    ]
+    out = dedupe_tool_calls(calls)
+    assert len(out) == 1
+    assert out[0]["id"] == "a"

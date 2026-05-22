@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING
 from common.logger import get_logger, log_event
 from context.state import CompactState
 from hooks import HookManager
-from loop import LoopState
+from loop_state import LoopState
 from permission import CapabilityMode, PermissionManager
-from tools.todo_write import apply_todo_snapshot, reset_todo_state
+from tools.handlers.todo_write import apply_todo_snapshot, reset_todo_state
 
 from .models import ChatSession, SessionMeta
 from .store import FileSessionStore
@@ -189,7 +189,7 @@ class SessionManager:
             self.store.set_active_id(session.id)
 
     def _sync_todo_from_runtime(self) -> None:
-        from tools.todo_write import export_todo_snapshot
+        from tools.handlers.todo_write import export_todo_snapshot
 
         if self._active is None:
             return
