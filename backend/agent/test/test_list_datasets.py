@@ -4,6 +4,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 AGENT_ROOT = Path(__file__).resolve().parents[1]
 if str(AGENT_ROOT) not in sys.path:
     sys.path.insert(0, str(AGENT_ROOT))
@@ -17,10 +19,17 @@ from data.dataset_registry import (  # noqa: E402
 )
 from loop_state import AnalysisToolContext  # noqa: E402
 from tools.handlers.data_tools import run_list_datasets  # noqa: E402
-from tools.runtime.data_chain import inject_data_tool_context  # noqa: E402
+from tools.runtime.data.inject import inject_data_tool_context  # noqa: E402
 
 
-def test_build_catalog_newest_first_and_current_turn_flag():
+@pytest.fixture
+def isolated_agent_state(tmp_path, monkeypatch):
+    """Each test gets a fresh .agent root (append-only datasets.jsonl stays isolated)."""
+    monkeypatch.setattr("data.dataset_registry.AGENT_STATE_DIR", tmp_path)
+    return tmp_path
+
+
+def test_build_catalog_newest_first_and_current_turn_flag(isolated_agent_state):
     sid = "sess-catalog"
     append_dataset(
         sid,
@@ -54,7 +63,7 @@ def test_run_list_datasets_requires_session():
     assert raw.startswith("Error:")
 
 
-def test_run_list_datasets_returns_entries():
+def test_run_list_datasets_returns_entries(isolated_agent_state):
     sid = "sess-run-unique-x"
     append_dataset(
         sid,

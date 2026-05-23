@@ -13,8 +13,8 @@ import runtime_bootstrap  # noqa: F401, E402
 os.environ["BINDING_RESOLVER_DISABLE_LLM"] = "1"
 
 from loop_state import AnalysisToolContext, QuerySnapshot  # noqa: E402
-from tools.runtime.binding_compat import BindMode  # noqa: E402
-from tools.runtime.data_chain import resolve_aggregate_binding  # noqa: E402
+from tools.runtime.binding.types import BindMode  # noqa: E402
+from tools.runtime.binding.pipeline import resolve_aggregate_binding  # noqa: E402
 
 
 def _ctx(msg: str) -> AnalysisToolContext:

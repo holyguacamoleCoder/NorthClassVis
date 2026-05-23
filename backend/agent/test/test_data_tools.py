@@ -281,7 +281,7 @@ def test_query_small_result_always_has_result_ref(data_dir, monkeypatch):
 
 def test_aggregate_on_small_query_ref_not_whole_class(data_dir, monkeypatch):
     from loop_state import AnalysisToolContext, QuerySnapshot
-    from tools.runtime.data_chain import inject_data_tool_context
+    from tools.runtime.data.inject import inject_data_tool_context
 
     monkeypatch.chdir(BACKEND_ROOT.parent)
     qraw = run_query_data(

@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING, Any
 from permission import PermissionManager
 from permission.modes import MODE_TOOL_ALLOWLIST
 
-from ..definitions.registry import TOOL_DISPATCHER
-from .hooks_io import prepend_hook_messages
+from ...definitions.registry import TOOL_DISPATCHER
+from .hooks import prepend_hook_messages
 
 if TYPE_CHECKING:
     from hooks import HookManager

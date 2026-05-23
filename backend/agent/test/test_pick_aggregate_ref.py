@@ -8,7 +8,7 @@ if str(AGENT_ROOT) not in sys.path:
     sys.path.insert(0, str(AGENT_ROOT))
 
 from loop_state import AnalysisToolContext, QuerySnapshot  # noqa: E402
-from tools.runtime.data_chain import working_result_ref  # noqa: E402
+from tools.runtime.data.snapshot import working_result_ref  # noqa: E402
 
 
 def test_working_prefers_last_in_batch_not_smaller_limit():

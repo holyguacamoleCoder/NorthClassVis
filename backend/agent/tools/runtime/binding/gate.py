@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .binding_compat import BindMode, pick_best_candidate, score_for_ref
-from .binding_context import BindingContext, candidate_for_dataset_id
+from .context import BindingContext, candidate_for_dataset_id
+from .scoring import pick_best_candidate, score_for_ref
+from .types import BindMode
 
 
 @dataclass

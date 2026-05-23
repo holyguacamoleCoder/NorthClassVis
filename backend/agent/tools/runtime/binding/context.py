@@ -1,14 +1,14 @@
-"""Build binding context for aggregate / intent resolver."""
+"""Build binding context for aggregate / intent recognition."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from data.dataset_registry import build_datasets_catalog, get_dataset_record
 from loop_state import AnalysisToolContext, QuerySnapshot
 
-from .binding_compat import BindingCandidate
+from .types import BindingCandidate
 
 
 @dataclass

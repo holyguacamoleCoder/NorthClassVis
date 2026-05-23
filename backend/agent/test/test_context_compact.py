@@ -15,7 +15,8 @@ from context.micro_compact import compact_tool_content, micro_compact_messages
 from context.persist import COMPACTED_TOOL_PLACEHOLDER
 from context.persist import maybe_persist_output
 from context.state import CompactState, track_recent_file
-from tools.runtime.dedupe import dedupe_tool_calls
+from common.prompts import COMPACT_USER_MESSAGE_PREAMBLE
+from tools.runtime.pipeline.preprocess import dedupe_tool_calls
 from tools.runtime.executor import execute_tool_calls
 
 
@@ -98,7 +99,8 @@ def test_compact_history_uses_llm_and_writes_transcript(compact_config, tmp_path
     )
     assert state.has_compacted
     assert state.last_summary == "summary text"
-    assert "compacted" in new_messages[0]["content"].lower()
+    assert COMPACT_USER_MESSAGE_PREAMBLE in new_messages[0]["content"]
+    assert "summary text" in new_messages[0]["content"]
     assert list(compact_config.transcript_dir.glob("transcript_*.jsonl"))
     llm.chat_text.assert_called_once()
 
@@ -114,11 +116,11 @@ def test_build_compacted_messages_includes_focus_and_recent_files():
 
 def test_execute_tool_calls_persists_large_output(compact_config, monkeypatch):
     monkeypatch.setattr(
-        "tools.runtime.postprocess.maybe_persist_output",
+        "tools.runtime.pipeline.postprocess.maybe_persist_output",
         lambda call_id, content: maybe_persist_output(call_id, content, config=compact_config),
     )
     monkeypatch.setattr(
-        "tools.runtime.postprocess.DEFAULT_CONFIG",
+        "tools.runtime.pipeline.postprocess.DEFAULT_CONFIG",
         compact_config,
     )
     monkeypatch.setattr(

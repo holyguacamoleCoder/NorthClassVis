@@ -14,13 +14,12 @@ if str(AGENT_ROOT) not in sys.path:
 
 from data.dataset_registry import append_dataset, DatasetRecord  # noqa: E402
 from loop_state import AnalysisToolContext, QuerySnapshot  # noqa: E402
-from tools.runtime.binding_compat import BindMode, pick_best_candidate  # noqa: E402
-from tools.runtime.data_chain import (  # noqa: E402
-    _snap_to_candidate,
-    inject_data_tool_context,
-    partition_tool_calls_for_data_pipeline,
-    resolve_aggregate_binding,
-)
+from tools.runtime.binding.types import BindMode  # noqa: E402
+from tools.runtime.binding.scoring import pick_best_candidate  # noqa: E402
+from tools.runtime.binding.context import _snap_to_candidate  # noqa: E402
+from tools.runtime.data.inject import inject_data_tool_context  # noqa: E402
+from tools.runtime.data.ordering import partition_tool_calls_for_data_pipeline  # noqa: E402
+from tools.runtime.binding.pipeline import resolve_aggregate_binding  # noqa: E402
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("numpy") is None,

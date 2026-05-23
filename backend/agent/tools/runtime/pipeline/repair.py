@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..definitions.manifest import GLOBAL_ARG_ALIASES
+from ...definitions.manifest import GLOBAL_ARG_ALIASES
 from .specs import TOOL_SPECS, ToolSpec
 
 FUZZY_CUTOFF = 0.75

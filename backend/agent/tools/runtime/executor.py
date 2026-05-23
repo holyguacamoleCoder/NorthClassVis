@@ -9,12 +9,13 @@ from loop_state import AnalysisToolContext, QuerySnapshot
 from permission import PermissionManager
 
 from ..definitions.registry import TOOL_DISPATCHER
-from .data_chain import inject_data_tool_context, partition_tool_calls_for_data_pipeline
-from .dedupe import dedupe_tool_calls, parse_args
-from .hooks_io import append_hook_notes, prepend_hook_messages
-from .permission_io import allowed_tool_names, permission_denied_content
-from .postprocess import log_tool_repair, postprocess_tool_result, prepend_repair_notes
-from .repair import repair_tool_call
+from .data.inject import inject_data_tool_context
+from .data.ordering import partition_tool_calls_for_data_pipeline
+from .pipeline.hooks import append_hook_notes, prepend_hook_messages
+from .pipeline.permission import allowed_tool_names, permission_denied_content
+from .pipeline.postprocess import log_tool_repair, postprocess_tool_result, prepend_repair_notes
+from .pipeline.preprocess import dedupe_tool_calls, parse_args
+from .pipeline.repair import repair_tool_call
 
 _log = get_logger("tools")
 
@@ -76,8 +77,6 @@ def execute_tool_calls(
                     }
                 continue
 
-        # 规范化工具名/参数：每条未 blocked 的调用都会执行，仅在有 typo、别名或可选默认值时改写；
-        # 放在 permission 之前，使修正后的名称参与 allowlist 校验（如 QueryData→query_data）。
         repair = repair_tool_call(
             tool_name,
             parsed_args,

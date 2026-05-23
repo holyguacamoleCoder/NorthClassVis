@@ -1,4 +1,4 @@
-"""Semantic dataset binding: LLM resolver with heuristic fallback."""
+"""Dataset binding intent recognition: LLM + heuristic fallback."""
 
 from __future__ import annotations
 
@@ -6,16 +6,17 @@ import json
 import logging
 import os
 import re
+from dataclasses import dataclass, field
 from typing import Any
 
 from common.logger import get_logger, log_event
 
-from .binding_context import BindingContext, candidate_for_dataset_id
-from .binding_validate import DatasetBindingDecision
+from .context import BindingContext, candidate_for_dataset_id
+from .types import BindingCandidate, DatasetBindingDecision
 
-_log = get_logger("binding_resolver")
+_log = get_logger("binding_intent")
 
-_SYSTEM_PROMPT = """你是数据集绑定器。根据「教师当前问题」和「本会话 query 产生的数据集列表」，
+_DEFAULT_SYSTEM_PROMPT = """你是数据集绑定器。根据「教师当前问题」和「本会话 query 产生的数据集列表」，
 选择唯一一个 dataset_id 用于接下来的 aggregate_data。
 
 只输出一个 JSON 对象，不要 markdown，不要解释。字段：
@@ -31,6 +32,29 @@ _SYSTEM_PROMPT = """你是数据集绑定器。根据「教师当前问题」和
 - 新一道教师题问全班时，不要选上一题留下的 limit=10 切片。
 - 「刚才那份/上一问」→ prior_turn_dataset，选对应 user_turn 的 id。
 """
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes")
+
+
+@dataclass(frozen=True)
+class IntentConfig:
+    """Configuration for binding intent recognition (LLM path)."""
+
+    model: str | None = None
+    max_tokens: int = 256
+    temperature: float | None = None
+    system_prompt: str = field(default=_DEFAULT_SYSTEM_PROMPT)
+    disable_llm: bool = False
+    force_fallback: bool = False
+
+    @classmethod
+    def from_env(cls) -> IntentConfig:
+        return cls(
+            disable_llm=_env_flag("BINDING_RESOLVER_DISABLE_LLM"),
+            force_fallback=_env_flag("BINDING_RESOLVER_FORCE"),
+        )
 
 
 def _chain_keywords(text: str) -> bool:
@@ -166,7 +190,12 @@ def _parse_json_content(content: str) -> dict[str, Any] | None:
     return None
 
 
-def llm_resolve(ctx: BindingContext, llm_client: Any) -> DatasetBindingDecision | None:
+def llm_resolve(
+    ctx: BindingContext,
+    llm_client: Any,
+    *,
+    config: IntentConfig,
+) -> DatasetBindingDecision | None:
     if not llm_client or not getattr(llm_client, "get_client", lambda: None)():
         return None
 
@@ -193,13 +222,14 @@ def llm_resolve(ctx: BindingContext, llm_client: Any) -> DatasetBindingDecision 
     )
 
     try:
+        # config.model / config.temperature reserved for per-intent client override
         resp = llm_client.create_completion(
-            system_prompt=_SYSTEM_PROMPT,
+            system_prompt=config.system_prompt,
             messages=[{"role": "user", "content": user_body}],
-            max_tokens=256,
+            max_tokens=config.max_tokens,
         )
     except Exception as exc:
-        log_event(_log, logging.WARNING, "binding_resolver_llm_failed", error=str(exc))
+        log_event(_log, logging.WARNING, "binding_intent_llm_failed", error=str(exc))
         return None
 
     if not resp or not resp.choices:
@@ -228,22 +258,19 @@ def llm_resolve(ctx: BindingContext, llm_client: Any) -> DatasetBindingDecision 
 def resolve_binding_intent(
     ctx: BindingContext,
     llm_client: Any | None = None,
+    *,
+    config: IntentConfig | None = None,
 ) -> DatasetBindingDecision | None:
-    force = os.environ.get("BINDING_RESOLVER_FORCE", "").strip() in ("1", "true", "yes")
-    disable_llm = os.environ.get("BINDING_RESOLVER_DISABLE_LLM", "").strip() in (
-        "1",
-        "true",
-        "yes",
-    )
+    cfg = config or IntentConfig.from_env()
 
     decision: DatasetBindingDecision | None = None
-    if not disable_llm and llm_client is not None:
-        decision = llm_resolve(ctx, llm_client)
+    if not cfg.disable_llm and llm_client is not None:
+        decision = llm_resolve(ctx, llm_client, config=cfg)
         if decision:
             log_event(
                 _log,
                 logging.INFO,
-                "binding_resolver_llm",
+                "binding_intent_llm",
                 dataset_id=decision.dataset_id,
                 scope=decision.scope,
             )
@@ -254,12 +281,12 @@ def resolve_binding_intent(
             log_event(
                 _log,
                 logging.INFO,
-                "binding_resolver_heuristic",
+                "binding_intent_heuristic",
                 dataset_id=decision.dataset_id,
                 scope=decision.scope,
             )
 
-    if force and decision is None and ctx.candidates:
+    if cfg.force_fallback and decision is None and ctx.candidates:
         c = ctx.candidates[-1]
         if c.dataset_id:
             decision = DatasetBindingDecision(

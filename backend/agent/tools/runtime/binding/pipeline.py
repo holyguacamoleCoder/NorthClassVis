@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from data.dataset_registry import (
@@ -14,14 +13,16 @@ from data.dataset_registry import (
 
 from loop_state import AnalysisToolContext, QuerySnapshot
 
-from .ambiguity_gate import check_ambiguity, should_skip_resolver
-from .binding_compat import BindMode, pick_best_candidate
-from .binding_context import build_binding_context, candidate_for_dataset_id
-from .binding_validate import DatasetBindingDecision, validate_decision
-from .intent_resolver import resolve_binding_intent
+from ..data.types import AggregateBinding
+from .context import build_binding_context, candidate_for_dataset_id
+from .gate import check_ambiguity
+from .intent import resolve_binding_intent
+from .scoring import pick_best_candidate
+from .types import BindMode, DatasetBindingDecision
+from .validate import validate_decision
 
 
-def resolve_aggregate_binding_pipeline(
+def resolve_aggregate_binding(
     inp: dict[str, Any],
     *,
     metrics: list[dict[str, Any]],
@@ -31,8 +32,6 @@ def resolve_aggregate_binding_pipeline(
     batch_snapshots: list[QuerySnapshot],
     llm_client: Any | None = None,
 ) -> AggregateBinding:
-    from .data_chain import AggregateBinding
-
     ctx = build_binding_context(
         inp=inp,
         metrics=metrics,
@@ -52,8 +51,6 @@ def resolve_aggregate_binding_pipeline(
 
     chain_id = inp.get("chain_from_dataset_id")
     if chain_id:
-        from data.dataset_registry import get_dataset_record
-
         rec = get_dataset_record(session_id, str(chain_id))
         if not rec:
             hint = format_catalog_hint(session_id)

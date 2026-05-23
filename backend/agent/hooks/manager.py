@@ -91,7 +91,8 @@ class HookManager:
             log_event(_log, logging.DEBUG, "hooks_skipped_untrusted", hook_event=event)
             return result
 
-        context = dict(context or {})
+        if context is None:
+            context = {}
         for hook_def in self.hooks.get(event, []):
             matcher = hook_def.get("matcher")
             if matcher:
@@ -165,7 +166,15 @@ class HookManager:
                     hook_output = None
                 if isinstance(hook_output, dict):
                     if "updatedInput" in hook_output:
-                        context["tool_input"] = hook_output["updatedInput"]
+                        updated = hook_output["updatedInput"]
+                        if isinstance(updated, dict):
+                            tool_input = context.get("tool_input")
+                            if isinstance(tool_input, dict):
+                                tool_input.update(updated)
+                            else:
+                                context["tool_input"] = dict(updated)
+                        else:
+                            context["tool_input"] = updated
                     if "additionalContext" in hook_output:
                         result.messages.append(str(hook_output["additionalContext"]))
                     if "permissionDecision" in hook_output:

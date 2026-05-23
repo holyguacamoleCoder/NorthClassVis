@@ -6,13 +6,13 @@ import pytest
 import runtime_bootstrap  # noqa: F401, E402 — agent before backend/tools on sys.path
 
 from permission.modes import MODE_TOOL_ALLOWLIST, CapabilityMode
-from tools.runtime.repair import (
+from tools.runtime.pipeline.repair import (
     apply_arg_repairs,
     normalize_tool_name,
     repair_tool_call,
     resolve_tool_name,
 )
-from tools.runtime.specs import TOOL_SPECS, build_tool_specs
+from tools.runtime.pipeline.specs import TOOL_SPECS, build_tool_specs
 
 
 ANALYZE_ALLOWED = MODE_TOOL_ALLOWLIST[CapabilityMode.ANALYZE]

@@ -1,4 +1,4 @@
-"""Runtime hints: data-tool results ↔ session plan (todo_write)."""
+"""Loop-level hints: data-tool results ↔ session plan (todo_write)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ def _parse_tool_result_content(content: str) -> dict[str, Any] | None:
     if not content or content.startswith("Error:"):
         return None
     try:
-        # JSON may be followed by [Checks] footer
         end = content.find("\n\n[Checks]")
         chunk = content if end < 0 else content[:end]
         return json.loads(chunk)

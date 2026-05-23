@@ -23,11 +23,11 @@ from recovery import DEFAULT_RECOVERY_CONFIG, RecoveryHandler
 from skills import SkillRegistry, get_registry
 from tools import TOOLS, execute_tool_calls
 from permission.modes import CapabilityMode
-from tools.runtime.dedupe import dedupe_tool_calls, parse_args
+from tools.runtime.pipeline.preprocess import dedupe_tool_calls, parse_args
 from session.turns import resolve_loop_turn_count
 from tools.handlers.compact import format_compact_applied_result
 from tools.handlers.todo_write import get_todo_reminder, mark_round_without_todo_update
-from tools.runtime.plan_checks import append_data_tool_checks
+from hints.plan_checks import append_data_tool_checks
 
 _log = get_logger("loop")
 

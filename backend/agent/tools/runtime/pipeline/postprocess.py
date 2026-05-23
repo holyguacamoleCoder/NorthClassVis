@@ -5,10 +5,10 @@ from context import maybe_persist_output, track_recent_file
 from context.config import DEFAULT_CONFIG
 from context.state import CompactState
 from context.tool_result_summary import append_query_summary_to_result
+from loop_state import AnalysisToolContext, QuerySnapshot
 from permission import PermissionManager
 
-from loop_state import AnalysisToolContext, QuerySnapshot
-from .data_chain import record_query_result
+from ..data.snapshot import record_query_result
 from .repair import ToolRepairResult
 
 _log = get_logger("tools")

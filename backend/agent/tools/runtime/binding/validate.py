@@ -2,20 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-from .binding_context import BindingContext, candidate_for_dataset_id, catalog_item
-
-
-@dataclass
-class DatasetBindingDecision:
-    scope: str
-    dataset_id: str
-    result_ref: str
-    confidence: str = "medium"
-    rationale: str = ""
-    overrides_model_ref: bool = False
-    resolver: str = "heuristic"
+from .context import BindingContext, candidate_for_dataset_id, catalog_item
+from .types import DatasetBindingDecision
 
 
 def validate_decision(

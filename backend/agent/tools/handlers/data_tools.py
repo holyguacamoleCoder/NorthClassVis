@@ -75,10 +75,12 @@ def run_resolve_dataset_binding(
     **kwargs: Any,
 ) -> str:
     """Expose semantic binding for the main model (optional step before aggregate_data)."""
-    from tools.runtime.ambiguity_gate import check_ambiguity
-    from tools.runtime.binding_context import build_binding_context
-    from tools.runtime.binding_validate import validate_decision
-    from tools.runtime.intent_resolver import resolve_binding_intent
+    from tools.runtime.binding import (
+        build_binding_context,
+        check_ambiguity,
+        resolve_binding_intent,
+        validate_decision,
+    )
 
     session_id = kwargs.pop("_session_id", None)
     current_turn = kwargs.pop("_current_user_turn", None)
