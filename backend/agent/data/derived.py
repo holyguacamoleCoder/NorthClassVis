@@ -30,14 +30,14 @@ def build_submit_record_joined(
         on="title_ID",
     )
 
+    student_df = load_student_info(data_dir)
+    merged = data_loader.merge_dataframes_or_files(
+        left_df=merged,
+        right_df=student_df,
+        on="student_ID",
+        right_columns=["student_ID", "major", "sex", "age"],
+    )
     if majors:
-        student_df = load_student_info(data_dir)
-        merged = data_loader.merge_dataframes_or_files(
-            left_df=merged,
-            right_df=student_df,
-            on="student_ID",
-            right_columns=["student_ID", "major"],
-        )
         merged = merged[merged["major"].isin(majors)]
 
     return data_loader.process_non_numeric_values(merged)

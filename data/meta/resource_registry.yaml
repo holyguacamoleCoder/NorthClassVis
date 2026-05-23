@@ -3,7 +3,7 @@
 # 与 metrics/_index.yaml 中 resource 字段一致。
 
 version: "0.1.0"
-updated: "2026-05-20"
+updated: "2026-05-23"
 description: |
   逻辑 resource id → 物理路径或 derived loader。
   Join 键：student_ID（提交↔学生）、title_ID（提交↔题目）、class（提交）、major（学生）。
@@ -26,7 +26,7 @@ join_keys:
     links: [submit_record, submit_record_joined]
   major:
     description: 专业代码（Data_StudentInfo.major）
-    links: [student_info, submit_record_joined]
+    links: [student_info, submit_record, submit_record_joined]
 
 resources:
   student_info:
@@ -45,35 +45,34 @@ resources:
 
   submit_record:
     id: submit_record
-    kind: csv
-    path_pattern: "data/Data_SubmitRecord/SubmitRecord-{class}.csv"
-    join_keys: [student_ID, title_ID, class]
+    kind: derived
+    loader: build_submit_record_joined
+    depends_on: [title_info, student_info]
+    join_keys: [student_ID, title_ID, class, major, knowledge, sex, age]
     params:
       class:
-        required: true
-        description: 单个班级名，如 Class1
-    columns:
-      - index
-      - class
-      - time
-      - state
-      - score
-      - title_ID
-      - method
-      - memory
-      - timeconsume
-      - student_ID
+        required: false
+        description: 单个班级名，如 Class1（与 classes 二选一）
+      classes:
+        required: false
+        description: 班级名列表，如 ["Class1"]（与 class 二选一）
+      majors:
+        required: false
+        description: 可选专业过滤（Data_StudentInfo.major）
 
   submit_record_joined:
     id: submit_record_joined
     kind: derived
     loader: build_submit_record_joined
-    depends_on: [submit_record, title_info, student_info]
+    agent_visible: false
+    deprecated: true
+    alias_of: submit_record
+    depends_on: [title_info, student_info]
     join_keys: [student_ID, title_ID, class, major, knowledge]
     params:
       classes:
         required: true
-        description: 班级名列表，如 ["Class1"]
+        description: 已弃用；请改用 submit_record
       majors:
         required: false
         description: 可选专业过滤（Data_StudentInfo.major）

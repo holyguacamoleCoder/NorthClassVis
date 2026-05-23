@@ -25,7 +25,7 @@ from data import (  # noqa: E402  # backend/agent/data
     validate_tabular_result,
 )
 from data.exceptions import InvalidParameterError, UnknownResourceError  # noqa: E402
-from data.registry import list_resource_ids  # noqa: E402
+from data.registry import list_agent_resource_ids, list_resource_ids  # noqa: E402
 
 
 @pytest.fixture
@@ -51,6 +51,16 @@ def test_resolve_student_and_title_schema_columns(data_dir):
     assert list(title_df.columns) == title.schema_columns
     assert "student_ID" in student_df.columns
     assert "title_ID" in title_df.columns
+
+
+def test_submit_record_class1(data_dir):
+    resolved = resolve("submit_record", classes=["Class1"], data_dir=data_dir)
+    df = resolved.load()
+    assert len(df) > 0
+    assert "knowledge" in df.columns
+    assert "major" in df.columns
+    assert "student_ID" in df.columns
+    assert "title_ID" in df.columns
 
 
 def test_submit_record_joined_class1(data_dir):
@@ -121,5 +131,13 @@ def test_filter_context_to_params():
 def test_all_registry_ids_listed():
     ids = list_resource_ids()
     assert "student_info" in ids
+    assert "submit_record" in ids
     assert "submit_record_joined" in ids
     assert "week_aggregation" in ids
+
+
+def test_agent_resource_ids_hide_internal_alias():
+    agent_ids = list_agent_resource_ids()
+    assert "submit_record" in agent_ids
+    assert "submit_record_joined" not in agent_ids
+    assert "week_aggregation" in agent_ids

@@ -12,7 +12,6 @@ from .exceptions import InvalidParameterError, UnknownResourceError
 from .limits import QueryLimits
 from .loaders import (
     load_student_info,
-    load_submit_record,
     load_title_info,
     project_data_dir,
 )
@@ -63,6 +62,36 @@ def list_resource_ids(registry_path: str | None = None) -> list[str]:
     return sorted(resources.keys())
 
 
+def list_agent_resource_ids(registry_path: str | None = None) -> list[str]:
+    """Resource ids exposed to the LLM (excludes internal/deprecated aliases)."""
+    doc = _load_registry_document(registry_path)
+    resources = doc.get("resources") or {}
+    return sorted(
+        rid
+        for rid, entry in resources.items()
+        if entry.get("agent_visible", True) is not False
+    )
+
+
+def _load_submit_record_joined(
+    merged: dict[str, Any],
+    *,
+    data_dir: Path,
+) -> Any:
+    if "classes" not in merged and "class" in merged:
+        merged["classes"] = [merged.pop("class")]
+    if "classes" not in merged:
+        raise InvalidParameterError(
+            "submit_record 需要 class 或 classes",
+            param="class",
+        )
+    return build_submit_record_joined(
+        merged["classes"],
+        merged.get("majors"),
+        data_dir=data_dir,
+    )
+
+
 def resolve(
     resource_id: str,
     *,
@@ -87,14 +116,6 @@ def resolve(
             from .loaders import load_csv_resource
 
             merged = {**params, **load_params}
-            if resource_id == "submit_record":
-                class_name = merged.get("class")
-                if not class_name:
-                    raise InvalidParameterError(
-                        "submit_record 需要参数 class",
-                        param="class",
-                    )
-                return load_submit_record(class_name, data_dir)
             return load_csv_resource(path_pattern, data_dir, **merged)
 
         if resource_id == "student_info":
@@ -112,19 +133,8 @@ def resolve(
 
         def load_fn(**load_params: Any):
             merged = {**params, **load_params}
-            if "classes" not in merged and "class" in merged:
-                merged["classes"] = [merged.pop("class")]
-            if resource_id == "submit_record_joined":
-                if "classes" not in merged:
-                    raise InvalidParameterError(
-                        "submit_record_joined 需要参数 classes",
-                        param="classes",
-                    )
-                return loader_fn(
-                    merged["classes"],
-                    merged.get("majors"),
-                    data_dir=data_dir,
-                )
+            if resource_id in ("submit_record", "submit_record_joined"):
+                return _load_submit_record_joined(merged, data_dir=data_dir)
             if resource_id == "week_aggregation":
                 if "classes" not in merged:
                     raise InvalidParameterError(
