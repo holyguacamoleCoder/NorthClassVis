@@ -5,11 +5,11 @@ import runtime_bootstrap  # noqa: F401
 
 from common.logger import get_logger, log_event, truncate_for_log
 from context.state import CompactState
-from loop_state import AnalysisToolContext
+from loop_state import AnalysisToolContext, QuerySnapshot
 from permission import PermissionManager
 
 from ..definitions.registry import TOOL_DISPATCHER
-from .data_chain import inject_data_tool_context
+from .data_chain import inject_data_tool_context, partition_tool_calls_for_data_pipeline
 from .dedupe import dedupe_tool_calls, parse_args
 from .hooks_io import append_hook_notes, prepend_hook_messages
 from .permission_io import allowed_tool_names, permission_denied_content
@@ -29,12 +29,17 @@ def execute_tool_calls(
     permission: PermissionManager | None = None,
     hooks: "HookManager | None" = None,
     analysis_context: AnalysisToolContext | None = None,
+    loaded_skills: set[str] | None = None,
+    llm_client: Any | None = None,
 ) -> list[dict[str, Any]]:
     tool_calls = dedupe_tool_calls(tool_calls)
-    tool_results: list[dict[str, Any]] = []
-    batch_query_refs: list[str] = []
+    batch_snapshots: list[QuerySnapshot] = []
+    results_by_id: dict[str, dict[str, Any]] = {}
 
-    for call in tool_calls:
+    queries, rest = partition_tool_calls_for_data_pipeline(tool_calls)
+    execution_order = queries + rest
+
+    for call in execution_order:
         tool_name = call.get("name")
         call_id = call.get("id")
         parsed_args = parse_args(call.get("arguments", {}))
@@ -63,13 +68,12 @@ def execute_tool_calls(
                     tool_call_id=call_id,
                     reason=reason,
                 )
-                tool_results.append(
-                    {
+                if call_id:
+                    results_by_id[call_id] = {
                         "role": "tool",
                         "tool_call_id": call_id,
                         "content": content,
                     }
-                )
                 continue
 
         # 规范化工具名/参数：每条未 blocked 的调用都会执行，仅在有 typo、别名或可选默认值时改写；
@@ -95,8 +99,8 @@ def execute_tool_calls(
                 tool_call_id=call_id,
                 missing=missing,
             )
-            tool_results.append(
-                {
+            if call_id:
+                results_by_id[call_id] = {
                     "role": "tool",
                     "tool_call_id": call_id,
                     "content": prepend_hook_messages(
@@ -107,7 +111,6 @@ def execute_tool_calls(
                         pre_messages,
                     ),
                 }
-            )
             continue
 
         if permission is not None:
@@ -124,8 +127,8 @@ def execute_tool_calls(
                     mode=getattr(permission.mode, "value", permission.mode),
                     reason=reason,
                 )
-                tool_results.append(
-                    {
+                if call_id:
+                    results_by_id[call_id] = {
                         "role": "tool",
                         "tool_call_id": call_id,
                         "content": permission_denied_content(
@@ -138,7 +141,6 @@ def execute_tool_calls(
                             deny_type="policy",
                         ),
                     }
-                )
                 continue
             if behavior == "ask":
                 reason = decision.get("reason", "approval required")
@@ -165,13 +167,12 @@ def execute_tool_calls(
                         deny_type="approval",
                         message_prefix=f"Permission denied for {tool_name}",
                     )
-                    tool_results.append(
-                        {
+                    if call_id:
+                        results_by_id[call_id] = {
                             "role": "tool",
                             "tool_call_id": call_id,
                             "content": content,
                         }
-                    )
                     continue
 
         if tool_name not in TOOL_DISPATCHER:
@@ -187,8 +188,8 @@ def execute_tool_calls(
                 tool_call_id=call_id,
                 suggestions=repair.suggestions or None,
             )
-            tool_results.append(
-                {
+            if call_id:
+                results_by_id[call_id] = {
                     "role": "tool",
                     "tool_call_id": call_id,
                     "content": prepend_hook_messages(
@@ -196,15 +197,17 @@ def execute_tool_calls(
                         pre_messages,
                     ),
                 }
-            )
             continue
 
         dispatch_args = inject_data_tool_context(
             tool_name,
             parsed_args,
             analysis_context=analysis_context,
-            batch_query_refs=batch_query_refs,
+            batch_snapshots=batch_snapshots,
+            llm_client=llm_client,
         )
+        if tool_name == "load_skill" and loaded_skills is not None:
+            dispatch_args = {**dispatch_args, "_loaded_skills": loaded_skills}
 
         log_event(
             _log,
@@ -224,8 +227,8 @@ def execute_tool_calls(
                 tool_name,
                 call_id,
             )
-            tool_results.append(
-                {
+            if call_id:
+                results_by_id[call_id] = {
                     "role": "tool",
                     "tool_call_id": call_id,
                     "content": prepend_hook_messages(
@@ -233,7 +236,6 @@ def execute_tool_calls(
                         pre_messages,
                     ),
                 }
-            )
             continue
 
         tool_result = postprocess_tool_result(
@@ -243,7 +245,7 @@ def execute_tool_calls(
             parsed_args=parsed_args,
             compact_state=compact_state,
             analysis_context=analysis_context,
-            batch_query_refs=batch_query_refs,
+            batch_snapshots=batch_snapshots,
         )
 
         if hooks is not None:
@@ -268,12 +270,16 @@ def execute_tool_calls(
             tool_call_id=call_id,
             result_preview=truncate_for_log(tool_result),
         )
-        tool_results.append(
-            {
+        if call_id:
+            results_by_id[call_id] = {
                 "role": "tool",
                 "tool_call_id": call_id,
                 "content": tool_result,
             }
-        )
 
+    tool_results: list[dict[str, Any]] = []
+    for call in tool_calls:
+        call_id = call.get("id")
+        if call_id and call_id in results_by_id:
+            tool_results.append(results_by_id[call_id])
     return tool_results

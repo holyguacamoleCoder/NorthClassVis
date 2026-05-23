@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from common.message import repair_stored_message
 from common.paths import SESSIONS_DIR, bootstrap_agent_paths
 from context.state import CompactState
 
@@ -187,14 +188,15 @@ class FileSessionStore:
             except json.JSONDecodeError:
                 continue
             if isinstance(row, dict):
-                messages.append(row)
+                messages.append(repair_stored_message(row))
         return messages
 
     @staticmethod
     def _save_messages(path: Path, messages: list[dict[str, Any]]) -> None:
         with path.open("w", encoding="utf-8") as handle:
             for message in messages:
-                handle.write(json.dumps(message, default=str, ensure_ascii=False) + "\n")
+                row = repair_stored_message(message) if isinstance(message, dict) else message
+                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     @staticmethod
     def _load_compact(path: Path) -> CompactState:

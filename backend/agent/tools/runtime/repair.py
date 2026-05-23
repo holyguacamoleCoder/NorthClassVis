@@ -7,19 +7,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..definitions.manifest import GLOBAL_ARG_ALIASES
 from .specs import TOOL_SPECS, ToolSpec
-
-GLOBAL_ARG_ALIASES: dict[str, str] = {
-    "file_path": "path",
-    "filepath": "path",
-    "file": "path",
-    "skill_name": "name",
-    "skill": "name",
-}
-
-PER_TOOL_ARG_ALIASES: dict[str, dict[str, str]] = {
-    "query_data": {"filter": "where"},
-}
 
 FUZZY_CUTOFF = 0.75
 FUZZY_MIN_RATIO = 0.88
@@ -102,7 +91,8 @@ def apply_arg_repairs(
     notes: list[str] = []
 
     aliases = dict(GLOBAL_ARG_ALIASES)
-    aliases.update(PER_TOOL_ARG_ALIASES.get(tool_name, {}))
+    if spec is not None and spec.arg_aliases:
+        aliases.update(spec.arg_aliases)
     for wrong, right in aliases.items():
         if wrong in out and right not in out:
             out[right] = out.pop(wrong)

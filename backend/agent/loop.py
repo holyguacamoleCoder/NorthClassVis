@@ -15,20 +15,26 @@ from context import (
     estimate_context_size,
     micro_compact_messages,
 )
+from context.macro_compact import extract_tail_messages
 from hooks import HookManager
 from permission import PermissionManager, filter_tools
 from loop_state import LoopState
 from recovery import DEFAULT_RECOVERY_CONFIG, RecoveryHandler
 from skills import SkillRegistry, get_registry
 from tools import TOOLS, execute_tool_calls
-from tools.runtime.dedupe import dedupe_tool_calls
+from permission.modes import CapabilityMode
+from tools.runtime.dedupe import dedupe_tool_calls, parse_args
 from session.turns import resolve_loop_turn_count
+from tools.handlers.compact import format_compact_applied_result
 from tools.handlers.todo_write import get_todo_reminder, mark_round_without_todo_update
+from tools.runtime.plan_checks import append_data_tool_checks
 
 _log = get_logger("loop")
 
 MAX_TOKENS = 8192
 TOOL_LOOP_WINDOW = 6
+_CONSULT_LIST_LOOP_WINDOW = 4
+_TODO_ONLY_LOOP_WINDOW = 4
 _LOOPING_TOOLS = frozenset({"inspect_schema", "load_skill"})
 _PRODUCTIVE_DATA_TOOLS = frozenset({"query_data", "aggregate_data"})
 ERROR_LOOP_WINDOW = 4
@@ -63,6 +69,10 @@ class AgentLoop:
             state=self.loop_state.recovery,
         )
         self._recent_tool_batches: deque[tuple[str, ...]] = deque(maxlen=TOOL_LOOP_WINDOW)
+        self._recent_consult_list_signatures: deque[tuple[str, ...]] = deque(
+            maxlen=_CONSULT_LIST_LOOP_WINDOW
+        )
+        self._recent_todo_only_batches: deque[bool] = deque(maxlen=_TODO_ONLY_LOOP_WINDOW)
         self._recent_tool_error_signatures: deque[tuple[str, ...]] = deque(maxlen=ERROR_LOOP_WINDOW)
         self._recent_aggregate_input_errors: deque[bool] = deque(maxlen=ERROR_LOOP_WINDOW)
 
@@ -91,16 +101,49 @@ class AgentLoop:
             reason="auto",
         )
 
-    def _apply_manual_compaction(self, focus: str | None) -> None:
-        # 手动压缩context
+    def _apply_manual_compaction(self, focus: str | None) -> dict[str, Any]:
+        if not self.compact_config.enabled:
+            return {"applied": False, "reason": "compaction_disabled"}
+        messages = self.loop_state.messages
+        before_count = len(messages)
+        tail = extract_tail_messages(messages, config=self.compact_config)
         self.loop_state.messages = compact_history(
-            self.loop_state.messages,
+            messages,
             self.llm_client,
             self.loop_state.compact,
             focus=focus,
             config=self.compact_config,
             reason="manual",
         )
+        return {
+            "applied": True,
+            "messages_before": before_count,
+            "messages_after": len(self.loop_state.messages),
+            "tail_turns": len(tail),
+            "focus": focus,
+            "recent_files": list(self.loop_state.compact.recent_files),
+        }
+
+    def _patch_compact_tool_results(
+        self,
+        tool_results: list[dict[str, Any]],
+        compact_calls: list[dict[str, Any]],
+        stats: dict[str, Any],
+    ) -> None:
+        compact_ids = {c.get("id") for c in compact_calls if c.get("id")}
+        content = format_compact_applied_result(
+            applied=bool(stats.get("applied")),
+            messages_before=int(stats.get("messages_before") or 0),
+            messages_after=int(stats.get("messages_after") or 0),
+            tail_turns=int(stats.get("tail_turns") or 0),
+            focus=stats.get("focus"),
+            recent_files=stats.get("recent_files"),
+            reason=stats.get("reason"),
+        )
+        for result in tool_results:
+            if result.get("tool_call_id") in compact_ids:
+                result["content"] = content
+                break
 
     def _apply_recovery_compaction(self) -> None:
         if not self.compact_config.enabled:
@@ -201,6 +244,39 @@ class AgentLoop:
                 batches=list(self._recent_tool_batches),
             )
             return False
+        if self._should_break_consult_list_loop(tool_calls):
+            self.loop_state.continue_reason = "consult_list_loop_guard"
+            guard_hint = (
+                "检测到 consult 模式下对同一路径反复 list_files，已自动停止本轮。"
+                "列目录不能读取 CSV 内容，也不能做统计。请切换到 /mode analyze，"
+                "再用 inspect_schema(resource=submit_record, class=Class1) 或 query_data。"
+            )
+            self.loop_state.messages.append({"role": "assistant", "content": guard_hint})
+            log_event(
+                _log,
+                logging.WARNING,
+                "consult_list_loop_guard_triggered",
+                turn=self.loop_state.turn_count,
+                mode=self.permission.mode.value,
+                signatures=list(self._recent_consult_list_signatures),
+            )
+            return False
+        if self._should_break_todo_only_loop(tool_calls):
+            self.loop_state.continue_reason = "todo_only_loop_guard"
+            guard_hint = (
+                "检测到连续多轮仅更新 todo_write 而无数据分析，已自动停止本轮。"
+                "若已有明确查询目标，请直接 query_data / aggregate_data；"
+                "多步任务也应在 todo 之外调用 inspect_schema 等工具。"
+            )
+            self.loop_state.messages.append({"role": "assistant", "content": guard_hint})
+            log_event(
+                _log,
+                logging.WARNING,
+                "todo_only_loop_guard_triggered",
+                turn=self.loop_state.turn_count,
+                mode=self.permission.mode.value,
+            )
+            return False
         log_event(
             _log,
             logging.INFO,
@@ -215,6 +291,8 @@ class AgentLoop:
             permission=self.permission,
             hooks=self.hooks,
             analysis_context=self.loop_state.analysis_context,
+            loaded_skills=self.loop_state.loaded_skills,
+            llm_client=self.llm_client,
         )
 
         # 错误响应防护
@@ -265,16 +343,33 @@ class AgentLoop:
                         result["content"] = f"{original}\n\n{reminder}".strip()
                         break
         
+        append_data_tool_checks(tool_calls, tool_results)
+
         if not tool_results:
             # 工具调用失败
             self.loop_state.continue_reason = "tool_calls_failed"
             log_event(_log, logging.WARNING, "tool_batch_empty", turn=self.loop_state.turn_count)
             return False
 
+        if compact_calls and not self.compact_config.enabled:
+            self._patch_compact_tool_results(
+                tool_results,
+                compact_calls,
+                {"applied": False, "reason": "compaction_disabled"},
+            )
+
         # 将工具调用结果添加到messages中（Tool）
         self.loop_state.messages.extend(tool_results)
         if compact_calls and self.compact_config.enabled:
-            self._apply_manual_compaction(compact_focus)
+            compact_stats = self._apply_manual_compaction(compact_focus)
+            self._patch_compact_tool_results(tool_results, compact_calls, compact_stats)
+            for msg in self.loop_state.messages:
+                if msg.get("role") != "tool":
+                    continue
+                for result in tool_results:
+                    if result.get("tool_call_id") == msg.get("tool_call_id"):
+                        msg["content"] = result["content"]
+                        break
 
         self.loop_state.messages_count += (1 + len(tool_results))
         self.loop_state.turn_count += 1
@@ -311,6 +406,46 @@ class AgentLoop:
 
         # Break only when all recent batches are low-value inspection loops.
         return all(set(batch).issubset(_LOOPING_TOOLS) for batch in self._recent_tool_batches)
+
+    def _list_files_batch_signature(self, tool_calls: list[dict[str, Any]]) -> tuple[str, ...] | None:
+        paths: list[str] = []
+        for call in tool_calls:
+            if call.get("name") != "list_files":
+                return None
+            args = parse_args(call.get("arguments", {}))
+            raw_path = args.get("path")
+            paths.append(str(raw_path).strip() if raw_path is not None else ".")
+        return tuple(sorted(paths))
+
+    def _should_break_consult_list_loop(self, tool_calls: list[dict[str, Any]]) -> bool:
+        if self.permission.mode is not CapabilityMode.CONSULT:
+            self._recent_consult_list_signatures.clear()
+            return False
+
+        signature = self._list_files_batch_signature(tool_calls)
+        if signature is None:
+            self._recent_consult_list_signatures.clear()
+            return False
+
+        self._recent_consult_list_signatures.append(signature)
+        if len(self._recent_consult_list_signatures) < _CONSULT_LIST_LOOP_WINDOW:
+            return False
+
+        first = self._recent_consult_list_signatures[0]
+        return all(sig == first for sig in self._recent_consult_list_signatures)
+
+    def _should_break_todo_only_loop(self, tool_calls: list[dict[str, Any]]) -> bool:
+        names = {str(c.get("name") or "") for c in tool_calls if c.get("name")}
+        if names != {"todo_write"}:
+            self._recent_todo_only_batches.clear()
+            return False
+        if names & _PRODUCTIVE_DATA_TOOLS:
+            self._recent_todo_only_batches.clear()
+            return False
+        self._recent_todo_only_batches.append(True)
+        if len(self._recent_todo_only_batches) < _TODO_ONLY_LOOP_WINDOW:
+            return False
+        return True
 
     def _tool_args_preview(self, tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
         preview: list[dict[str, Any]] = []

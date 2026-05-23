@@ -7,12 +7,28 @@ class CapabilityMode(str, Enum):
     PRODUCE = "produce"
 
 
-READ_ONLY_TOOLS = frozenset({"read_file", "list_files", "load_skill"})
+# consult：探查与目录浏览，不暴露 read_file（避免与「勿读原始 CSV」冲突、减少无效调用）
+CONSULT_TOOLS = frozenset({"list_files", "load_skill", "inspect_schema"})
+# analyze/produce：可读 meta、reports 等文本；原始 CSV 仍由 permission 路径策略拒绝
+FILE_READ_TOOLS = frozenset({"read_file"})
+DATA_INSPECT_TOOLS = frozenset({
+    "inspect_schema",
+    "list_datasets",
+    "resolve_dataset_binding",
+})
+DATA_QUERY_TOOLS = frozenset({"query_data", "aggregate_data"})
 SESSION_TOOLS = frozenset({"todo_write", "compact", "save_memory"})
 WRITE_TOOLS = frozenset({"write_file", "edit_file"})
 
 MODE_TOOL_ALLOWLIST: dict[CapabilityMode, frozenset[str]] = {
-    CapabilityMode.CONSULT: READ_ONLY_TOOLS,
-    CapabilityMode.ANALYZE: READ_ONLY_TOOLS | SESSION_TOOLS,
-    CapabilityMode.PRODUCE: READ_ONLY_TOOLS | SESSION_TOOLS | WRITE_TOOLS,
+    CapabilityMode.CONSULT: CONSULT_TOOLS,
+    CapabilityMode.ANALYZE: FILE_READ_TOOLS | {"list_files", "load_skill"}
+    | DATA_INSPECT_TOOLS
+    | DATA_QUERY_TOOLS
+    | SESSION_TOOLS,
+    CapabilityMode.PRODUCE: FILE_READ_TOOLS | {"list_files", "load_skill"}
+    | DATA_INSPECT_TOOLS
+    | DATA_QUERY_TOOLS
+    | SESSION_TOOLS
+    | WRITE_TOOLS,
 }

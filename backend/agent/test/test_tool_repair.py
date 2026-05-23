@@ -3,9 +3,7 @@ from pathlib import Path
 
 import pytest
 
-AGENT_ROOT = Path(__file__).resolve().parents[1]
-if str(AGENT_ROOT) not in sys.path:
-    sys.path.insert(0, str(AGENT_ROOT))
+import runtime_bootstrap  # noqa: F401, E402 — agent before backend/tools on sys.path
 
 from permission.modes import MODE_TOOL_ALLOWLIST, CapabilityMode
 from tools.runtime.repair import (
@@ -137,3 +135,27 @@ def test_build_tool_specs_includes_core_tools():
     specs = build_tool_specs()
     for name in ("query_data", "inspect_schema", "load_skill", "list_files"):
         assert name in specs
+
+
+def test_manifest_single_source_of_truth():
+    from tools.definitions.manifest import MANIFEST, build_dispatcher, build_openai_tools
+    from tools.definitions.registry import TOOL_DISPATCHER
+    from tools.definitions.schemas import TOOLS
+
+    names = {d.name for d in MANIFEST}
+    assert len(TOOLS) == len(MANIFEST)
+    assert {t["function"]["name"] for t in TOOLS} == names
+    assert set(TOOL_DISPATCHER) == names
+    assert set(build_dispatcher()) == names
+    list_files = next(d for d in MANIFEST if d.name == "list_files")
+    assert list_files.defaults["path"] == "."
+    query = next(d for d in MANIFEST if d.name == "query_data")
+    assert query.arg_aliases.get("filter") == "where"
+    assert "filter" not in (query.parameters.get("properties") or {})
+    resource_enum = query.parameters["properties"]["resource"].get("enum")
+    assert resource_enum and "submit_record" in resource_enum
+    assert "submit_record_joined" not in resource_enum
+    inspect = next(d for d in MANIFEST if d.name == "inspect_schema")
+    assert "Do NOT" in inspect.description or "Do NOT use" in inspect.description
+    load_skill = next(d for d in MANIFEST if d.name == "load_skill")
+    assert load_skill.parameters["properties"]["name"].get("enum")

@@ -1,3 +1,5 @@
+import runtime_bootstrap  # noqa: F401  # must run before loop/tools → data → core
+
 from loop import AgentLoop
 from common.llm_client import LLMClient
 from common.memory import get_memory_manager
@@ -98,25 +100,36 @@ def _handle_session_command(line: str, session_manager: SessionManager) -> bool:
     return False
 
 
+# Agent Loop 生命周期 (agent_service session层级)
+#  权限检查 -> 技能加载 -> session加载 -> llm_client初始化 -> loop_state初始化 -> agent_loop初始化 -> agent_loop.run_loop() -> session_manager.sync_loop_state() -> session_manager.persist_active()
+#  中断检查
+
 def pipeline():
     bootstrap_agent_paths()
+    
+    # 权限与模式
     print(f"Capability modes: {MODE_HELP} (default: consult)")
     print(f"Session commands: {SESSION_HELP}")
     mode_input = input("Mode (consult): ").strip().lower() or "consult"
     mode = _parse_mode(mode_input) or CapabilityMode.CONSULT
     perms = PermissionManager(mode=mode, approval=CliApprovalHandler())
     print(f"[Permission mode: {mode.value}]")
+    if mode == CapabilityMode.CONSULT:
+        print("[Tip: 班级/成绩分析请用 /mode analyze 以启用 query_data]")
 
+    # 加载hooks相关
     hooks = HookManager()
     if any(hooks.hooks[e] for e in hooks.hooks):
         print("[Hooks: loaded from .hooks.json]")
 
+    # 加载memory相关
     mem_count = get_memory_manager().load_all()
     if mem_count:
         print(f"[Memories: {mem_count} loaded from .memory/]")
     else:
         print("[Memories: none yet — agent can create them with save_memory]")
 
+    # 加载skill
     skill_registry = get_registry()
     if skill_registry.documents:
         names = ", ".join(sorted(skill_registry.documents))
@@ -125,6 +138,7 @@ def pipeline():
             f"{skill_registry.skills_dir.name}/ ({names})]"
         )
 
+    # 加载session
     session_manager = SessionManager(hooks=hooks, skills=skill_registry)
     session = session_manager.bootstrap(permission_mode=mode.value)
     if session.session_context and not session.messages:
@@ -133,6 +147,7 @@ def pipeline():
 
     llm_client = LLMClient()
 
+    # query_turn循环
     while True:
         try:
             query = input("请输入问题: ")
@@ -176,6 +191,8 @@ def pipeline():
 
         session_manager.maybe_set_title_from_message(query)
         loop_state = session_manager.to_loop_state(perms)
+        loop_state.analysis_context.session_id = loop_state.session_id
+        loop_state.analysis_context.begin_user_turn(query)
         loop_state.messages.append({
             "role": "user",
             "content": query,

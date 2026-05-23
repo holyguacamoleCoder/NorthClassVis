@@ -69,6 +69,133 @@
   
 #     return merged_message
 
+from __future__ import annotations
+
+import json
+from typing import Any
+
+
+def _arguments_as_json_string(arguments: Any) -> str:
+    if arguments is None:
+        return "{}"
+    if isinstance(arguments, str):
+        return arguments
+    return json.dumps(arguments, ensure_ascii=False)
+
+
+def _tool_call_item_to_api_dict(item: Any) -> dict[str, Any] | None:
+    if item is None:
+        return None
+    if isinstance(item, str):
+        try:
+            item = json.loads(item)
+        except (TypeError, ValueError):
+            return None
+    if not isinstance(item, dict):
+        fn = getattr(item, "function", None)
+        if fn is None and not hasattr(item, "id"):
+            return None
+        name = getattr(fn, "name", None) if fn is not None else getattr(item, "name", "")
+        raw_args = (
+            getattr(fn, "arguments", None)
+            if fn is not None
+            else getattr(item, "arguments", "{}")
+        )
+        return {
+            "id": str(getattr(item, "id", "") or ""),
+            "type": str(getattr(item, "type", "function") or "function"),
+            "function": {
+                "name": str(name or ""),
+                "arguments": _arguments_as_json_string(raw_args),
+            },
+        }
+    fn = item.get("function")
+    if isinstance(fn, dict):
+        return {
+            "id": str(item.get("id") or ""),
+            "type": str(item.get("type") or "function"),
+            "function": {
+                "name": str(fn.get("name") or ""),
+                "arguments": _arguments_as_json_string(fn.get("arguments")),
+            },
+        }
+    if item.get("name"):
+        return {
+            "id": str(item.get("id") or ""),
+            "type": "function",
+            "function": {
+                "name": str(item.get("name") or ""),
+                "arguments": _arguments_as_json_string(item.get("arguments")),
+            },
+        }
+    return None
+
+
+def coerce_tool_calls_for_api(tool_calls: Any) -> list[dict[str, Any]]:
+    """Normalize SDK / persisted / legacy shapes to OpenAI Chat Completions tool_calls."""
+    if not tool_calls:
+        return []
+    if isinstance(tool_calls, str):
+        try:
+            tool_calls = json.loads(tool_calls)
+        except (TypeError, ValueError):
+            return []
+    if not isinstance(tool_calls, list):
+        single = _tool_call_item_to_api_dict(tool_calls)
+        return [single] if single else []
+    out: list[dict[str, Any]] = []
+    for item in tool_calls:
+        coerced = _tool_call_item_to_api_dict(item)
+        if coerced and coerced.get("id"):
+            out.append(coerced)
+    return out
+
+
+def _sanitize_tool_protocol(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop tool results that are not preceded by assistant tool_calls (OpenAI requirement)."""
+    out: list[dict[str, Any]] = []
+    i = 0
+    while i < len(messages):
+        msg = messages[i]
+        role = msg.get("role")
+        if role == "assistant" and msg.get("tool_calls"):
+            expected_ids = {
+                str(tc.get("id"))
+                for tc in msg["tool_calls"]
+                if tc.get("id")
+            }
+            out.append(msg)
+            i += 1
+            while i < len(messages) and messages[i].get("role") == "tool":
+                tid = str(messages[i].get("tool_call_id") or "")
+                if tid and tid in expected_ids:
+                    out.append(messages[i])
+                    expected_ids.discard(tid)
+                i += 1
+            continue
+        if role == "tool":
+            i += 1
+            continue
+        out.append(msg)
+        i += 1
+    return out
+
+
+def repair_stored_message(msg: dict[str, Any]) -> dict[str, Any]:
+    """Fix persisted assistant tool_calls before the next LLM request."""
+    if msg.get("role") == "assistant" and msg.get("tool_calls"):
+        api_calls = coerce_tool_calls_for_api(msg["tool_calls"])
+        if api_calls:
+            msg = dict(msg)
+            msg["tool_calls"] = api_calls
+            if not (msg.get("content") or "").strip():
+                msg["content"] = None
+        else:
+            msg = dict(msg)
+            msg.pop("tool_calls", None)
+    return msg
+
+
 # Openai规范
 def normalize_message(messages):
     """
@@ -89,9 +216,13 @@ def normalize_message(messages):
         else:
             clean["content"] = str(content)
 
-        # Preserve OpenAI tool-calling fields.
+        # Preserve OpenAI tool-calling fields (must be list[object], not SDK or str).
         if role == "assistant" and msg.get("tool_calls"):
-            clean["tool_calls"] = msg["tool_calls"]
+            api_calls = coerce_tool_calls_for_api(msg["tool_calls"])
+            if api_calls:
+                clean["tool_calls"] = api_calls
+                if not clean.get("content"):
+                    clean["content"] = None
 
         if role == "tool" and msg.get("tool_call_id"):
             clean["tool_call_id"] = msg["tool_call_id"]
@@ -125,4 +256,4 @@ def normalize_message(messages):
         else:
             merged_messages.append(msg)
 
-    return merged_messages
+    return _sanitize_tool_protocol(merged_messages)

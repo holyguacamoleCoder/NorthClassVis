@@ -1,9 +1,10 @@
 import sys
 from pathlib import Path
 
-AGENT_ROOT = Path(__file__).resolve().parents[1]
-if str(AGENT_ROOT) not in sys.path:
-    sys.path.insert(0, str(AGENT_ROOT))
+import runtime_bootstrap  # noqa: F401, E402
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+AGENT_ROOT = BACKEND_ROOT / "agent"
 
 from permission import CapabilityMode, filter_tools
 from permission.modes import MODE_TOOL_ALLOWLIST
@@ -11,7 +12,7 @@ from skills import SkillRegistry, reset_registry
 from skills.registry import _parse_frontmatter
 from tools.definitions.registry import TOOL_DISPATCHER
 from tools.definitions.schemas import TOOLS
-from tools.handlers.load_skill import run_load_skill
+from tools.handlers.load_skill import _FALLBACK_LOADED, run_load_skill
 
 
 def test_parse_frontmatter():
@@ -53,8 +54,12 @@ def test_load_skill_tool_with_registry(tmp_path):
     )
     reset_registry(SkillRegistry(skills_dir=tmp_path))
     try:
-        assert "Alpha body." in run_load_skill("alpha")
-        assert "already loaded" in run_load_skill("alpha")
+        _FALLBACK_LOADED.clear()
+        loaded: set[str] = set()
+        first = run_load_skill("alpha", _loaded_skills=loaded)
+        assert "Alpha body." in first
+        assert "[Skill loaded: alpha]" in first
+        assert "already loaded" in run_load_skill("alpha", _loaded_skills=loaded)
         assert "Error" in run_load_skill("")
         assert "Unknown skill" in run_load_skill("nope")
         assert "load_skill" in TOOL_DISPATCHER

@@ -9,8 +9,10 @@ from .modes import (
 from .paths import (
     governance_path_denial_reason,
     is_governance_data_path,
+    is_raw_dataset_path,
     is_writable_path,
     path_matches_pattern,
+    raw_dataset_read_denial_reason,
     resolve_data_relative_path,
     writable_path_denial_reason,
 )
@@ -60,6 +62,16 @@ class PermissionManager:
                 }
 
         path_for_policy = str(tool_input.get("path") or "")
+
+        if (
+            tool_name == "read_file"
+            and path_for_policy
+            and is_raw_dataset_path(path_for_policy)
+        ):
+            return {
+                "behavior": "deny",
+                "reason": raw_dataset_read_denial_reason(self.mode.value),
+            }
 
         for rule in self.rules:
             if rule.get("behavior") != "deny":

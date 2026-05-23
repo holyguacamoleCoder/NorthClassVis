@@ -6,11 +6,12 @@ from __future__ import annotations
 from _lib import DATA_CATALOG, ROOT, write_json_stdout
 
 POLICY = (
-    "Analysis policy: paths are relative to data/ (e.g. reports/foo.md, Data_StudentInfo.csv, "
-    "Data_SubmitRecord/SubmitRecord-Class1.csv). "
-    "Catalog source of truth: meta/data_catalog.md (injected summary below; not a report deliverable). "
-    "Use read_file with limit on Data_*.csv and Data_SubmitRecord/*.csv. "
-    "Do not modify raw datasets; write outputs only to reports/ or exports/ in produce mode."
+    "Analysis policy: paths are relative to data/. "
+    "Structured academic data: use logical resource ids from meta/resource_registry.yaml "
+    "(inspect_schema, then query_data / aggregate_data in analyze mode). "
+    "Do NOT read_file raw Data_StudentInfo.csv, Data_TitleInfo.csv, or Data_SubmitRecord/*.csv. "
+    "Catalog: meta/data_catalog.md (summary below). "
+    "Deliverables: reports/ or exports/ in produce mode only."
 )
 
 

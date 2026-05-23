@@ -66,6 +66,23 @@ def hook_tool_input() -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def hook_deny_reason() -> str:
+    return os.environ.get("HOOK_DENY_REASON", "").strip()
+
+
+def hook_permission_mode() -> str:
+    return os.environ.get("HOOK_PERMISSION_MODE", "").strip().lower()
+
+
+def hook_deny_type() -> str:
+    return os.environ.get("HOOK_DENY_TYPE", "").strip().lower()
+
+
+def is_deliverable_path(path: str) -> bool:
+    norm = normalize_data_path(path)
+    return norm.startswith("reports/") or norm.startswith("exports/")
+
+
 def normalize_data_path(path: str) -> str:
     raw = str(path or "").strip().replace("\\", "/")
     while raw.startswith("./"):

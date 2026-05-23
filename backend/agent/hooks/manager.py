@@ -16,7 +16,7 @@ _log = get_logger("hooks")
 
 BASE_DIR = Path(__file__).resolve().parents[3]  # NorthClassVision
 
-HOOK_EVENTS = ("PreToolUse", "PostToolUse", "SessionStart")
+HOOK_EVENTS = ("PreToolUse", "PostToolUse", "PermissionDeny", "SessionStart")
 HOOK_TIMEOUT = 30
 
 # Optional trust gate (off by default). Set AGENT_HOOKS_REQUIRE_TRUST=1 to enable.
@@ -112,6 +112,12 @@ class HookManager:
             )[:10000]
             if "tool_output" in context:
                 env["HOOK_TOOL_OUTPUT"] = str(context["tool_output"])[:10000]
+            if "deny_reason" in context:
+                env["HOOK_DENY_REASON"] = str(context.get("deny_reason") or "")[:2000]
+            if "permission_mode" in context:
+                env["HOOK_PERMISSION_MODE"] = str(context.get("permission_mode") or "")[:64]
+            if "deny_type" in context:
+                env["HOOK_DENY_TYPE"] = str(context.get("deny_type") or "")[:32]
 
             try:
                 proc = subprocess.run(

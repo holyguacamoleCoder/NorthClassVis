@@ -7,7 +7,7 @@ from context.state import CompactState
 from context.tool_result_summary import append_query_summary_to_result
 from permission import PermissionManager
 
-from loop_state import AnalysisToolContext
+from loop_state import AnalysisToolContext, QuerySnapshot
 from .data_chain import record_query_result
 from .repair import ToolRepairResult
 
@@ -60,14 +60,17 @@ def postprocess_tool_result(
     parsed_args: dict,
     compact_state: CompactState | None,
     analysis_context: AnalysisToolContext | None,
-    batch_query_refs: list[str],
+    batch_snapshots: list[QuerySnapshot],
 ) -> str:
     if tool_name == "query_data" and isinstance(tool_result, str):
-        record_query_result(
+        enriched = record_query_result(
             tool_result,
+            parsed_args=parsed_args,
             analysis_context=analysis_context,
-            batch_query_refs=batch_query_refs,
+            batch_snapshots=batch_snapshots,
         )
+        if enriched:
+            tool_result = enriched
         tool_result = append_query_summary_to_result(tool_result)
 
     if compact_state and tool_name in PATH_TOOLS:

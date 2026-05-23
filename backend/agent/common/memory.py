@@ -77,10 +77,16 @@ class MemoryManager:
 
     def save_memory(self, name: str, description: str, mem_type: str, content: str) -> str:
         if mem_type not in MEMORY_TYPES:
-            return f"Error: type must be one of {MEMORY_TYPES}"
+            return (
+                f"Error: type must be one of {MEMORY_TYPES} | Example: "
+                '{"name":"prefer_tabs","description":"Report uses tabs",'
+                '"type":"user","content":"…"}'
+            )
         safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", name.lower())
         if not safe_name:
-            return "Error: invalid memory name"
+            return (
+                "Error: invalid memory name (use [a-z0-9_-] only) | Example: report_style_class1"
+            )
         self.memory_dir.mkdir(parents=True, exist_ok=True)
         frontmatter = (
             f"---\n"
@@ -92,6 +98,7 @@ class MemoryManager:
         )
         file_name = f"{safe_name}.md"
         file_path = self.memory_dir / file_name
+        overwritten = file_path.exists()
         file_path.write_text(frontmatter, encoding="utf-8")
         self.memories[name] = {
             "description": description,
@@ -105,7 +112,8 @@ class MemoryManager:
         except ValueError:
             rel = file_path
         log_event(_log, logging.INFO, "memory_saved", name=name, type=mem_type, path=str(rel))
-        return f"Saved memory '{name}' [{mem_type}] to {rel}"
+        action = "overwritten" if overwritten else "created"
+        return f"[Memory saved: name={name}, type={mem_type}, path={rel}, {action}]"
 
     def _rebuild_index(self) -> None:
         lines = ["# Memory Index", ""]

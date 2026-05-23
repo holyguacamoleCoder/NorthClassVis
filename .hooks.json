@@ -16,6 +16,16 @@
         "matcher": "write_file",
         "command": "python scripts/hooks/export_manifest.py"
       }
+    ],
+    "PermissionDeny": [
+      {
+        "matcher": "write_file",
+        "command": "python scripts/hooks/permission_deny_hint.py"
+      },
+      {
+        "matcher": "edit_file",
+        "command": "python scripts/hooks/permission_deny_hint.py"
+      }
     ]
   }
 }

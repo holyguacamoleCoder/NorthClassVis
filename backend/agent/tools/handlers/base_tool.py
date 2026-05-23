@@ -7,11 +7,14 @@ from permission.paths import resolve_data_relative_path
 MAX_OUTPUT_LENGTH = 50000
 BLOCKED_WRITE_PATTERNS = ("out-file", "set-content", "add-content", ">")
 WORKSPACE_PATH_ERROR = (
-    "Error: Path must stay within data workspace (use paths relative to data/ only)."
+    "Error: Path must stay within data workspace (use paths relative to data/ only). "
+    "| Next: use paths like reports/… or exports/… under data/"
 )
 HIDDEN_PATH_ERROR = (
-    "Error: Hidden or agent-governance paths under data/ are not accessible via tools."
+    "Error: Hidden or agent-governance paths under data/ are not accessible via tools. "
+    "| Next: write deliverables under reports/ or exports/"
 )
+_WRITE_CONTENT_WARN_BYTES = 512_000
 
 
 def _safe_path(path: str) -> Path:
@@ -78,13 +81,32 @@ def run_read_file(path: str, limit: int | None = None) -> str:
         fp = _safe_path(path)
         text = fp.read_text(encoding="utf-8")
         lines = text.splitlines()
-        if limit and len(lines) > limit:
-            lines = lines[:limit] + [f"... ({len(lines) - limit} more lines)"]
-        return "\n".join(lines)[:MAX_OUTPUT_LENGTH]
+        total_lines = len(lines)
+        truncated_lines = bool(limit and total_lines > limit)
+        if truncated_lines:
+            lines = lines[:limit] + [f"... ({total_lines - limit} more lines)"]
+        body = "\n".join(lines)
+        char_truncated = len(body) > MAX_OUTPUT_LENGTH
+        if char_truncated:
+            body = body[:MAX_OUTPUT_LENGTH]
+        header = (
+            f"[Read OK: path={path}, lines={min(total_lines, limit or total_lines)}, "
+            f"truncated={truncated_lines or char_truncated}]\n"
+        )
+        suffix = ""
+        if char_truncated:
+            suffix = "\n[Truncated: use a smaller limit or query_data for tabular data]"
+        return header + body + suffix
     except FileNotFoundError:
-        return f"Error: File not found: {path}"
+        return (
+            f"Error: File not found: {path} | Next: list_files path=\"reports\" "
+            f"or list_files path=\".\""
+        )
     except UnicodeDecodeError:
-        return f"Error: File is not valid UTF-8: {path}"
+        return (
+            f"Error: File is not valid UTF-8: {path} | Next: do not read binary files; "
+            "use query_data for tabular academic data"
+        )
     except ValueError as e:
         return _format_tool_error(e, path)
     except Exception as e:
@@ -95,9 +117,15 @@ def run_list_files(path: str = ".", recursive: bool = False, limit: int = 200) -
     try:
         target_dir = _safe_path(path)
         if not target_dir.exists():
-            return f"Error: Path not found: {path}"
+            return (
+                f"Error: Path not found: {path} | Next: list_files path=\".\" "
+                f"or list_files path=\"reports\""
+            )
         if not target_dir.is_dir():
-            return f"Error: Not a directory: {path}"
+            return (
+                f"Error: Not a directory: {path} | Next: list_files on parent directory "
+                "or read_file if targeting a file"
+            )
 
         entries: list[str] = []
         if recursive:
@@ -115,11 +143,15 @@ def run_list_files(path: str = ".", recursive: bool = False, limit: int = 200) -
                 entries.append(f"{name}/" if p.is_dir() else name)
 
         entries.sort()
-        if limit > 0 and len(entries) > limit:
+        total = len(entries)
+        truncated = limit > 0 and total > limit
+        if truncated:
             shown = entries[:limit]
-            shown.append(f"... ({len(entries) - limit} more entries)")
+            shown.append(f"... ({total - limit} more entries)")
             entries = shown
-        return "\n".join(entries) if entries else "(empty directory)"
+        header = f"[List: root={path}, count={total}, truncated={truncated}]\n"
+        body = "\n".join(entries) if entries else "(empty directory)"
+        return header + body
     except ValueError as e:
         return _format_tool_error(e, path)
     except Exception as e:
@@ -130,8 +162,16 @@ def run_write_file(path: str, content: str) -> str:
     try:
         fp = _safe_path(path)
         fp.parent.mkdir(parents=True, exist_ok=True)
+        existed = fp.exists()
         fp.write_text(content, encoding="utf-8", newline="\n")
-        return f"Wrote {len(content)} bytes to {path}"
+        action = "overwritten" if existed else "created"
+        msg = f"[Write OK: path={path}, bytes={len(content)}, {action}]"
+        if len(content) > _WRITE_CONTENT_WARN_BYTES:
+            msg += (
+                f"\n[Warning: large write ({len(content)} chars); "
+                "prefer concise markdown reports]"
+            )
+        return msg
     except ValueError as e:
         return _format_tool_error(e, path)
     except Exception as e:
@@ -143,11 +183,17 @@ def run_edit_file(path: str, old_text: str, new_text: str) -> str:
         fp = _safe_path(path)
         content = fp.read_text(encoding="utf-8")
         if old_text not in content:
-            return f"Error: Text not found in {path}"
+            return (
+                f"Error: Text not found in {path} | Next: read_file path=\"{path}\" "
+                "to copy an exact old_text snippet"
+            )
         fp.write_text(content.replace(old_text, new_text, 1), encoding="utf-8", newline="\n")
-        return f"Edited {path}"
+        return f"[Edit OK: path={path}]"
     except UnicodeDecodeError:
-        return f"Error: File is not valid UTF-8: {path}"
+        return (
+            f"Error: File is not valid UTF-8: {path} | Next: do not read binary files; "
+            "use query_data for tabular academic data"
+        )
     except ValueError as e:
         return _format_tool_error(e, path)
     except Exception as e:

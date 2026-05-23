@@ -1,11 +1,7 @@
 import sys
 from pathlib import Path
 
-BACKEND_ROOT = Path(__file__).resolve().parents[2]
-AGENT_ROOT = BACKEND_ROOT / "agent"
-for path in (BACKEND_ROOT, AGENT_ROOT):
-    if str(path) not in sys.path:
-        sys.path.insert(0, str(path))
+import runtime_bootstrap  # noqa: F401, E402
 
 from permission import CapabilityMode, PermissionManager, filter_tools
 from permission.approval import DenyAskApprovalHandler

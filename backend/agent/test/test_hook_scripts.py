@@ -91,12 +91,46 @@ def test_export_manifest_appends(tmp_path):
     assert row["bytes"] == 5
 
 
+def test_permission_deny_hint_consult_write():
+    proc = _run_hook(
+        "permission_deny_hint.py",
+        "PermissionDeny",
+        "write_file",
+        {"path": "reports/academic_analysis_Class1.md", "content": "# x"},
+        extra_env={
+            "HOOK_PERMISSION_MODE": "consult",
+            "HOOK_DENY_REASON": "consult: write operations are blocked",
+            "HOOK_DENY_TYPE": "policy",
+        },
+    )
+    assert proc.returncode == 2
+    assert "produce" in proc.stderr.lower()
+    assert "consult" in proc.stderr.lower()
+
+
+def test_permission_deny_hint_skips_read_tools():
+    proc = _run_hook(
+        "permission_deny_hint.py",
+        "PermissionDeny",
+        "read_file",
+        {"path": "Data_StudentInfo.csv"},
+        extra_env={
+            "HOOK_PERMISSION_MODE": "consult",
+            "HOOK_DENY_REASON": "consult: tool read_file not allowed",
+            "HOOK_DENY_TYPE": "policy",
+        },
+    )
+    assert proc.returncode == 0
+    assert proc.stderr.strip() == ""
+
+
 def test_hooks_json_loads_project_defaults():
     cfg = ROOT / ".hooks.json"
     assert cfg.is_file()
     hm = HookManager(config_path=cfg, workdir=ROOT)
     assert len(hm.hooks["SessionStart"]) == 1
     assert len(hm.hooks["PreToolUse"]) == 1
+    assert len(hm.hooks["PermissionDeny"]) == 2
 
 
 def test_session_start_via_hook_manager(tmp_path):

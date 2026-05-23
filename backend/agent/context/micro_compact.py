@@ -5,12 +5,21 @@ from common.logger import get_logger, log_event
 
 from .config import ContextCompactConfig, DEFAULT_CONFIG
 from .persist import COMPACTED_TOOL_PLACEHOLDER
+from .tool_result_summary import extract_tabular_summary
 
 _log = get_logger("context.micro")
 
 
 def collect_tool_message_indices(messages: list[dict[str, Any]]) -> list[int]:
     return [i for i, msg in enumerate(messages) if msg.get("role") == "tool"]
+
+
+def compact_tool_content(content: str) -> str:
+    """Replace body with placeholder but keep a one-line data-tool summary if present."""
+    summary = extract_tabular_summary(content)
+    if summary:
+        return f"{COMPACTED_TOOL_PLACEHOLDER}\n{summary}"
+    return COMPACTED_TOOL_PLACEHOLDER
 
 
 def micro_compact_messages(
@@ -35,9 +44,9 @@ def micro_compact_messages(
             continue
         if len(content) <= config.micro_compact_min_chars:
             continue
-        if content == COMPACTED_TOOL_PLACEHOLDER:
+        if content.startswith(COMPACTED_TOOL_PLACEHOLDER):
             continue
-        msg["content"] = COMPACTED_TOOL_PLACEHOLDER
+        msg["content"] = compact_tool_content(content)
         compacted += 1
 
     if compacted:
