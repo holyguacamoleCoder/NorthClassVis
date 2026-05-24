@@ -172,6 +172,14 @@ def _sanitize_tool_protocol(messages: list[dict[str, Any]]) -> list[dict[str, An
                     out.append(messages[i])
                     expected_ids.discard(tid)
                 i += 1
+            for missing_id in sorted(expected_ids):
+                out.append({
+                    "role": "tool",
+                    "tool_call_id": missing_id,
+                    "content": (
+                        "[Tool result missing; call was deduplicated or not executed.]"
+                    ),
+                })
             continue
         if role == "tool":
             i += 1

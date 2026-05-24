@@ -99,3 +99,27 @@ def test_normalize_message_parses_json_string_tool_calls():
     messages = [{"role": "assistant", "content": "", "tool_calls": json.dumps(calls)}]
     out = normalize_message(messages)
     assert out[0]["tool_calls"][0]["function"]["name"] == "read_file"
+
+
+def test_normalize_appends_placeholder_for_missing_tool_results():
+    calls = [
+        {
+            "id": "call_a",
+            "type": "function",
+            "function": {"name": "query_data", "arguments": "{}"},
+        },
+        {
+            "id": "call_b",
+            "type": "function",
+            "function": {"name": "query_data", "arguments": "{}"},
+        },
+    ]
+    messages = [
+        {"role": "assistant", "content": "", "tool_calls": calls},
+        {"role": "tool", "tool_call_id": "call_a", "content": "ok"},
+    ]
+    out = normalize_message(messages)
+    assert [m.get("role") for m in out] == ["assistant", "tool", "tool"]
+    assert out[1]["tool_call_id"] == "call_a"
+    assert out[2]["tool_call_id"] == "call_b"
+    assert "missing" in out[2]["content"].lower() or "deduplicated" in out[2]["content"].lower()

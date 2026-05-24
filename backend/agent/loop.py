@@ -202,10 +202,16 @@ class AgentLoop:
             }
             self.loop_state.messages.append(assistant_message)
 
+        tool_calls: list[dict[str, Any]] = []
         if getattr(response.message, "tool_calls", None):
-            assistant_message["tool_calls"] = coerce_tool_calls_for_api(
-                response.message.tool_calls
+            tool_calls = dedupe_tool_calls(
+                self.llm_client.extract_tool_calls(raw_response)
             )
+            assistant_message["tool_calls"] = coerce_tool_calls_for_api(tool_calls)
+            if not assistant_message["tool_calls"]:
+                assistant_message["tool_calls"] = coerce_tool_calls_for_api(
+                    response.message.tool_calls
+                )
             if not (assistant_message.get("content") or "").strip():
                 assistant_message["content"] = None
         elif response.message.content:
@@ -225,14 +231,18 @@ class AgentLoop:
             )
             return False
 
-        # 如果LLM有工具调用，则执行工具调用
-        tool_calls = dedupe_tool_calls(self.llm_client.extract_tool_calls(raw_response))
+        # 如果LLM有工具调用，则执行工具调用（tool_calls 已在上方 dedupe 并写入 assistant）
         if self._should_break_tool_loop(tool_calls):
             self.loop_state.continue_reason = "tool_loop_guard"
             guard_hint = (
                 "检测到工具调用在 inspect_schema/load_skill 上反复循环，已自动停止本轮。"
                 "若你要做统计（计数/均值/分组），请切换到 /mode analyze 并使用 "
                 "query_data / aggregate_data。"
+            )
+            _sync_tool_results_to_messages(
+                self.loop_state.messages,
+                tool_calls,
+                missing_content="Cancelled: tool loop guard",
             )
             self.loop_state.messages.append({"role": "assistant", "content": guard_hint})
             log_event(
@@ -251,6 +261,11 @@ class AgentLoop:
                 "列目录不能读取 CSV 内容，也不能做统计。请切换到 /mode analyze，"
                 "再用 inspect_schema(resource=submit_record, class=Class1) 或 query_data。"
             )
+            _sync_tool_results_to_messages(
+                self.loop_state.messages,
+                tool_calls,
+                missing_content="Cancelled: consult list loop guard",
+            )
             self.loop_state.messages.append({"role": "assistant", "content": guard_hint})
             log_event(
                 _log,
@@ -267,6 +282,11 @@ class AgentLoop:
                 "检测到连续多轮仅更新 todo_write 而无数据分析，已自动停止本轮。"
                 "若已有明确查询目标，请直接 query_data / aggregate_data；"
                 "多步任务也应在 todo 之外调用 inspect_schema 等工具。"
+            )
+            _sync_tool_results_to_messages(
+                self.loop_state.messages,
+                tool_calls,
+                missing_content="Cancelled: todo-only loop guard",
             )
             self.loop_state.messages.append({"role": "assistant", "content": guard_hint})
             log_event(
@@ -302,6 +322,11 @@ class AgentLoop:
                 "检测到工具调用连续报错并重复，已自动停止本轮，避免空转。"
                 "请检查工具参数：aggregate_data 需要 input/result_ref；"
                 "如为统计问题，先 query_data 再 aggregate_data。"
+            )
+            _sync_tool_results_to_messages(
+                self.loop_state.messages,
+                tool_calls,
+                tool_results,
             )
             self.loop_state.messages.append({"role": "assistant", "content": guard_hint})
             log_event(
@@ -348,6 +373,11 @@ class AgentLoop:
         if not tool_results:
             # 工具调用失败
             self.loop_state.continue_reason = "tool_calls_failed"
+            _sync_tool_results_to_messages(
+                self.loop_state.messages,
+                tool_calls,
+                missing_content="Cancelled: tool execution returned no results",
+            )
             log_event(_log, logging.WARNING, "tool_batch_empty", turn=self.loop_state.turn_count)
             return False
 
@@ -358,8 +388,10 @@ class AgentLoop:
                 {"applied": False, "reason": "compaction_disabled"},
             )
 
-        # 将工具调用结果添加到messages中（Tool）
-        self.loop_state.messages.extend(tool_results)
+        # 将工具调用结果添加到 messages 中（Tool），缺失 id 补占位以满足 OpenAI 协议
+        synced = _sync_tool_results_to_messages(
+            self.loop_state.messages, tool_calls, tool_results
+        )
         if compact_calls and self.compact_config.enabled:
             compact_stats = self._apply_manual_compaction(compact_focus)
             self._patch_compact_tool_results(tool_results, compact_calls, compact_stats)
@@ -371,7 +403,7 @@ class AgentLoop:
                         msg["content"] = result["content"]
                         break
 
-        self.loop_state.messages_count += (1 + len(tool_results))
+        self.loop_state.messages_count += (1 + synced)
         self.loop_state.turn_count += 1
         self.loop_state.continue_reason = "tool_calls_executed"
         log_event(
@@ -559,6 +591,39 @@ class AgentLoop:
             turn=self.loop_state.turn_count,
             messages=len(self.loop_state.messages),
         )
+
+
+def _sync_tool_results_to_messages(
+    messages: list[dict[str, Any]],
+    tool_calls: list[dict[str, Any]],
+    tool_results: list[dict[str, Any]] | None = None,
+    *,
+    missing_content: str = (
+        "[Tool result missing; call was deduplicated or not executed.]"
+    ),
+) -> int:
+    """Append one tool message per call id; use placeholders when results are absent."""
+    results_by_id = {
+        str(r["tool_call_id"]): r
+        for r in (tool_results or [])
+        if r.get("tool_call_id")
+    }
+    appended = 0
+    for call in tool_calls:
+        call_id = call.get("id")
+        if not call_id:
+            continue
+        call_id = str(call_id)
+        if call_id in results_by_id:
+            messages.append(results_by_id[call_id])
+        else:
+            messages.append({
+                "role": "tool",
+                "tool_call_id": call_id,
+                "content": missing_content,
+            })
+        appended += 1
+    return appended
 
 
 def _recovery_failure_message(reason: str | None) -> str:
