@@ -17,8 +17,8 @@
 |----|------|------|
 | 0 | `feat/analysis-contracts` | 上表契约；无 query_data / 新 LLM tool |
 | 1 | `feat/data-resource-registry` | `resource` id → 路径/loader；注册表 `data/meta/resource_registry.yaml`；库 `backend/agent/data/` |
-| 2 | `feat/tabular-query-primitive` | query/aggregate → tabular_result + result_ref |
-| 3 | `feat/generic-agent-tools` | inspect_schema、filter_context；停增业务名 tool |
+| 2 | `feat/agent-tools-primitives` | inspect_schema、query_data、aggregate_data；tabular_result + result_ref |
+| 3 | `feat/generic-agent-tools` | filter_context、visual_links 薄适配；停增业务名 tool |
 | 4 | `feat/metrics-runtime` | 按 metrics 定义计算并写入 evidence |
 | 5 | `feat/analysis-orchestrator` | archetype → 子目标 → 工具序列 |
 | 6 | `feat/thick-student-delivery` | 六章 + 五视图；Portrait/Scatter handler |
@@ -36,13 +36,27 @@
 - [x] metrics `_index.yaml` 引用的 resource id 均可 `resolve`
 - [ ] 无新增 LLM TOOLS（本 Phase 不注册 tool schema）
 
-**Phase 2 调用示例**（`feat/tabular-query-primitive`）：
+## Phase 2 验收（`feat/agent-tools-primitives`）
+
+- [x] `backend/agent/data/` — `where`、`query`、`aggregate`、`result_store`、`inspect`
+- [x] LLM 工具 `inspect_schema`、`query_data`、`aggregate_data`（schema + registry + modes）
+- [x] 大结果 preview + `meta.truncated` + `meta.result_ref`（`backend/.agent/task_outputs/query-results/`）
+- [x] `consult` 仅 `inspect_schema`；`analyze`/`produce` 含 query/aggregate
+- [x] `backend/agent/test/test_data_tools.py`
+- [ ] Phase 3：`get_current_filter_context`、`build_visual_links`（本 Phase 不做）
+
+**库层调用示例**：
 
 ```python
-# sys.path: backend + backend/agent
-from data import resolve, default_limits, dataframe_to_tabular
+from data import QuerySpec, execute_query
 
-resolved = resolve("submit_record_joined", classes=["Class1"])
-df = resolved.load()
-tabular = dataframe_to_tabular(df, resolved.resource_id, limits=default_limits())
+result = execute_query(
+    QuerySpec(
+        resource="submit_record_joined",
+        select=["student_ID", "score"],
+        resolve_params={"classes": ["Class1"]},
+        limit=100,
+    ),
+)
+# LLM 侧优先 query_data，勿用业务名工具
 ```
