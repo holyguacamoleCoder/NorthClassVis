@@ -16,6 +16,7 @@ class SessionMeta:
     created_at: float
     updated_at: float
     message_count: int = 0
+    user_turn_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -25,6 +26,7 @@ class SessionMeta:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "message_count": self.message_count,
+            "user_turn_count": self.user_turn_count,
         }
 
     @classmethod
@@ -36,6 +38,7 @@ class SessionMeta:
             created_at=float(data.get("created_at") or 0),
             updated_at=float(data.get("updated_at") or 0),
             message_count=int(data.get("message_count") or 0),
+            user_turn_count=int(data.get("user_turn_count") or 0),
         )
 
 
@@ -51,12 +54,16 @@ class ChatSession:
     compact: CompactState = field(default_factory=CompactState)
     todo_items: list[dict[str, str]] = field(default_factory=list)
     todo_round_since_update: int = 0
+    filter_context: dict[str, Any] | None = None
     # High-water user round index for logs / compaction; see count_user_turns().
     user_turn_count: int = 0
     messages_count: int = 1
 
     @property
     def meta(self) -> SessionMeta:
+        from .turns import count_user_turns
+
+        live_turns = count_user_turns(self.messages)
         return SessionMeta(
             id=self.id,
             title=self.title,
@@ -64,4 +71,5 @@ class ChatSession:
             created_at=self.created_at,
             updated_at=self.updated_at,
             message_count=len(self.messages),
+            user_turn_count=max(self.user_turn_count, live_turns),
         )

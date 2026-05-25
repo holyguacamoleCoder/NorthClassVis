@@ -1,0 +1,86 @@
+/** Agent 页面 UI 文案（集中管理，避免编码损坏） */
+
+export const AGENT_UI = {
+  sidebarSub: '教师问答助手',
+  newChat: '新建对话',
+  sessionCount: (n) => `共 ${n} 个会话`,
+
+  searchSessions: '搜索会话…',
+  sessionsLoading: '加载中…',
+  noSessions: '暂无会话',
+  noSessionMatch: '无匹配会话',
+  defaultSessionTitle: '新对话',
+  renameSession: '重命名会话',
+  cancel: '取消',
+  save: '保存',
+  deleteConfirm: (title) => `确定删除「${title}」？`,
+
+  emptyTitle: '开始新的分析',
+  emptyDesc: '基于班级数据提问，Agent 将查询数据并给出解读。',
+
+  composerPlaceholder: '输入问题，Enter 发送，Shift+Enter 换行',
+  composerHint: 'Enter 发送 · Shift+Enter 换行',
+  send: '发送',
+
+  backDashboard: '返回可视化',
+  toggleSidebar: '切换会话栏',
+  toggleRail: '切换信息栏',
+  defaultTitle: '新对话',
+  clickToEditTitle: '点击编辑',
+  floatMode: '浮窗',
+
+  railScope: '分析范围',
+  railScopeShort: '范围',
+  railClass: '班级',
+  railMajor: '专业',
+  railStudents: '选中学生',
+  railStudentsCount: (n) => `${n} 人`,
+  railNoScope: '未限定范围，将基于全局数据回答',
+  railAdjustScope: '在可视化中调整范围 →',
+  railScopeLoading: '正在加载筛选…',
+  railApplyScope: '应用筛选',
+  railApplying: '应用中…',
+  railOpenViz: '打开可视化查看',
+  railScatter: '学生簇分布',
+  railScatterLoading: '正在刷新散点…',
+  railBrush: '框选',
+  railClick: '点选',
+  railWeekRange: '周次范围',
+  railWeekLocked: '调整周次',
+  railWeekUnlock: '锁定周次',
+  railSelectedStudents: (n) => `已选 ${n} 名学生`,
+  railScopeHint: '班级/专业/周次与散点选择会作为 Agent 分析范围',
+  railMode: '能力模式',
+  modeConsult: '咨询 — 只读建议',
+  modeAnalyze: '分析 — 查询统计',
+  modeProduce: '产出 — 可写文件',
+  railPlan: '执行计划',
+  railMeta: '会话信息',
+  railMessageCount: '消息数',
+
+  permissionTitle: '需要权限确认',
+  deny: '拒绝',
+  allowOnce: '允许一次',
+  allowAlways: '永久允许',
+
+  rename: '重命名',
+  delete: '删除',
+  messageUnit: '条',
+  /** 会话列表副标题：消息条数 + Agent 用户轮次（与 loop turn 一致） */
+  sessionListMeta: (messageCount, turnCount) =>
+    `消息 ${messageCount} | 轮次 ${turnCount}`,
+
+  toolParams: '参数',
+  toolError: '错误',
+  toolStatusOk: '成功',
+  toolStatusFail: '失败',
+  toolStatusDenied: '拒绝',
+  toolStatusBlocked: '拦截',
+  toolStatusRunning: '执行中',
+
+  sampleQuestions: [
+    '最近两周链表知识点表现如何？',
+    '哪些学生需要重点关注？',
+    '班级整体作业提交率趋势怎样？',
+  ],
+}

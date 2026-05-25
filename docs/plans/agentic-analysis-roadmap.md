@@ -43,7 +43,23 @@
 - [x] 大结果 preview + `meta.truncated` + `meta.result_ref`（`backend/.agent/task_outputs/query-results/`）
 - [x] `consult` 仅 `inspect_schema`；`analyze`/`produce` 含 query/aggregate
 - [x] `backend/agent/test/test_data_tools.py`
-- [ ] Phase 3：`get_current_filter_context`、`build_visual_links`（本 Phase 不做）
+- [ ] Phase 3：`get_current_filter_context`、`build_visual_links`（见 Phase 3 验收）
+
+## Phase 3 验收（`feat/generic-agent-tools`）
+
+- [ ] `backend/agent/data/filter_context.py` — `from_http_body`、`merge_defaults`、`to_dict`
+- [ ] `backend/agent/data/visual_links.py` — 校验/规范化（读 `visual_link_contract.yaml`）
+- [ ] LLM 工具 `get_current_filter_context`、`build_visual_links`（manifest + modes）
+- [ ] `LoopState.filter_context` + executor 自动注入 `query_data`/`inspect_schema`
+- [ ] consult 仅 `get_current_filter_context`；analyze/produce 含两者
+- [ ] `backend/agent/test/test_adapter_tools.py`
+- [ ] 无新增第四类「分析」业务工具
+
+**本 Phase 不做**：Orchestrator 自动填 HTTP 顶层 `visual_links[]`、PortraitView 前端 handler、analysis skills（P4/P6/P7）
+
+## Phase 2 历史（已完成）
+
+- [x] Phase 2 原「本 Phase 不做」项已移交 Phase 3
 
 **库层调用示例**：
 

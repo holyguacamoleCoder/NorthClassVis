@@ -67,7 +67,7 @@ def test_agent_query_returns_contract(client):
         assert "view" in link
         assert "params" in link
         assert isinstance(link["params"], dict)
-    # 默认主路径为 compiler_v1，步骤为工具名
+    # Generic Agent Loop 工具名（Phase 2+）或旧 compiler 工具名
     if data["trace"]["steps"]:
         known_tools = {
             "get_context_filter",
@@ -76,6 +76,14 @@ def test_agent_query_returns_contract(client):
             "get_student_portrait",
             "query_submissions",
             "get_cluster_everyone",
+            "query_data",
+            "aggregate_data",
+            "inspect_schema",
+            "get_current_filter_context",
+            "build_visual_links",
+            "list_files",
+            "load_skill",
+            "todo_write",
         }
         assert any(step.get("tool") in known_tools for step in data["trace"]["steps"])
 

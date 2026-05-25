@@ -32,6 +32,10 @@ class WeekRoutes:
             lambda value: week_service.calculate_week_of_year(value, start_date=start_date)
         )
         wr = self.config.get_week_range()
+        qs_start = request.args.get("week_start", type=int)
+        qs_end = request.args.get("week_end", type=int)
+        if qs_start is not None and qs_end is not None and qs_start <= qs_end:
+            wr = [qs_start, qs_end]
         df = week_service.filter_to_week_range(df, wr[0], wr[1]) if wr else week_service.filter_to_recent_weeks(df)
         if df.empty:
             return jsonify({"students": []})

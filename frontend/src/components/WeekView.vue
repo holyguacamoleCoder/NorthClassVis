@@ -3,6 +3,7 @@
     <div class="title">
       <span>Week View</span>
       <span v-if="isAgentTarget" class="agent-target-badge">来自 Agent 推荐</span>
+      <span v-if="weekRangeLabel" class="week-range-badge">{{ weekRangeLabel }}</span>
       <div class="view-mode-switch">
         <span class="mode-label">Mode: {{showPeakView ? 'p' : 'r'}}</span>
         <label class="switch">
@@ -27,7 +28,8 @@
     </div>
     <Simplebar style="height: 550px; width: 98%">
       <LoadingSpinner v-if=loading />
-      <div class="wait-prompt"  v-if="isWaiting">Waiting for brush :) ...</div>
+      <div class="wait-prompt" v-if="isWaiting">请先在散点图中点选学生，或从 Agent 图表入口跳转</div>
+      <div class="empty-prompt" v-else-if="!loading && !hasRenderableData">暂无周视图数据（请确认已选中学生）</div>
       <div id="visualizationW"></div>
     </Simplebar>
   </div>
@@ -48,12 +50,11 @@ export default {
   },
   data() {
     return {
-      debugger: true,
       loading: false,
       isWaiting: true,
       WeekData: [],
       PeakData:[],
-      selectedKind: 'All kinds',
+      selectedKind: '',
       showPeakView: false,
       selectedDay: 5,
       lastAppliedAgentLink: null,
@@ -62,13 +63,27 @@ export default {
   },
   mounted() {
     this._highlightInterval = setInterval(() => { this.highlightTick = Date.now() }, 400)
+    this.bootstrapFromStore()
   },
   beforeUnmount() {
     if (this._highlightInterval) clearInterval(this._highlightInterval)
   },
   computed: {
-    ...mapState(['configLoaded']),
-    ...mapGetters(['getStudentClusterInfo','getSelectedIds', 'getSelectedData','getColors', 'getAgentVisualLink', 'getAgentHighlightAt']),
+    ...mapState(['configLoaded', 'navConfigRevision']),
+    ...mapGetters([
+      'getStudentClusterInfo',
+      'getSelectedIds',
+      'getSelectedData',
+      'getColors',
+      'getAgentVisualLink',
+      'getAgentHighlightAt',
+      'getNavWeekRange',
+    ]),
+    weekRangeLabel() {
+      const wr = this.getNavWeekRange
+      if (!wr || wr.length < 2) return ''
+      return `第 ${wr[0]}–${wr[1]} 周`
+    },
     highlighted() {
       const link = this.getAgentVisualLink
       if (!link || link.view !== 'WeekView') return false
@@ -77,30 +92,110 @@ export default {
     isAgentTarget() {
       return this.getAgentVisualLink?.view === 'WeekView'
     },
+    hasRenderableData() {
+      if (this.showPeakView) return this.filteredPeakData.length > 0
+      return this.filteredWeekData.length > 0
+    },
     filteredWeekData() {
       const students = this.WeekData?.students
       if (!students || !Array.isArray(students)) return []
-      if (!this.selectedKind) return students
-      return students.filter(s => this.getStudentClusterInfo[s.id] === this.selectedKind - 1)
+      if (this.isAllKinds()) return students
+      const cluster = Number(this.selectedKind) - 1
+      return students.filter(s => this.getStudentClusterInfo[s.id] === cluster)
     },
     filteredPeakData() {
       const peaks = this.PeakData?.peaks
       if (!peaks || !Array.isArray(peaks)) return []
-      if (!this.selectedKind) return peaks
-      return peaks.filter(s => this.getStudentClusterInfo[s.id] === this.selectedKind - 1)
+      if (this.isAllKinds()) return peaks
+      const cluster = Number(this.selectedKind) - 1
+      return peaks.filter(s => this.getStudentClusterInfo[s.id] === cluster)
     }
   },
   async created() {
   },
   methods: {
+    isAllKinds() {
+      const k = this.selectedKind
+      return k === '' || k === null || k === undefined || k === 'All kinds'
+    },
+    applyAgentVisualLink() {
+      const link = this.getAgentVisualLink
+      if (!link || link.view !== 'WeekView' || !link.params) return false
+      if (link.params.kind === undefined && link.params.cluster === undefined) return false
+      if (JSON.stringify(link) === JSON.stringify(this.lastAppliedAgentLink)) return false
+      this.lastAppliedAgentLink = { ...link }
+      const kind = link.params.kind !== undefined ? link.params.kind : (link.params.cluster + 1)
+      const num = Number(kind)
+      if (num >= 1 && num <= 3) {
+        this.selectedKind = num
+      }
+      return true
+    },
+    async bootstrapFromStore() {
+      const applied = this.applyAgentVisualLink()
+      const ids = this.getSelectedIds || []
+      if (!ids.length) {
+        this.isWaiting = true
+        return
+      }
+      this.isWaiting = false
+      const hasDetail = this.getSelectedData && Object.keys(this.getSelectedData).length > 0
+      if (!hasDetail) {
+        await this.$store.dispatch('fetchSelectedData')
+      }
+      await this.loadData()
+      if (applied && this.selectedKind && !this.isAllKinds()) {
+        this.updateKind()
+      }
+      if (!this.hasRenderableData && !this.isAllKinds()) {
+        this.selectedKind = ''
+        this.updateKind()
+      }
+    },
+    weekRangeParams() {
+      const wr = this.getNavWeekRange
+      return wr && wr.length >= 2 ? wr : null
+    },
+    /** 旭日图半径：按单列宽度与行高约束，避免跨列重叠 */
+    sunburstRadius(weekWidth, rowHeight) {
+      return Math.max(6, Math.min(weekWidth * 0.34, rowHeight * 0.4))
+    },
+    measureChartLayout(numWeeks, numStudents) {
+      const height = 600
+      const margin = { top: 20, bottom: 20, left: 20, right: 20 }
+      const stu_icon = 40
+      const weekLabelHeight = 20
+      const root = document.getElementById('visualizationW')
+      const avail = (root && root.clientWidth) ? root.clientWidth : 1000
+      const minCol = 64
+      const maxCol = 120
+      const targetCol = 82
+      const plotBudget = Math.max(avail - margin.left - margin.right - stu_icon - 12, minCol * 4)
+      const fitCol = plotBudget / Math.max(numWeeks, 1)
+      // 优先使用可读列宽；超出面板时由 #visualizationW 横向滚动
+      const colW = Math.max(minCol, Math.min(maxCol, Math.max(targetCol, fitCol)))
+      const plotWidth = colW * Math.max(numWeeks, 1)
+      const svgWidth = margin.left + margin.right + stu_icon + plotWidth
+      const svgHeight = (height / 5) * numStudents + weekLabelHeight
+      return {
+        height,
+        margin,
+        stu_icon,
+        weekLabelHeight,
+        plotWidth,
+        colW,
+        svgWidth,
+        svgHeight,
+      }
+    },
     async getWeekData(stu_ids) {
-      const { data } = await getWeeks(stu_ids)
+      const { data } = await getWeeks(stu_ids, this.weekRangeParams())
       this.WeekData = data
       // console.log('WeekData', this.WeekData)
       this.renderWeekData()
     },
     async getPeakData(stu_ids, day) {
-      const { data } = await getPeaks(stu_ids, day)
+      const { data } = await getPeaks(stu_ids, day, this.weekRangeParams())
       this.PeakData = data
       this.renderPeakData()
     },
@@ -111,22 +206,24 @@ export default {
         d3.select('#visualizationW').selectAll('*').remove()
         return
       }
-      const height = 600
-      const width = 1000
-      const margin = { top: 20, bottom: 20, left: 20 ,right: 20 }
-      const stu_icon = 40
-      const weekLabelHeight = 20 // 周标签高度
-
-      // 定义维度
       const numWeeks = d3.max(filteredWeekData, d => d.weeks.length)
-
-      // 根据选中的 kind 过滤数据
       const numStudents = filteredWeekData.length
+      const layout = this.measureChartLayout(numWeeks, numStudents)
+      const {
+        height,
+        margin,
+        stu_icon,
+        weekLabelHeight,
+        plotWidth,
+        svgWidth,
+        svgHeight,
+      } = layout
+      const width = plotWidth
 
       const svg = d3.select('#visualizationW')
         .append('svg')
-        .attr('width', margin.left + margin.right + stu_icon + width / 9 * (numWeeks + 1))
-        .attr('height', (height / 5) * numStudents + weekLabelHeight)
+        .attr('width', svgWidth)
+        .attr('height', svgHeight)
       const g = svg.append('g')
 
       // 定义rect组，放置深色矩形和各个环
@@ -136,13 +233,12 @@ export default {
       // 定义缩放尺
       const weekX = d3.scaleLinear()
         .domain([0, numWeeks])
-        .range([0, width / 9 * (numWeeks)])
+        .range([0, width])
 
       const studentsY = d3.scaleBand()
         .domain(d3.range(numStudents))
         .range([0, (height / 5) * numStudents])
 
-      // 计算每个周的宽度
       const weekWidth = weekX(1) - weekX(0)
 
       // 区分x轴,奇数填充为深色列
@@ -162,12 +258,13 @@ export default {
           .attr('y', 0)
           .text(`Week${i}`)
           .attr('text-anchor', 'middle')
-          .attr('font-size', 14)
+          .attr('font-size', weekWidth >= 72 ? 13 : 11)
           .attr('font-weight', 'bold')
       }
 
       // ------------------每个元素：Bar Radar部分-----------------
-      const radius = width / 24
+      const rowHeight = studentsY.bandwidth()
+      const radius = this.sunburstRadius(weekWidth, rowHeight)
       const innerRadius = 0.4 * radius
       const outerRadius = radius
       const knowledge = Object.keys(filteredWeekData[0].weeks[0].scores)
@@ -327,24 +424,26 @@ export default {
         d3.select('#visualizationW').selectAll('*').remove();
         return;
       }
-      const height = 600;
-      const width = 1000;
-      const margin = { top: 20, bottom: 20, left: 20, right: 20 };
-      const stu_icon = 40;
-      const weekLabelHeight = 20; // 周标签高度
-    
-      // 定义维度
       const numWeeks = d3.max(filteredPeakData, d =>
         d3.max(d.weeks, w => w.week)
       );
-    
-      // 根据选中的 kind 过滤数据
       const numStudents = filteredPeakData.length;
-    
+      const layout = this.measureChartLayout(numWeeks, numStudents);
+      const {
+        height,
+        margin,
+        stu_icon,
+        weekLabelHeight,
+        plotWidth,
+        svgWidth,
+        svgHeight,
+      } = layout;
+      const width = plotWidth;
+
       const svg = d3.select('#visualizationW')
         .append('svg')
-        .attr('width', margin.left + margin.right + stu_icon + width / 9 * (numWeeks + 1))
-        .attr('height', (height / 5) * numStudents + weekLabelHeight);
+        .attr('width', svgWidth)
+        .attr('height', svgHeight);
       const g = svg.append('g');
     
       const rg = g.append('g')
@@ -352,7 +451,7 @@ export default {
     
       const weekX = d3.scaleLinear()
         .domain([0, numWeeks])
-        .range([0, width / 9 * (numWeeks)]);
+        .range([0, width]);
     
       const studentsY = d3.scaleBand()
         .domain(d3.range(numStudents))
@@ -558,10 +657,16 @@ export default {
   },
   watch: {
     configLoaded(newVal) {
-      if (newVal && this.debugger) {
-        // 重新加载逻辑
-        this.loadData(false)
+      if (!newVal) return
+      if ((this.getSelectedIds || []).length > 0) {
+        this.bootstrapFromStore()
+      } else {
         this.isWaiting = true
+      }
+    },
+    navConfigRevision() {
+      if ((this.getSelectedIds || []).length > 0 && !this.isWaiting) {
+        this.loadData()
       }
     },
     async getSelectedData(newVal) {
@@ -583,18 +688,8 @@ export default {
       }
     },
     getAgentVisualLink(newLink) {
-      if (!newLink || newLink.view !== 'WeekView' || !newLink.params) return
-      if (newLink.params.kind === undefined && newLink.params.cluster === undefined) return
-      if (JSON.stringify(newLink) === JSON.stringify(this.lastAppliedAgentLink)) return
-      this.lastAppliedAgentLink = { ...newLink }
-      const kind = newLink.params.kind !== undefined ? newLink.params.kind : (newLink.params.cluster + 1)
-      const num = Number(kind)
-      if (num >= 1 && num <= 3) {
-        this.selectedKind = num
-        this.updateKind()
-      }
-      this.isWaiting = false
-      this.loadData()
+      if (!newLink || newLink.view !== 'WeekView') return
+      this.bootstrapFromStore()
     },
   }
 }
@@ -607,11 +702,19 @@ export default {
     box-shadow: 0 0 0 2px #0a7ea4;
     border-radius: 6px;
   }
-  .agent-target-badge {
+  .agent-target-badge,
+  .week-range-badge {
     font-size: 12px;
     color: #0a7ea4;
     margin-left: 10px;
     font-weight: normal;
+  }
+
+  #visualizationW {
+    width: 100%;
+    min-height: 120px;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
   .title {
     border-bottom: 1px solid #ccc;
@@ -726,14 +829,19 @@ export default {
     }
   }
 
-  .wait-prompt {
+  .wait-prompt,
+  .empty-prompt {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translateX(-50%) translateY(-50%);
-    font-size: 40px;
-    font-weight: bold;
-    color: #eee;
+    font-size: 16px;
+    font-weight: 600;
+    color: #999;
+    text-align: center;
+    padding: 0 24px;
+    max-width: 90%;
+    line-height: 1.5;
   }
 
   .simplebar-content-wrapper {

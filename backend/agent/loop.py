@@ -3,7 +3,7 @@ import runtime_bootstrap  # noqa: F401
 import json
 import logging
 from collections import deque
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Callable
 
 from common.llm_client import LLMClient
 from common.logger import get_logger, log_event, truncate_for_log
@@ -56,6 +56,7 @@ class AgentLoop:
         permission: PermissionManager | None = None,
         hooks: HookManager | None = None,
         recovery_config=DEFAULT_RECOVERY_CONFIG,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ):
         self.llm_client = llm_client or LLMClient()
         self.loop_state = loop_state or LoopState(messages=[])
@@ -75,6 +76,14 @@ class AgentLoop:
         self._recent_todo_only_batches: deque[bool] = deque(maxlen=_TODO_ONLY_LOOP_WINDOW)
         self._recent_tool_error_signatures: deque[tuple[str, ...]] = deque(maxlen=ERROR_LOOP_WINDOW)
         self._recent_aggregate_input_errors: deque[bool] = deque(maxlen=ERROR_LOOP_WINDOW)
+        self._progress_callback = progress_callback
+
+    def _emit_progress(self, event: dict[str, Any]) -> None:
+        if self._progress_callback is not None:
+            try:
+                self._progress_callback(event)
+            except Exception:
+                _log.exception("progress_callback_failed")
 
     def _system_prompt(self) -> str:
         registry = self.loop_state.skills or get_registry()
@@ -82,6 +91,7 @@ class AgentLoop:
             SystemPromptContext(
                 permission_mode=self.permission.mode.value,
                 session_context=list(self.loop_state.session_context),
+                filter_context=self.loop_state.filter_context,
                 skills=registry,
             )
         )
@@ -166,7 +176,14 @@ class AgentLoop:
             turn=self.loop_state.turn_count,
             messages=len(self.loop_state.messages),
         )
-        
+        self._emit_progress({"type": "llm_start"})
+
+        on_content_delta = None
+        if self._progress_callback is not None:
+            def on_content_delta(delta: str) -> None:
+                if delta:
+                    self._emit_progress({"type": "answer_delta", "delta": delta})
+
         visible_tools = filter_tools(TOOLS, self.permission.mode)
         raw_response, failure_reason = self._recovery.request_completion(
             system_prompt=self._system_prompt(),
@@ -175,6 +192,7 @@ class AgentLoop:
             max_tokens=MAX_TOKENS,
             normalize_fn=normalize_message,
             compact_fn=self._apply_recovery_compaction,
+            on_content_delta=on_content_delta,
         )
         if not raw_response or not getattr(raw_response, "choices", None):
             self.loop_state.continue_reason = failure_reason or "llm_no_response"
@@ -221,6 +239,11 @@ class AgentLoop:
         if response.finish_reason != "tool_calls":
             self.loop_state.continue_reason = None
             preview = truncate_for_log(response.message.content or "")
+            if response.message.content:
+                self._emit_progress({
+                    "type": "answer",
+                    "content": response.message.content,
+                })
             log_event(
                 _log,
                 logging.INFO,
@@ -313,6 +336,8 @@ class AgentLoop:
             analysis_context=self.loop_state.analysis_context,
             loaded_skills=self.loop_state.loaded_skills,
             llm_client=self.llm_client,
+            filter_context=self.loop_state.filter_context,
+            on_tool_event=self._emit_progress,
         )
 
         # 错误响应防护

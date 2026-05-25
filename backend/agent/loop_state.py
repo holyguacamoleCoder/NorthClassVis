@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, TYPE_CHECKING
 
 from context.state import CompactState
 from hooks import HookManager
 from permission import PermissionManager
 from recovery import RecoveryState
 from skills import SkillRegistry
+
+
+if TYPE_CHECKING:
+    from data.filter_context import FilterContext
 
 
 @dataclass(frozen=True)
@@ -83,4 +87,5 @@ class LoopState:
     continue_reason: str | None = None
     recovery: RecoveryState = field(default_factory=RecoveryState)
     analysis_context: AnalysisToolContext = field(default_factory=AnalysisToolContext)
+    filter_context: "FilterContext | None" = None
     loaded_skills: set[str] = field(default_factory=set)

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from common.logger import get_logger, log_event
 from context.state import CompactState
+from data.filter_context import FilterContext, merge_defaults, merge_http_context
 from hooks import HookManager
 from loop_state import LoopState
 from permission import CapabilityMode, PermissionManager
@@ -147,6 +148,26 @@ class SessionManager:
         self._sync_todo_from_runtime()
         self.store.save(self._active)
 
+    def set_filter_context(self, ctx: FilterContext) -> None:
+        if self._active is None:
+            return
+        self._active.filter_context = ctx.to_dict()
+
+    def apply_http_context(self, body: dict | None) -> FilterContext:
+        """Map POST /api/agent/query context → session filter_context."""
+        incoming = FilterContext.from_http_body(body)
+        existing = FilterContext.from_dict(
+            self._active.filter_context if self._active else None
+        )
+        merged = merge_http_context(existing, incoming)
+        if merged is not None:
+            self.set_filter_context(merged)
+        return merge_defaults(
+            FilterContext.from_dict(
+                self._active.filter_context if self._active else None
+            )
+        )
+
     def sync_loop_state(self, loop_state: LoopState) -> None:
         """Copy in-memory loop fields back into the active session."""
         if self._active is None:
@@ -159,12 +180,16 @@ class SessionManager:
         self._active.user_turn_count = max(self._active.user_turn_count, user_turns)
         if loop_state.permission is not None:
             self._active.permission_mode = loop_state.permission.mode.value
+        if loop_state.filter_context is not None:
+            self._active.filter_context = loop_state.filter_context.to_dict()
 
     def to_loop_state(self, permission: PermissionManager) -> LoopState:
         if self._active is None:
             raise RuntimeError("No active session")
         session = self._active
         permission.mode = CapabilityMode(session.permission_mode)
+        fc = FilterContext.from_dict(session.filter_context)
+        fc = merge_defaults(fc)
         return LoopState(
             messages=list(session.messages),
             compact=session.compact,
@@ -178,6 +203,7 @@ class SessionManager:
                 stored_user_turn_count=session.user_turn_count,
             ),
             messages_count=session.messages_count,
+            filter_context=fc,
         )
 
     def _activate(self, session: ChatSession, *, persist_active: bool) -> None:

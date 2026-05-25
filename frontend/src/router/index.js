@@ -1,9 +1,13 @@
-import Vue from 'vue'
-import VueRouter from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
+import DashboardView from '@/views/DashboardView.vue'
+import AgentView from '@/views/AgentView.vue'
 
-Vue.use(VueRouter)
-const router = new VueRouter({
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    { path: '/', name: 'dashboard', component: DashboardView },
+    { path: '/agent', name: 'agent', component: AgentView },
+  ],
 })
-
 
 export default router

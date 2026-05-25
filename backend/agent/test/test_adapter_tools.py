@@ -1,0 +1,164 @@
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+import runtime_bootstrap  # noqa: F401, E402
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+AGENT_ROOT = BACKEND_ROOT / "agent"
+
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("numpy") is None,
+    reason="numpy 未安装，跳过数据分析栈测试",
+)
+
+from data.filter_context import FilterContext  # noqa: E402
+from data.visual_links import validate_links  # noqa: E402
+from permission import CapabilityMode, filter_tools  # noqa: E402
+from tools.definitions.schemas import TOOLS  # noqa: E402
+from tools.handlers.context_tools import (  # noqa: E402
+    run_build_visual_links,
+    run_get_current_filter_context,
+)
+from tools.handlers.data_tools import run_query_data  # noqa: E402
+from tools.runtime.data.inject import inject_data_tool_context  # noqa: E402
+
+
+@pytest.fixture
+def data_dir():
+    return BACKEND_ROOT.parent / "data"
+
+
+def test_get_current_filter_context_default():
+    raw = run_get_current_filter_context()
+    payload = json.loads(raw)
+    assert payload["classes"]
+    assert isinstance(payload["classes"], list)
+    json.dumps(payload)
+
+
+def test_filter_context_from_http_body():
+    fc = FilterContext.from_http_body(
+        {
+            "classes": ["Class1"],
+            "majors": ["All"],
+            "week_range": [10, 25],
+            "selected_student_ids": ["abc123"],
+        }
+    )
+    assert fc is not None
+    assert fc.classes == ("Class1",)
+    assert fc.week_range == (10, 25)
+    assert fc.selected_student_ids == ("abc123",)
+    assert fc.source == "http_body"
+    assert fc.to_resolve_params()["classes"] == ["Class1"]
+    assert fc.to_resolve_params()["student_ids"] == ["abc123"]
+
+
+def test_build_visual_links_valid_three(data_dir, monkeypatch):
+    monkeypatch.chdir(BACKEND_ROOT.parent)
+    raw = run_build_visual_links(
+        links=[
+            {"view": "WeekView", "params": {"kind": 1}},
+            {"view": "QuestionView", "params": {"knowledge": "链表"}},
+            {"view": "StudentView", "params": {"student_ids": ["8b6d1125760bd3939b6e"]}},
+        ],
+    )
+    payload = json.loads(raw)
+    assert len(payload["visual_links"]) == 3
+    assert not payload["rejected"]
+    json.dumps(payload)
+
+
+def test_build_visual_links_rejects_bad_view():
+    raw = run_build_visual_links(
+        links=[
+            {"view": "BadView", "params": {}},
+            {"view": "QuestionView", "params": {}},
+        ],
+    )
+    payload = json.loads(raw)
+    assert payload["rejected"]
+    views = {item["view"] for item in payload["rejected"]}
+    assert "BadView" in views
+    assert "QuestionView" in views
+
+
+def test_build_visual_links_archetype_warnings():
+    raw = run_build_visual_links(
+        links=[
+            {"view": "StudentView", "params": {"student_ids": ["x"]}},
+        ],
+        archetype="student_diagnosis",
+    )
+    payload = json.loads(raw)
+    assert len(payload["visual_links"]) == 1
+    assert any("missing recommended view" in w for w in payload["warnings"])
+
+
+def test_consolidate_three_week_view_links():
+    result = validate_links(
+        [
+            {"view": "WeekView", "params": {"kind": 1}},
+            {"view": "WeekView", "params": {"kind": 2}},
+            {"view": "WeekView", "params": {"kind": 3}},
+        ],
+    )
+    assert len(result["visual_links"]) == 1
+    assert result["visual_links"][0]["params"] == {}
+    assert any("合并" in w for w in result["warnings"])
+
+
+def test_week_view_cluster_normalization():
+    result = validate_links(
+        [{"view": "WeekView", "params": {"cluster": 2}}],
+    )
+    link = result["visual_links"][0]
+    assert link["params"] == {"kind": 3}
+
+
+def test_filter_tools_consult_excludes_build_links():
+    names = {t["function"]["name"] for t in filter_tools(TOOLS, CapabilityMode.CONSULT)}
+    assert "get_current_filter_context" in names
+    assert "build_visual_links" not in names
+
+
+def test_filter_tools_analyze_includes_adapter_tools():
+    names = {t["function"]["name"] for t in filter_tools(TOOLS, CapabilityMode.ANALYZE)}
+    assert "get_current_filter_context" in names
+    assert "build_visual_links" in names
+
+
+def test_inject_filter_context_into_query(data_dir, monkeypatch):
+    monkeypatch.chdir(BACKEND_ROOT.parent)
+    fc = FilterContext(classes=("Class1",), source="session")
+    args = inject_data_tool_context(
+        "query_data",
+        {"resource": "submit_record"},
+        analysis_context=None,
+        batch_snapshots=[],
+        filter_context=fc,
+    )
+    assert args.get("_filter_context") is fc
+    raw = run_query_data(**args, data_dir=data_dir)
+    assert not raw.startswith("Error:")
+    payload = json.loads(raw)
+    assert payload.get("meta")
+
+
+def test_merge_resolve_params_explicit_wins():
+    fc = FilterContext(classes=("Class1",), source="session")
+    merged = fc.merge_resolve_params({"classes": ["Class2"]})
+    assert merged["classes"] == ["Class2"]
+
+
+def test_trace_params_json_serializable():
+    raw = run_build_visual_links(
+        links=[{"view": "WeekView", "params": {"kind": 2}}],
+        archetype="class_overview",
+    )
+    payload = json.loads(raw)
+    json.dumps({"tool": "build_visual_links", "params": payload})

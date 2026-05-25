@@ -10,6 +10,7 @@ from data.registry import get_registry_defaults, list_agent_resource_ids
 
 from ..handlers.base_tool import run_edit_file, run_list_files, run_read_file, run_write_file
 from ..handlers.compact import run_compact
+from ..handlers.context_tools import run_build_visual_links, run_get_current_filter_context
 from ..handlers.data_tools import (
     run_aggregate_data,
     run_inspect_schema,
@@ -182,6 +183,8 @@ CONCURRENCY_SAFE_TOOL = frozenset({
     "resolve_dataset_binding",
     "query_data",
     "aggregate_data",
+    "get_current_filter_context",
+    "build_visual_links",
 })
 CONCURRENCY_UNSAFE_TOOL = frozenset({"write_file", "edit_file"})
 
@@ -402,6 +405,47 @@ _LIST_DATASETS_PARAMS = {
             "description": "Optional filter: only datasets from this teacher question index.",
         },
     },
+}
+
+_GET_FILTER_CONTEXT_PARAMS = {
+    "type": "object",
+    "properties": {},
+}
+
+_BUILD_VISUAL_LINKS_PARAMS = {
+    "type": "object",
+    "properties": {
+        "links": {
+            "type": "array",
+            "description": (
+                "Candidate navigation links. Each item: {view, params [, label]}. "
+                "Views must match visual_link_contract.yaml (WeekView, QuestionView, "
+                "StudentView, PortraitView, ScatterView)."
+            ),
+            "items": {
+                "type": "object",
+                "properties": {
+                    "view": {"type": "string"},
+                    "params": {"type": "object"},
+                    "label": {"type": "string"},
+                },
+                "required": ["view", "params"],
+            },
+        },
+        "archetype": {
+            "type": "string",
+            "enum": [
+                "trend_decline",
+                "knowledge_weakness",
+                "student_diagnosis",
+                "class_overview",
+            ],
+            "description": (
+                "Optional question archetype; missing recommended views yield warnings only."
+            ),
+        },
+    },
+    "required": ["links"],
 }
 
 _INSPECT_SCHEMA_PARAMS = {
@@ -656,6 +700,34 @@ MANIFEST: tuple[ToolDefinition, ...] = (
         ),
         parameters=_SAVE_MEMORY_PARAMS,
         handler=run_save_memory,
+    ),
+
+    # Adapter Tools (Phase 3 — nav context + visual link validation)
+    ToolDefinition(
+        name="get_current_filter_context",
+        description=(
+            "Return the current analysis scope (classes, majors, week_range, selected students). "
+            "Use when: multi-class or week-range questions; confirming Nav scope before query_data; "
+            "consult mode scope introspection. "
+            "Does NOT compute metrics or query tables. "
+            "Nav scope is also auto-applied to query_data/inspect_schema when classes/majors are omitted."
+        ),
+        parameters=_GET_FILTER_CONTEXT_PARAMS,
+        handler=run_get_current_filter_context,
+        pass_through_kwargs=True,
+    ),
+    ToolDefinition(
+        name="build_visual_links",
+        description=(
+            "Validate and normalize frontend visual navigation links per visual_link_contract.yaml. "
+            "Use after analysis when suggesting chart/student/knowledge drill-downs. "
+            "Provide concrete params (knowledge, student_ids; WeekView: at most ONE link, omit kind unless "
+            "highlighting a single cluster—never three links for kind 1/2/3). Do not invent view names. "
+            "Does NOT render charts or write business conclusions. "
+            "Returns visual_links, warnings, and rejected items."
+        ),
+        parameters=_BUILD_VISUAL_LINKS_PARAMS,
+        handler=run_build_visual_links,
     ),
 
     # Data Tools

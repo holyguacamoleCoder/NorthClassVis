@@ -10,8 +10,8 @@
       <div class="filter">Major:</div>
     </div>
     <div v-if="getAgentSuggestedStudentIds.length > 0" class="agent-suggest-bar">
-      <span>Agent 建议关注 {{ getAgentSuggestedStudentIds.length }} 个学生</span>
-      <button type="button" class="agent-apply-btn" @click="applyAgentSuggested">应用到选择</button>
+      <span>Agent 建议关注 {{ getAgentSuggestedStudentIds.length }} 个学生（已同步到本视图）</span>
+      <button type="button" class="agent-apply-btn" @click="applyAgentSuggested">同步到散点图选择</button>
     </div>
     <div class="student-view-scroll-wrap">
       <Simplebar class="student-view-simplebar" @scroll="handleScroll">
@@ -49,6 +49,7 @@ export default {
       PanelsHeight: [], // 面板高度
       visibleIndices: new Set(), // 可见的学生索引集合
       expandedIndices: new Set(), // 展开的学生索引集合
+      expandPanelsOnLoad: false, // Agent 跳转后默认展开题目树
       batchSize: 20, // 每次加载的数量
       uniqueMajors: [], // 唯一的专业列表
       highlightTick: 0,
@@ -56,6 +57,7 @@ export default {
   },
   mounted() {
     this._highlightInterval = setInterval(() => { this.highlightTick = Date.now() }, 400)
+    this.bootstrapFromAgentLink()
   },
   beforeUnmount() {
     if (this._highlightInterval) clearInterval(this._highlightInterval)
@@ -76,13 +78,27 @@ export default {
       return this.treeData.filter(student => student.major === this.selectedMajor)
     }
   },
-  async created() {
-    
-  },
-  mounted() {
-  },
   methods: {
     ...mapActions(['applyAgentSuggestedStudents']),
+    resolveTreeStudentIds() {
+      const link = this.getAgentVisualLink
+      if (link?.view === 'StudentView' && link.params?.student_ids?.length) {
+        return link.params.student_ids
+      }
+      if (this.getAgentSuggestedStudentIds?.length) {
+        return this.getAgentSuggestedStudentIds
+      }
+      return this.getSelectedIds || []
+    },
+    bootstrapFromAgentLink() {
+      const link = this.getAgentVisualLink
+      if (link?.view !== 'StudentView') return
+      const ids = this.resolveTreeStudentIds()
+      if (!ids.length) return
+      this.isWaiting = false
+      this.expandPanelsOnLoad = true
+      this.loadData()
+    },
     async applyAgentSuggested() {
       await this.applyAgentSuggestedStudents()
     },
@@ -196,6 +212,19 @@ export default {
       this.PanelsHeight[th] = xOffset + margin.top + studentTitleHeight + studentTipHeight
     },
 
+    panelCollapsedHeight() {
+      const studentTitleHeight = 30
+      const studentTipHeight = 40
+      const margin = { bottom: 10 }
+      return studentTitleHeight + studentTipHeight + margin.bottom
+    },
+
+    panelExpandedHeight(index) {
+      const collapsed = this.panelCollapsedHeight()
+      const measured = this.PanelsHeight[index]
+      return Math.max(measured > 0 ? measured : collapsed, collapsed + 8)
+    },
+
     loadStudentPanel(index) {
       if (this.visibleIndices.has(index)) return // 如果已经加载过，则跳过
 
@@ -229,17 +258,18 @@ export default {
       const colors = this.getColors
       currentCluster = (currentCluster >= 0 && currentCluster < colors.length) ? currentCluster : 0
       this.currentCluster = currentCluster // 设置当前集群
-      const studentPanelHeight = studentTitleHeight + studentTipHeight + margin.bottom // 计算学生面板高度
+      const collapsedHeight = this.panelCollapsedHeight()
+      const startExpanded = this.expandPanelsOnLoad || this.expandedIndices.has(index)
       const varToggleFunc = this.togglePanelHeight
       const studentPanel = g.append('svg') // 创建学生面板
         .attr('transform', `translate(${margin.left}, ${0})`)  
         .attr('class', 'student-panel')
         .attr('width', width - margin.left - margin.right)
-        .attr('height', studentPanelHeight)
-        // .attr('height', this.PanelsHeight[index])
+        .attr('height', collapsedHeight)
+        .attr('data-collapsed-height', collapsedHeight)
         .style('box-shadow', '0 0 10px rgba(0, 0, 0, 0.1)')
-        .on("click", function() {
-          // 点击时，切换面板的高度
+        .on('click', function (event) {
+          event.stopPropagation()
           varToggleFunc(d3.select(this), index)
         })
 
@@ -282,6 +312,14 @@ export default {
       const Questions = s.children // 获取学生的问题
       this.renderQuestions(sg, Questions, index) // 渲染问题
 
+      const expandedHeight = this.panelExpandedHeight(index)
+      studentPanel
+        .attr('data-expanded-height', expandedHeight)
+        .attr('height', startExpanded ? expandedHeight : collapsedHeight)
+      if (startExpanded) {
+        this.expandedIndices.add(index)
+      }
+
       this.visibleIndices.add(index) // 标记为已加载
     },
 
@@ -308,13 +346,15 @@ export default {
     },
 
     togglePanelHeight(element, index) {
-      const targetHeight = this.expandedIndices.has(index) ? 80 : this.PanelsHeight[index]
+      const collapsedHeight = Number(element.attr('data-collapsed-height')) || this.panelCollapsedHeight()
+      const expandedHeight = Number(element.attr('data-expanded-height')) || this.panelExpandedHeight(index)
+      const isExpanded = this.expandedIndices.has(index)
+      const targetHeight = isExpanded ? collapsedHeight : expandedHeight
       element
         .transition()
-        .duration(400)  // 动画时长 300ms
-        .attr("height", targetHeight)
-      
-      if (this.expandedIndices.has(index)) {
+        .duration(400)
+        .attr('height', targetHeight)
+      if (isExpanded) {
         this.expandedIndices.delete(index)
       } else {
         this.expandedIndices.add(index)
@@ -328,27 +368,37 @@ export default {
       this.loadInitialBatch() // 重新加载初始批次的数据
     },
     async loadData(render = true) {
+      if (this.isAgentTarget) {
+        this.expandPanelsOnLoad = true
+      }
       this.loading = true
       this.visibleIndices.clear() // 清空可见索引集合并重新加载
       this.expandedIndices.clear() // 清空展开索引集合并重新加载
       this.$refs.visualizationStu.innerHTML = '' // 清空现有内容
       if (render) {
         // 若当前是 Agent 推荐跳转且有待展示的推荐学生，用推荐 id 拉列表；否则用当前选中学生
-        const ids =
-          this.getAgentVisualLink?.view === 'StudentView' && this.getAgentSuggestedStudentIds?.length
-            ? this.getAgentSuggestedStudentIds
-            : (this.getSelectedIds || [])
+        const ids = this.resolveTreeStudentIds()
+        if (!ids.length) {
+          this.loading = false
+          return
+        }
         await this.getTreeData(ids)
         this.loadInitialBatch()
+        if (!this.isAgentTarget) {
+          this.expandPanelsOnLoad = false
+        }
       }
       this.loading = false
     }
   },
   watch: {
     configLoaded(newVal) {
-      if (newVal) {
-        // 重新加载逻辑
-        this.loadData(false)
+      if (!newVal) return
+      const ids = this.resolveTreeStudentIds()
+      if (ids.length) {
+        this.isWaiting = false
+        this.loadData()
+      } else {
         this.isWaiting = true
       }
     },
@@ -361,19 +411,23 @@ export default {
     },
     // 点击图表入口跳转到学生视图时，用 Agent 推荐 id 拉列表，无需先点「应用到选择」
     getAgentVisualLink: {
-      handler(link) {
-        if (link?.view === 'StudentView' && this.getAgentSuggestedStudentIds?.length) {
-          this.isWaiting = false
-          this.loadData()
-        }
+      handler(link, prev) {
+        if (link?.view !== 'StudentView') return
+        const prevIds = prev?.params?.student_ids?.join(',') || ''
+        const nextIds = link?.params?.student_ids?.join(',') || ''
+        if (prev?.view === 'StudentView' && prevIds === nextIds) return
+        this.expandPanelsOnLoad = true
+        this.bootstrapFromAgentLink()
       },
       deep: true,
     },
-    getAgentSuggestedStudentIds(ids) {
-      if (this.getAgentVisualLink?.view === 'StudentView' && ids?.length) {
-        this.isWaiting = false
-        this.loadData()
-      }
+    getAgentSuggestedStudentIds(ids, prev) {
+      if (this.getAgentVisualLink?.view !== 'StudentView') return
+      const a = (ids || []).join(',')
+      const b = (prev || []).join(',')
+      if (a === b) return
+      this.expandPanelsOnLoad = true
+      this.bootstrapFromAgentLink()
     },
   }
 }
@@ -485,10 +539,13 @@ export default {
     color: #eee;
   }
   .student-panel {
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    display: block;
+    margin-bottom: 6px;
+    border: 1px solid #d0d0d0;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
     cursor: pointer;
-    /*超出页面增加滚动效果*/
-    overflow-y: scroll;
+    overflow: hidden;
   }
 }
 /deep/ .simplebar-vertical {

@@ -6,6 +6,7 @@ from typing import Any
 from data.aggregate import AggregateSpec, execute_aggregate
 from data.dataset_registry import build_datasets_catalog
 from data.exceptions import DataResourceError, InvalidParameterError, UnknownResourceError
+from data.filter_context import FilterContext
 from data.inspect import inspect_resource
 from data.param_validation import normalize_query_resource, validate_resolve_params
 from data.query import QuerySpec, execute_query
@@ -35,6 +36,27 @@ def _format_data_error(
 
 def _resolve_params(kwargs: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in kwargs.items() if k in _RESOLVE_KEYS and v is not None}
+
+
+def _resolve_params_with_context(
+    kwargs: dict[str, Any],
+    filter_context: FilterContext | None,
+    *,
+    resource: str | None = None,
+) -> dict[str, Any]:
+    resolve = _resolve_params(kwargs)
+    if filter_context is not None:
+        resolve = filter_context.merge_resolve_params(resolve, resource_id=resource)
+    return resolve
+
+
+def _pop_filter_context(kwargs: dict[str, Any]) -> FilterContext | None:
+    raw = kwargs.pop("_filter_context", None)
+    if isinstance(raw, FilterContext):
+        return raw
+    if isinstance(raw, dict):
+        return FilterContext.from_dict(raw)
+    return None
 
 
 def _json_result(payload: dict) -> str:
@@ -187,9 +209,10 @@ def run_inspect_schema(resource: str | None = None, **kwargs: Any) -> str:
             "Error: resource is required | Next: inspect_schema with resource from "
             "resource_registry (e.g. student_info, submit_record)"
         )
+    filter_context = _pop_filter_context(kwargs)
     try:
         resource, kwargs, notes = normalize_query_resource(resource, kwargs)
-        resolve = _resolve_params(kwargs)
+        resolve = _resolve_params_with_context(kwargs, filter_context, resource=resource)
         validate_resolve_params(resource, resolve)
         payload = inspect_resource(
             resource,
@@ -233,10 +256,11 @@ def run_query_data(
         )
     if where is None and filter is not None:
         where = filter
+    filter_context = _pop_filter_context(kwargs)
     try:
         reject_limit_zero(limit)
         resource, kwargs, notes = normalize_query_resource(resource, kwargs, where=where)
-        resolve = _resolve_params(kwargs)
+        resolve = _resolve_params_with_context(kwargs, filter_context, resource=resource)
         validate_resolve_params(resource, resolve)
         spec = QuerySpec(
             resource=resource,
@@ -247,7 +271,11 @@ def run_query_data(
             limit=limit,
             resolve_params=resolve,
         )
-        result = execute_query(spec, data_dir=kwargs.get("data_dir"))
+        result = execute_query(
+            spec,
+            filter_context=filter_context,
+            data_dir=kwargs.get("data_dir"),
+        )
         _enrich_query_payload(result, notes)
         enrich_query_payload(
             result,
@@ -279,19 +307,23 @@ def _composite_query_for_aggregate(
     resource: str,
     metrics: list[dict],
     kwargs: dict[str, Any],
+    *,
+    filter_context: FilterContext | None = None,
 ) -> dict | None:
     """When aggregate omits input but passes resource + filters, run query first."""
-    resolve = _resolve_params(kwargs)
+    resolve = _resolve_params_with_context(kwargs, filter_context, resource=resource)
     if resource == "submit_record" and not resolve.get("class") and not resolve.get("classes"):
         return None
     fields = {m.get("field") for m in metrics if m.get("field")}
     select = [f for f in fields if f] or None
+    extra = {k: v for k, v in kwargs.items() if k in _RESOLVE_KEYS or k == "class"}
     raw = run_query_data(
         resource=resource,
         select=select,
         limit=kwargs.get("limit"),
         data_dir=kwargs.get("data_dir"),
-        **{k: v for k, v in kwargs.items() if k in _RESOLVE_KEYS or k == "class"},
+        _filter_context=filter_context,
+        **extra,
     )
     if raw.startswith("Error:"):
         return None
@@ -316,13 +348,19 @@ def run_aggregate_data(
     binding_decision = kwargs.pop("_binding_decision", None)
     binding_trace = kwargs.pop("_binding_trace", None)
     auto_input = bool(kwargs.pop("_auto_input", False))
+    filter_context = _pop_filter_context(kwargs)
     kwargs.pop("_canonical_result_ref", None)
     kwargs.pop("_last_result_ref", None)
     kwargs.pop("_bind_layer", None)
 
     if not input and resource and metrics:
         resource, kwargs, _notes = normalize_query_resource(resource, kwargs)
-        query_payload = _composite_query_for_aggregate(resource, metrics, kwargs)
+        query_payload = _composite_query_for_aggregate(
+            resource,
+            metrics,
+            kwargs,
+            filter_context=filter_context,
+        )
         if query_payload:
             meta = query_payload.get("meta") or {}
             ref = meta.get("result_ref")

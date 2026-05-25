@@ -1,11 +1,13 @@
 import { createStore } from 'vuex'
 import { getClusterEveryone } from '@/api/ParallelView.js'
 import { getSelectedData } from '@/api/NavHeader.js'
+import { setConfig } from '@/api/ConfigPanel.js'
 
 
 export default createStore({
   state: {
     configLoaded: 0,    // 表示后端配置是否加载完成
+    navConfigRevision: 0, // 每次应用 nav 筛选 +1，供散点等视图可靠刷新
     studentClusterInfo: {}, // 存储从后端获取的聚类数据,key:stu_id,value:cluster
     selectedStudentIds: [], // 存储选中的学生 ID ，从前端交互而来
     selectedStudentData: [], // 对应的学生各项指标数据，需要从后端获取
@@ -19,11 +21,22 @@ export default createStore({
     agentSuggestedStudentIds: [], // 仅当用户点击「应用到选择」时才写入 selectedStudentIds，避免牵一发而动全身
     navClasses: 'Part',
     navMajors: 'All',
+    navSelectedClasses: [],
+    navSelectedMajors: [],
+    navWeekRange: null,
+    navScopeApplying: false,
   },
   mutations: {
     // 更新 configLoaded 状态
     SET_CONFIG_LOADED(state, value) {
       state.configLoaded = value;
+    },
+    NAV_CONFIG_APPLIED(state) {
+      state.navConfigRevision += 1
+      state.configLoaded = Date.now()
+    },
+    setNavScopeApplying(state, value) {
+      state.navScopeApplying = !!value
     },
 
     // 设置 studentClusterInfo
@@ -61,6 +74,14 @@ export default createStore({
     setNavFilter(state, { classes, majors }) {
       if (classes != null) state.navClasses = classes
       if (majors != null) state.navMajors = majors
+    },
+    setNavScope(state, payload) {
+      if (!payload) return
+      if (payload.classes != null) state.navSelectedClasses = payload.classes
+      if (payload.majors != null) state.navSelectedMajors = payload.majors
+      if (payload.weekRange !== undefined) state.navWeekRange = payload.weekRange
+      if (payload.classesLabel != null) state.navClasses = payload.classesLabel
+      if (payload.majorsLabel != null) state.navMajors = payload.majorsLabel
     },
   },
   actions: {
@@ -135,15 +156,60 @@ export default createStore({
       context.commit('setAgentVisualLink', payload)
       context.commit('setAgentHighlightAt', Date.now())
     },
+    /** 图表入口点击：写入链接、同步选中学生并拉取详情 */
+    async applyAgentVisualLinkNavigation(context, { view, params = {} }) {
+      context.commit('setAgentVisualLink', { view, params })
+      context.commit('setAgentHighlightAt', Date.now())
+
+      const ids = Array.isArray(params.student_ids) ? params.student_ids : []
+      if (view === 'StudentView' && ids.length > 0) {
+        context.commit('setAgentSuggestedStudentIds', ids)
+        context.commit('setSelectedStudents', ids)
+        await context.dispatch('fetchSelectedData')
+      } else if (ids.length > 0) {
+        context.commit('setAgentSuggestedStudentIds', ids)
+      }
+
+      if (view === 'WeekView') {
+        await context.dispatch('pushNavScopeToServer')
+        if (context.state.selectedStudentIds?.length) {
+          await context.dispatch('fetchSelectedData')
+        }
+      }
+    },
     applyAgentSuggestedStudents(context) {
       const ids = context.state.agentSuggestedStudentIds
       if (!ids || ids.length === 0) return
       context.commit('setSelectedStudents', ids)
       return context.dispatch('fetchSelectedData')
     },
+    applyNavConfig(context) {
+      context.commit('NAV_CONFIG_APPLIED')
+    },
+    async pushNavScopeToServer(context) {
+      const classes = context.state.navSelectedClasses || []
+      const majors = context.state.navSelectedMajors || []
+      const weekRange = context.state.navWeekRange
+      if (!classes.length || !majors.length) return
+      try {
+        await setConfig(classes, majors, weekRange)
+        context.commit('NAV_CONFIG_APPLIED')
+      } catch (err) {
+        console.error('pushNavScopeToServer failed', err)
+      }
+    },
+    async syncDashboardFromAgentScope(context) {
+      await context.dispatch('fetchClusterData')
+      await context.dispatch('pushNavScopeToServer')
+      const ids = context.state.selectedStudentIds
+      if (ids && ids.length > 0) {
+        await context.dispatch('fetchSelectedData')
+      }
+    },
   },
   getters: {
     getConfigLoaded: state => state.configLoaded,
+    getNavConfigRevision: state => state.navConfigRevision,
     getStudentClusterInfo: state => state.studentClusterInfo,
     getSelectedIds: state => state.selectedStudentIds,
     getSelectedData: state => state.selectedStudentData,
@@ -156,5 +222,9 @@ export default createStore({
     getAgentSuggestedStudentIds: state => state.agentSuggestedStudentIds,
     getNavClasses: state => state.navClasses,
     getNavMajors: state => state.navMajors,
+    getNavSelectedClasses: state => state.navSelectedClasses,
+    getNavSelectedMajors: state => state.navSelectedMajors,
+    getNavWeekRange: state => state.navWeekRange,
+    getNavScopeApplying: state => state.navScopeApplying,
   }
 })

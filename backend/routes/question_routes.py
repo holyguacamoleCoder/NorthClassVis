@@ -9,6 +9,10 @@ class QuestionRoutes:
         self.question_bp = Blueprint('question', __name__)
         self.register_routes()
 
+    def update_data(self, new_config):
+        """Observer: nav 筛选变更后同步 config 引用。"""
+        self.config = new_config
+
     def register_routes(self):
         self.question_bp.add_url_rule('/question/timeline/<title_id>', view_func=self.get_timeline_data, methods=['GET'])
         self.question_bp.add_url_rule('/question/distribution/<title_id>', view_func=self.get_distribution_data, methods=['GET'])

@@ -9,12 +9,14 @@ from common.memory import MemoryManager, get_memory_manager
 from common.prompts import (
     BASE_AGENT_PROMPT,
     MEMORY_GUIDANCE,
+    format_filter_context_section,
     format_permission_mode,
     format_session_section,
     format_skills_section,
 )
 
 if TYPE_CHECKING:
+    from data.filter_context import FilterContext
     from skills.registry import SkillRegistry
 
 
@@ -24,6 +26,7 @@ class SystemPromptContext:
 
     permission_mode: str = "consult"
     session_context: list[str] = field(default_factory=list)
+    filter_context: "FilterContext | None" = None
     skills: SkillRegistry | None = None
     include_memory_guidance: bool = True
 
@@ -49,6 +52,9 @@ class SystemPromptBuilder:
 
         if ctx.session_context:
             parts.append(format_session_section(ctx.session_context))
+
+        if ctx.filter_context is not None:
+            parts.append(format_filter_context_section(ctx.filter_context.to_dict()))
 
         if ctx.skills is not None:
             parts.append(format_skills_section(ctx.skills.describe_available()))

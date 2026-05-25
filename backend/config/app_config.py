@@ -111,4 +111,6 @@ class Config:
 
     def notify_observers(self):
         for observer in self._observers:
-            observer.update_data(self)
+            handler = getattr(observer, "update_data", None)
+            if callable(handler):
+                handler(self)

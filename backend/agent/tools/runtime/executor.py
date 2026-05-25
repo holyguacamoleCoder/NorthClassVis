@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 import runtime_bootstrap  # noqa: F401
 
@@ -32,6 +32,8 @@ def execute_tool_calls(
     analysis_context: AnalysisToolContext | None = None,
     loaded_skills: set[str] | None = None,
     llm_client: Any | None = None,
+    filter_context: Any | None = None,
+    on_tool_event: Callable[[dict[str, Any]], None] | None = None,
 ) -> list[dict[str, Any]]:
     tool_calls = dedupe_tool_calls(tool_calls)
     batch_snapshots: list[QuerySnapshot] = []
@@ -70,6 +72,20 @@ def execute_tool_calls(
                     reason=reason,
                 )
                 if call_id:
+                    if on_tool_event and tool_name:
+                        on_tool_event({
+                            "type": "tool_start",
+                            "call_id": str(call_id),
+                            "tool": str(tool_name or ""),
+                            "params": dict(parsed_args),
+                        })
+                        on_tool_event({
+                            "type": "tool_end",
+                            "call_id": str(call_id),
+                            "tool": str(tool_name or ""),
+                            "params": dict(parsed_args),
+                            "content": content,
+                        })
                     results_by_id[call_id] = {
                         "role": "tool",
                         "tool_call_id": call_id,
@@ -88,6 +104,32 @@ def execute_tool_calls(
             tool_name = repair.name
             parsed_args = repair.args
 
+        def _emit_start() -> None:
+            if on_tool_event and call_id and tool_name:
+                on_tool_event({
+                    "type": "tool_start",
+                    "call_id": str(call_id),
+                    "tool": str(tool_name),
+                    "params": dict(parsed_args),
+                })
+
+        def _store(content: str) -> None:
+            if not call_id:
+                return
+            results_by_id[call_id] = {
+                "role": "tool",
+                "tool_call_id": call_id,
+                "content": content,
+            }
+            if on_tool_event and tool_name:
+                on_tool_event({
+                    "type": "tool_end",
+                    "call_id": str(call_id),
+                    "tool": str(tool_name),
+                    "params": dict(parsed_args),
+                    "content": content,
+                })
+
         if repair.missing_required:
             missing = ", ".join(sorted(repair.missing_required))
             log_event(
@@ -99,18 +141,19 @@ def execute_tool_calls(
                 missing=missing,
             )
             if call_id:
-                results_by_id[call_id] = {
-                    "role": "tool",
-                    "tool_call_id": call_id,
-                    "content": prepend_hook_messages(
+                _emit_start()
+                _store(
+                    prepend_hook_messages(
                         prepend_repair_notes(
                             f"Error: Missing required arguments for {tool_name}: {missing}",
                             repair.notes,
                         ),
                         pre_messages,
-                    ),
-                }
+                    )
+                )
             continue
+
+        _emit_start()
 
         if permission is not None:
             decision = permission.check(tool_name, parsed_args)
@@ -127,10 +170,8 @@ def execute_tool_calls(
                     reason=reason,
                 )
                 if call_id:
-                    results_by_id[call_id] = {
-                        "role": "tool",
-                        "tool_call_id": call_id,
-                        "content": permission_denied_content(
+                    _store(
+                        permission_denied_content(
                             hooks=hooks,
                             permission=permission,
                             tool_name=tool_name,
@@ -138,8 +179,8 @@ def execute_tool_calls(
                             reason=reason,
                             pre_messages=pre_messages,
                             deny_type="policy",
-                        ),
-                    }
+                        )
+                    )
                 continue
             if behavior == "ask":
                 reason = decision.get("reason", "approval required")
@@ -167,11 +208,7 @@ def execute_tool_calls(
                         message_prefix=f"Permission denied for {tool_name}",
                     )
                     if call_id:
-                        results_by_id[call_id] = {
-                            "role": "tool",
-                            "tool_call_id": call_id,
-                            "content": content,
-                        }
+                        _store(content)
                     continue
 
         if tool_name not in TOOL_DISPATCHER:
@@ -188,14 +225,12 @@ def execute_tool_calls(
                 suggestions=repair.suggestions or None,
             )
             if call_id:
-                results_by_id[call_id] = {
-                    "role": "tool",
-                    "tool_call_id": call_id,
-                    "content": prepend_hook_messages(
+                _store(
+                    prepend_hook_messages(
                         prepend_repair_notes(hint, repair.notes),
                         pre_messages,
-                    ),
-                }
+                    )
+                )
             continue
 
         dispatch_args = inject_data_tool_context(
@@ -204,6 +239,7 @@ def execute_tool_calls(
             analysis_context=analysis_context,
             batch_snapshots=batch_snapshots,
             llm_client=llm_client,
+            filter_context=filter_context,
         )
         if tool_name == "load_skill" and loaded_skills is not None:
             dispatch_args = {**dispatch_args, "_loaded_skills": loaded_skills}
@@ -227,14 +263,12 @@ def execute_tool_calls(
                 call_id,
             )
             if call_id:
-                results_by_id[call_id] = {
-                    "role": "tool",
-                    "tool_call_id": call_id,
-                    "content": prepend_hook_messages(
+                _store(
+                    prepend_hook_messages(
                         f"Error: Tool {tool_name} execution failed",
                         pre_messages,
-                    ),
-                }
+                    )
+                )
             continue
 
         tool_result = postprocess_tool_result(
@@ -270,11 +304,7 @@ def execute_tool_calls(
             result_preview=truncate_for_log(tool_result),
         )
         if call_id:
-            results_by_id[call_id] = {
-                "role": "tool",
-                "tool_call_id": call_id,
-                "content": tool_result,
-            }
+            _store(tool_result)
 
     tool_results: list[dict[str, Any]] = []
     for call in tool_calls:

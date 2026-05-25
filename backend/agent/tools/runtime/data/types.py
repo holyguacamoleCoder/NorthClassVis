@@ -15,6 +15,13 @@ DATA_CHAIN_TOOLS = frozenset(
     }
 )
 
+ADAPTER_CONTEXT_TOOLS = frozenset(
+    {
+        "get_current_filter_context",
+        "build_visual_links",
+    }
+)
+
 
 @dataclass
 class AggregateBinding:

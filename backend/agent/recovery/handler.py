@@ -54,6 +54,7 @@ class RecoveryHandler:
         max_tokens: int,
         normalize_fn: Callable[[list], list],
         compact_fn: Callable[[], None],
+        on_content_delta: Callable[[str], None] | None = None,
     ) -> tuple[Any | None, str | None]:
         """
         Call the LLM with recovery strategies.
@@ -68,6 +69,7 @@ class RecoveryHandler:
                     messages=normalize_fn(messages),
                     tools=tools,
                     max_tokens=max_tokens,
+                    on_content_delta=on_content_delta,
                 )
             except LLMCallError as exc:
                 return None, _failure_reason(exc)
@@ -83,6 +85,7 @@ class RecoveryHandler:
                 max_tokens=max_tokens,
                 normalize_fn=normalize_fn,
                 compact_fn=compact_fn,
+                on_content_delta=on_content_delta,
             )
             if response is None:
                 return None, self._last_failure_reason or "llm_no_response"
@@ -127,6 +130,7 @@ class RecoveryHandler:
         max_tokens: int,
         normalize_fn: Callable[[list], list],
         compact_fn: Callable[[], None],
+        on_content_delta: Callable[[str], None] | None = None,
     ) -> Any | None:
         self._last_failure_reason = None
         max_attempts = self.config.max_attempts
@@ -138,6 +142,7 @@ class RecoveryHandler:
                     messages=normalize_fn(messages),
                     tools=tools,
                     max_tokens=max_tokens,
+                    on_content_delta=on_content_delta,
                 )
             except LLMCallError as exc:
                 action = classify_exception(exc)

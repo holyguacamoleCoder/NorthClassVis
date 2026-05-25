@@ -69,11 +69,7 @@ export default {
   methods: {
     ...mapActions(['fetchSelectedData', 'openAgentPanel', 'closeAgentPanel']),
     toggleAgentPanel() {
-      if (this.getAgentPanelVisible && !this.getAgentPanelMinimized) {
-        this.closeAgentPanel()
-      } else {
-        this.openAgentPanel()
-      }
+      this.$router.push('/agent')
     },
    toggleConfigPanel(){
       this.isConfigPanelVisible = !this.isConfigPanelVisible;
@@ -83,6 +79,13 @@ export default {
       this.selectedClasses = classesText
       this.selectedMajors = majorsText
       this.$store.commit('setNavFilter', { classes: classesText, majors: majorsText })
+      const scope = this.$store.state
+      if (scope.navSelectedClasses?.length) {
+        this.$store.commit('setNavScope', {
+          classesLabel: classesText,
+          majorsLabel: majorsText,
+        })
+      }
     },
     handleClusterClick() {
       // 检查是否有选中的学生
@@ -106,6 +109,7 @@ export default {
 @total_width : 2300px;
 .header-container{
   position: relative;
+  width: 100%;
   height: 50px;
   background-color: #2a2a2a;
   border-radius: 5px 5px 0 0;

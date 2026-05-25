@@ -17,6 +17,20 @@ from .where import apply_where
 PREVIEW_ROW_LIMIT = 50
 
 
+def _apply_ui_student_selection(
+    df: pd.DataFrame,
+    filter_context: FilterContext | None,
+) -> tuple[pd.DataFrame, int | None]:
+    """When the scatter plot has a selection, restrict rows to those student_IDs."""
+    if filter_context is None or not filter_context.selected_student_ids:
+        return df, None
+    if "student_ID" not in df.columns:
+        return df, None
+    ids = set(filter_context.selected_student_ids)
+    filtered = df[df["student_ID"].isin(ids)].copy()
+    return filtered, len(ids)
+
+
 @dataclass
 class QuerySpec:
     resource: str
@@ -122,12 +136,16 @@ def execute_query(
     limits = limits or default_limits()
     params = dict(spec.resolve_params)
     if filter_context is not None:
-        params.update(filter_context.to_resolve_params())
+        for key, value in filter_context.resolve_params_for_resource(spec.resource).items():
+            if key not in params or params[key] is None:
+                params[key] = value
 
     resolved = resolve(spec.resource, data_dir=data_dir, **params)
     df = resolved.load()
     if not isinstance(df, pd.DataFrame):
         raise InvalidParameterError("loader 未返回 DataFrame", param="resource")
+
+    df, ui_selection_count = _apply_ui_student_selection(df, filter_context)
 
     allowed = _allowed_columns(resolved)
     if not allowed:
@@ -162,5 +180,7 @@ def execute_query(
     )
     if spec.limit is not None:
         result.setdefault("meta", {})["query_limit"] = int(spec.limit)
+    if ui_selection_count is not None:
+        result.setdefault("meta", {})["ui_selected_students"] = ui_selection_count
     validate_tabular_result(result)
     return result

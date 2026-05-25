@@ -143,6 +143,7 @@ class LLMClient:
         tools=None,
         parallel_tool_calls: bool = True,
         max_tokens: int = 1024,
+        on_content_delta: Optional[Any] = None,
     ) -> Optional[Any]:
         # 返回raw响应
         client = self.get_client()
@@ -175,6 +176,7 @@ class LLMClient:
                 messages_count=len(request_messages),
                 tools_count=len(tools) if tools else 0,
                 user_preview=truncate_for_log(user_preview),
+                stream=bool(on_content_delta),
             )
             request_kwargs = {
                 "model": self._config.model,
@@ -185,6 +187,9 @@ class LLMClient:
                 request_kwargs["tools"] = tools
                 request_kwargs["tool_choice"] = "auto"
                 request_kwargs["parallel_tool_calls"] = parallel_tool_calls
+            if on_content_delta:
+                request_kwargs["stream"] = True
+                return self._create_completion_stream(client, request_kwargs, on_content_delta)
             resp = client.chat.completions.create(**request_kwargs)
 
             if resp and resp.choices:
@@ -216,6 +221,91 @@ class LLMClient:
         except Exception as e:
             log_event(_llm_log, logging.ERROR, "llm_error", error=str(e))
             raise LLMCallError(str(e), cause=e) from e
+
+    def _create_completion_stream(self, client, request_kwargs, on_content_delta):
+        stream = client.chat.completions.create(**request_kwargs)
+        content_parts: list[str] = []
+        tool_calls_acc: dict[int, dict[str, str]] = {}
+        finish_reason = None
+
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            choice = chunk.choices[0]
+            if choice.finish_reason:
+                finish_reason = choice.finish_reason
+            delta = choice.delta
+            if not delta:
+                continue
+            if delta.content:
+                content_parts.append(delta.content)
+                on_content_delta(delta.content)
+            if delta.tool_calls:
+                for tc in delta.tool_calls:
+                    idx = tc.index
+                    acc = tool_calls_acc.setdefault(
+                        idx,
+                        {"id": "", "name": "", "arguments": ""},
+                    )
+                    if tc.id:
+                        acc["id"] = tc.id
+                    if tc.function:
+                        if tc.function.name:
+                            acc["name"] += tc.function.name
+                        if tc.function.arguments:
+                            acc["arguments"] += tc.function.arguments
+
+        return self._build_streamed_response(
+            content="".join(content_parts),
+            tool_calls_acc=tool_calls_acc,
+            finish_reason=finish_reason,
+        )
+
+    @staticmethod
+    def _build_streamed_response(*, content: str, tool_calls_acc: dict, finish_reason):
+        class _Fn:
+            def __init__(self, name, arguments):
+                self.name = name
+                self.arguments = arguments
+
+        class _ToolCall:
+            def __init__(self, call_id, name, arguments):
+                self.id = call_id
+                self.function = _Fn(name, arguments)
+
+        class _Message:
+            def __init__(self, content, tool_calls):
+                self.content = content or None
+                self.tool_calls = tool_calls or None
+
+        class _Choice:
+            def __init__(self, message, finish_reason):
+                self.message = message
+                self.finish_reason = finish_reason
+
+        class _Response:
+            def __init__(self, choices):
+                self.choices = choices
+
+        tool_calls = None
+        if tool_calls_acc:
+            ordered = [tool_calls_acc[i] for i in sorted(tool_calls_acc)]
+            tool_calls = [
+                _ToolCall(acc["id"], acc["name"], acc["arguments"])
+                for acc in ordered
+                if acc.get("name")
+            ]
+            if not tool_calls:
+                tool_calls = None
+            elif finish_reason is None:
+                finish_reason = "tool_calls"
+
+        message = _Message(content, tool_calls)
+        if tool_calls and finish_reason != "tool_calls":
+            finish_reason = "tool_calls"
+        if not tool_calls and finish_reason is None:
+            finish_reason = "stop"
+        return _Response([_Choice(message, finish_reason)])
 
     @staticmethod
     def extract_tool_calls(response: Any) -> List[Dict[str, Any]]:

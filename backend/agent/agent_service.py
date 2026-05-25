@@ -1,16 +1,18 @@
+import os
 import runtime_bootstrap  # noqa: F401  # must run before loop/tools → data → core
 
 from loop import AgentLoop
 from common.llm_client import LLMClient
 from common.memory import get_memory_manager
 from common.paths import bootstrap_agent_paths
+from data.filter_context import FilterContext, merge_defaults
 from hooks import HookManager
 from permission import CapabilityMode, CliApprovalHandler, PermissionManager
 from session import SessionManager
 from skills import get_registry
 
 MODE_HELP = "consult | analyze | produce"
-SESSION_HELP = "/new | /sessions | /session <id> | /rename <title> | /delete [id]"
+SESSION_HELP = "/new | /sessions | /session <id> | /rename <title> | /delete [id] | /context <k=v ...>"
 
 
 def _parse_mode(raw: str) -> CapabilityMode | None:
@@ -100,6 +102,45 @@ def _handle_session_command(line: str, session_manager: SessionManager) -> bool:
     return False
 
 
+def _parse_context_command(line: str) -> FilterContext | None:
+    """Parse /context classes=Class1 week_range=10,25 selected_student_ids=a,b"""
+    stripped = line.strip()
+    if not stripped.lower().startswith("/context"):
+        return None
+    tail = stripped[len("/context"):].strip()
+    body: dict = {}
+    if tail:
+        for token in tail.split():
+            if "=" not in token:
+                continue
+            key, value = token.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            if key == "week_range":
+                body["week_range"] = value
+            elif key in ("classes", "majors", "selected_student_ids"):
+                body[key] = [x.strip() for x in value.split(",") if x.strip()]
+    fc = FilterContext.from_http_body(body) if body else None
+    if fc is None:
+        fc = FilterContext(source="session")
+    else:
+        fc = FilterContext(
+            classes=fc.classes,
+            majors=fc.majors,
+            week_range=fc.week_range,
+            selected_student_ids=fc.selected_student_ids,
+            source="session",
+        )
+    return merge_defaults(fc)
+
+
+def _bootstrap_filter_context(session_manager: SessionManager) -> None:
+    env_ctx = FilterContext.from_env()
+    if env_ctx is not None:
+        session_manager.set_filter_context(env_ctx)
+        print("[FilterContext: loaded from environment defaults]")
+
+
 # Agent Loop 生命周期 (agent_service session层级)
 #  权限检查 -> 技能加载 -> session加载 -> llm_client初始化 -> loop_state初始化 -> agent_loop初始化 -> agent_loop.run_loop() -> session_manager.sync_loop_state() -> session_manager.persist_active()
 #  中断检查
@@ -141,6 +182,7 @@ def pipeline():
     # 加载session
     session_manager = SessionManager(hooks=hooks, skills=skill_registry)
     session = session_manager.bootstrap(permission_mode=mode.value)
+    _bootstrap_filter_context(session_manager)
     if session.session_context and not session.messages:
         print("[SessionStart: data catalog injected into agent context]")
     _print_session_banner(session_manager)
@@ -187,6 +229,16 @@ def pipeline():
         if query.strip() == "/rules":
             for i, rule in enumerate(perms.rules):
                 print(f"  {i}: {rule}")
+            continue
+
+        if query.strip().lower().startswith("/context"):
+            ctx = _parse_context_command(query)
+            if ctx is not None:
+                session_manager.set_filter_context(merge_defaults(ctx))
+                session_manager.persist_active()
+                print(f"[FilterContext: {merge_defaults(ctx).to_dict()}]")
+            else:
+                print("Usage: /context classes=Class1 [week_range=10,25] [selected_student_ids=id1,id2]")
             continue
 
         session_manager.maybe_set_title_from_message(query)

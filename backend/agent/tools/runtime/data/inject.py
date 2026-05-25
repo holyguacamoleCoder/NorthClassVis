@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from data.filter_context import FilterContext
 from loop_state import AnalysisToolContext, QuerySnapshot
 
 from ..binding.pipeline import resolve_aggregate_binding
 from ..binding.types import BindMode
 from .snapshot import working_result_ref
-from .types import DATA_CHAIN_TOOLS
+from .types import ADAPTER_CONTEXT_TOOLS, DATA_CHAIN_TOOLS
 
 
 def inject_data_tool_context(
@@ -19,10 +20,17 @@ def inject_data_tool_context(
     analysis_context: AnalysisToolContext | None,
     batch_snapshots: list[QuerySnapshot],
     llm_client: Any | None = None,
+    filter_context: FilterContext | None = None,
 ) -> dict[str, Any]:
     args = dict(parsed_args)
+    if tool_name in ADAPTER_CONTEXT_TOOLS and filter_context is not None:
+        args["_filter_context"] = filter_context
+
     if tool_name not in DATA_CHAIN_TOOLS:
         return args
+
+    if tool_name in ("query_data", "inspect_schema", "aggregate_data") and filter_context is not None:
+        args["_filter_context"] = filter_context
 
     if tool_name in ("list_datasets", "resolve_dataset_binding"):
         if analysis_context:

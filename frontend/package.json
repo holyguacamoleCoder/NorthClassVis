@@ -16,9 +16,11 @@
     "d3-hierarchy": "^3.1.2",
     "d3-zoom": "^3.0.0",
     "echarts": "^5.5.1",
+    "marked": "^15.0.12",
     "simplebar-vue": "^2.3.5",
     "v-dropdown": "^3.0.0",
     "vue": "^3.2.13",
+    "vue-router": "^4.6.4",
     "vuex": "^4.0.2"
   },
   "devDependencies": {

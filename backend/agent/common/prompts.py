@@ -29,11 +29,15 @@ BASE_AGENT_PROMPT = f"""你是 **NorthClassVision** 的教师辅助数据分析 
 - **统计**：先 `query_data`（**全量请省略 limit**，勿用 `limit:0`），再 `aggregate_data` 且 `input={{"result_ref": "<meta.result_ref>"}}`
 - **学生人数**：`aggregate_data` 用 `count_distinct` + `field=student_ID`；`count` 只表示提交行数
 - **多步任务**：`todo_write` 每步写 `acceptance`；数据工具返回后更新 completed；注意 `meta.warnings`
+- **分析范围**：Nav/会话 scope 会自动注入 `query_data`/`inspect_schema`（缺 `classes` 时）；系统提示中会列出**可视化面板已选学生** `selected_student_ids`
+- **「我选的学生」**：散点图选中的 `selected_student_ids` 会同步到 scope；**勿**索要学号。查选中学生请用 `submit_record`（自动带 `student_ids`）或 `student_info`（**勿**传 majors/classes）；`query_data` 会按选中 ID 过滤行
+- **结论跳转**：分析完成后用 `build_visual_links` 校验五视图链接（勿手写未校验的 view 名）
+- **WeekView 只推 1 条**：教师要看周视图时给 **一条** `WeekView`（`params` 可省略 kind，表示当前选中学生的全部周次）；**禁止** kind 1/2/3 各推一条（前端会合并，对教师无意义）
 - 关联键：`student_ID`、`title_ID`、`class`、`major`（与 registry 一致）
 
 ## 工具与路径
-- **consult**：`inspect_schema`、`list_files`、`load_skill`（**无** `read_file` / `query_data`）
-- **analyze**：上述 + `query_data`、`aggregate_data`；`read_file` 仅用于 `meta/`、`reports/`、`exports/`
+- **consult**：`inspect_schema`、`list_files`、`load_skill`、`get_current_filter_context`（**无** `read_file` / `query_data` / `build_visual_links`）
+- **analyze**：上述 + `query_data`、`aggregate_data`、`build_visual_links`；`read_file` 仅用于 `meta/`、`reports/`、`exports/`
 - 路径相对 `data/`，不要用绝对盘符路径
 
 ## 工作方式
@@ -62,6 +66,7 @@ SECTION_MEMORY_TYPE = "## [{mem_type}]"
 SECTION_MEMORY_ENTRY = "### {name}：{description}"
 
 SECTION_SESSION = "--- 会话上下文（Hooks / 数据目录摘要）---"
+SECTION_UI_SCOPE = "--- 当前分析范围（可视化面板 / Nav，每轮 HTTP 同步）---"
 SECTION_SKILLS = "--- 可用技能（分析前请 load_skill 加载完整说明）---"
 
 PERMISSION_MODE_TEMPLATE = """当前能力模式：**{mode}**
@@ -70,15 +75,19 @@ PERMISSION_MODE_TEMPLATE = """当前能力模式：**{mode}**
 
 MODE_CAPABILITY_HINTS: dict[str, str] = {
     "consult": (
-        "探查模式：仅 inspect_schema + list_files + load_skill；"
-        "**没有 read_file、query_data**。学业数据只看 resource 元数据/样例；"
+        "探查模式（只读）：inspect_schema + list_files + load_skill + get_current_filter_context；"
+        "**没有 read_file、query_data、build_visual_links**。学业数据只看 resource 元数据/样例；"
+        "系统提示中若已有 selected_student_ids，可先 get_current_filter_context 确认，"
+        "并说明切换到 **analyze** 后可查询这些学生的表现；"
         "要计数/均值请切换 analyze。"
     ),
     "analyze": (
-        "学业分析：inspect_schema + query_data + aggregate_data；全量统计省略 limit；"
+        "学业分析：inspect_schema + query_data + aggregate_data + get_current_filter_context + "
+        "build_visual_links；全量统计省略 limit；"
         "学生数用 count_distinct(student_ID)；aggregate 用 input.result_ref 或 dataset_id；"
         "记不清 dataset_id 时用 list_datasets。"
         "todo_write 含 acceptance，数据步后更新 completed；勿 read_file 原始 Data_*.csv。"
+        "结论后 build_visual_links 校验图表跳转。"
     ),
     "produce": (
         "完整交付：在只读原始数据的前提下，可 write/edit "
@@ -140,6 +149,35 @@ def format_session_section(blocks: list[str]) -> str:
     """Join hook-injected session blocks under the session section header."""
     body = "\n\n".join(b for b in blocks if b and b.strip())
     return f"{SECTION_SESSION}\n{body}"
+
+
+def format_filter_context_section(scope: dict) -> str:
+    """Human-readable Nav / scatter selection for the system prompt."""
+    lines = [SECTION_UI_SCOPE]
+    classes = scope.get("classes") or []
+    majors = scope.get("majors") or []
+    week_range = scope.get("week_range")
+    selected = scope.get("selected_student_ids") or []
+
+    if classes:
+        lines.append(f"- 班级 classes: {', '.join(str(c) for c in classes)}")
+    if majors:
+        lines.append(f"- 专业 majors: {', '.join(str(m) for m in majors)}")
+    if week_range is not None and len(week_range) == 2:
+        lines.append(f"- 周次 week_range: {week_range[0]}–{week_range[1]}")
+
+    if selected:
+        preview = ", ".join(str(s) for s in selected[:40])
+        if len(selected) > 40:
+            preview = f"{preview} …"
+        lines.append(f"- **已选学生** selected_student_ids（{len(selected)} 人）: {preview}")
+        lines.append(
+            "  教师提及「我选的 / 选中的 / 这几名」时，**直接使用以上 student_ID**，勿索要学号。"
+        )
+    else:
+        lines.append("- 已选学生: （散点图未选中）")
+
+    return "\n".join(lines)
 
 
 def format_skills_section(catalog: str) -> str:

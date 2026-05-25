@@ -1,10 +1,11 @@
 import request from '@/utils/request'
 
 const USE_MOCK = import.meta.env.VUE_APP_AGENT_MOCK !== 'false'
+const JOB_POLL_MS = 400
+const JOB_POLL_MS_FAST = 250
+const JOB_TIMEOUT_MS = 180000
 
-/**
- * Mock 完整契约：complete 场景（已达成、关键结论、图表入口、完整 trace）
- */
+/** Mock 完整契约：complete 场景 */
 function getMockResponseComplete(question) {
   const prefix = question ? `针对「${question}」：` : ''
   return {
@@ -13,157 +14,184 @@ function getMockResponseComplete(question) {
       '最近两周班级整体稳定，但链表相关题表现明显偏弱。建议优先复讲链表遍历与边界处理。',
     evidence: [
       { tool: 'week_analysis', summary: '第3周到第4周链表相关得分下降' },
-      {
-        tool: 'question_by_knowledge',
-        summary: '链表相关题平均分低于总体均值',
-      },
+      { tool: 'question_by_knowledge', summary: '链表相关题平均分低于总体均值' },
     ],
-    actions: [
-      '优先复讲链表遍历与边界处理',
-      '重点关注 cluster 2 中提交次数多但得分低的学生',
-    ],
+    actions: ['优先复讲链表遍历与边界处理'],
     visual_links: [
       { view: 'QuestionView', params: { knowledge: '链表' } },
       { view: 'WeekView', params: { kind: 1 } },
-      {
-        view: 'StudentView',
-        params: {
-          student_ids: ['8b6d1125760bd3939b6e', '63eef37311aaac915a45'],
-        },
-      },
     ],
     trace: {
       steps: [
         {
-          tool: 'query_class',
-          params: { mode: 'trend' },
+          tool: 'query_data',
+          params: { resource: 'week_aggregation' },
           summary: '班级周趋势数据已获取',
           status: 'ok',
           duration_ms: 45,
-          reason: '获取整体趋势',
-          coverage: { covered: true },
-          quality: { score: 0.9 },
-          error: '',
-        },
-        {
-          tool: 'query_question',
-          params: { knowledge: '链表', mode: 'dist' },
-          summary: '链表题目分布已获取',
-          status: 'ok',
-          duration_ms: 32,
-          reason: '按知识点分析',
-          coverage: { covered: true },
-          quality: { score: 0.85 },
-          error: '',
         },
       ],
     },
-    goal_check: {
-      is_satisfied: true,
-      can_stop_early: true,
-      reason: '所有关键子目标均已有有效结果支撑。',
-      missing_requirements: [],
-      supporting_task_ids: ['t1', 't2'],
-      confidence: 0.8,
-    },
+    goal_check: { is_satisfied: true, can_stop_early: true, reason: '' },
     summary: {
       overall_status: 'complete',
-      completed_task_ids: ['t1', 't2'],
-      failed_task_ids: [],
-      partial_task_ids: [],
-      key_findings: [
-        '班级整体趋势较为稳定',
-        '链表相关题平均分低于总体均值',
-        '建议关注 cluster 2 中得分偏低学生',
-      ],
+      key_findings: ['班级整体趋势较为稳定'],
       unresolved_points: [],
     },
   }
 }
 
-/**
- * Mock partial 场景：未完全达成、有缺失、有未解决点
- */
-function getMockResponsePartial(question) {
-  const prefix = question ? `针对「${question}」：` : ''
-  return {
-    answer:
-      prefix +
-      '当前仅获取到班级趋势数据，学生画像因缺少学生范围暂未执行。请先选择要分析的学生或班级。',
-    evidence: [
-      { tool: 'query_class', summary: '班级周趋势已获取' },
-    ],
-    actions: [
-      '在左侧选择学生或班级后再次提问',
-      '或直接问：最近两周班级整体趋势如何？',
-    ],
-    visual_links: [
-      { view: 'WeekView', params: { kind: 1 } },
-    ],
-    trace: {
-      steps: [
-        {
-          tool: 'query_class',
-          params: { mode: 'trend' },
-          summary: '班级趋势数据已获取',
-          status: 'ok',
-          duration_ms: 38,
-          reason: '先获取整体',
-          coverage: { covered: true },
-          quality: { score: 0.9 },
-          error: '',
-        },
-        {
-          tool: 'query_student',
-          params: { mode: 'portrait' },
-          summary: '未执行：缺少 student_ids',
-          status: 'fail',
-          duration_ms: 0,
-          reason: '学生画像依赖选中学生',
-          coverage: { covered: false, reason: '缺少学生范围' },
-          quality: {},
-          error: '缺少 student_ids，无法执行学生画像',
-        },
-      ],
-    },
-    goal_check: {
-      is_satisfied: false,
-      can_stop_early: false,
-      reason: '仍有子目标未被有效结果覆盖。',
-      missing_requirements: ['student/portrait'],
-      supporting_task_ids: ['t1'],
-      confidence: 0.4,
-    },
-    summary: {
-      overall_status: 'partial',
-      completed_task_ids: ['t1'],
-      failed_task_ids: ['t2'],
-      partial_task_ids: [],
-      key_findings: ['班级周趋势已获取'],
-      unresolved_points: ['缺少 student_ids，无法执行学生画像'],
-    },
-  }
-}
-
-/**
- * 根据问题关键词选择 complete 或 partial mock（便于前端联调两种体验）
- */
 function getMockResponse(question) {
-  const q = (question || '').toLowerCase()
-  if (q.includes('不完整') || q.includes('部分') || q.includes('partial')) {
-    return getMockResponsePartial(question)
-  }
   return getMockResponseComplete(question)
 }
 
-/** Mock 模拟等待时长（毫秒） */
-const MOCK_DELAY_MS = 2000
+const MOCK_DELAY_MS = 1500
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+export async function listAgentSessions() {
+  const res = await request.get('/agent/sessions')
+  return res.data
+}
+
+export async function createAgentSession(payload = {}) {
+  const res = await request.post('/agent/sessions', payload)
+  return res.data
+}
+
+export async function getAgentSession(sessionId) {
+  const res = await request.get(`/agent/sessions/${sessionId}`)
+  return res.data
+}
+
+export async function updateAgentSession(sessionId, payload) {
+  const res = await request.patch(`/agent/sessions/${sessionId}`, payload)
+  return res.data
+}
+
+export async function deleteAgentSession(sessionId) {
+  const res = await request.delete(`/agent/sessions/${sessionId}`)
+  return res.data
+}
+
+export async function activateAgentSession(sessionId) {
+  const res = await request.post(`/agent/sessions/${sessionId}/activate`)
+  return res.data
+}
+
+export async function submitAgentMessage(sessionId, content, context = {}) {
+  const res = await request.post(`/agent/sessions/${sessionId}/messages`, {
+    content,
+    context,
+  })
+  return res.data
+}
+
+export async function getAgentJob(jobId) {
+  const res = await request.get(`/agent/jobs/${jobId}`)
+  return res.data
+}
+
+export async function resolveAgentApproval(approvalId, decision, remember = false) {
+  const res = await request.post(`/agent/approvals/${approvalId}`, {
+    decision,
+    remember,
+  })
+  return res.data
+}
+
+export async function pollAgentJob(jobId, { onApproval, onProgress } = {}) {
+  const started = Date.now()
+  let pendingApprovalId = null
+  let lastStepCount = -1
+  while (Date.now() - started < JOB_TIMEOUT_MS) {
+    const job = await getAgentJob(jobId)
+    if (onProgress && job.progress) {
+      const stepCount = (job.progress.tool_steps || []).length
+      const hasRunning = !!job.progress.running_tool
+      if (
+        stepCount !== lastStepCount ||
+        hasRunning ||
+        job.progress.phase === 'llm' ||
+        job.progress.answer
+      ) {
+        lastStepCount = stepCount
+        onProgress(job)
+      }
+    }
+    if (job.status === 'awaiting_approval' && job.approval) {
+      const approvalId = job.approval.id
+      if (approvalId !== pendingApprovalId && onApproval) {
+        pendingApprovalId = approvalId
+        await onApproval(job.approval)
+      }
+    }
+    if (job.status === 'completed') {
+      return job.result
+    }
+    if (job.status === 'failed') {
+      throw new Error(job.error || 'Agent job failed')
+    }
+    await sleep(job.progress?.running_tool ? JOB_POLL_MS_FAST : JOB_POLL_MS)
+  }
+  throw new Error('Agent 响应超时，请稍后重试')
+}
+
+async function mockStreamResponse(content, onProgress) {
+  const steps = [
+    { tool: 'query_data', params: { resource: 'submit_record' }, summary: '返回 96 行', status: 'ok' },
+    { tool: 'aggregate_data', params: { op: 'count' }, summary: 'aggregate_data 返回 1 行', status: 'ok' },
+  ]
+  const accumulated = []
+  if (onProgress) {
+    onProgress({ progress: { phase: 'llm', hint: '正在调用模型…', tool_steps: [], running_tool: null, answer: '' } })
+    await sleep(600)
+    for (const step of steps) {
+      onProgress({
+        progress: {
+          phase: 'tools',
+          hint: `正在执行 ${step.tool}…`,
+          tool_steps: [...accumulated],
+          running_tool: { tool: step.tool, params: step.params },
+          answer: '',
+        },
+      })
+      await sleep(500)
+      accumulated.push(step)
+      onProgress({
+        progress: {
+          phase: 'tools',
+          hint: '工具执行完成…',
+          tool_steps: [...accumulated],
+          running_tool: null,
+          answer: '',
+        },
+      })
+    }
+  } else {
+    await sleep(MOCK_DELAY_MS)
+  }
+  return getMockResponse(content)
+}
 
 /**
- * 调用 Agent 问答接口
- * @param {string} question - 用户问题
- * @param {object} [context] - 可选上下文 { classes?, majors?, selected_student_ids? }
- * @returns {Promise<{ answer, evidence, actions, visual_links, trace? }>}
+ * 发送消息并等待整轮 Loop 完成（含权限审批轮询）
+ */
+export async function postAgentMessage(sessionId, content, context = {}, hooks = {}) {
+  if (USE_MOCK) {
+    return mockStreamResponse(content, hooks.onProgress)
+  }
+  const { job_id: jobId } = await submitAgentMessage(sessionId, content, context)
+  return pollAgentJob(jobId, {
+    onApproval: hooks.onApproval,
+    onProgress: hooks.onProgress,
+  })
+}
+
+/**
+ * 兼容旧接口：单次 query（同步阻塞）
  */
 export function postAgentQuery(question, context = {}) {
   if (USE_MOCK) {
@@ -171,9 +199,26 @@ export function postAgentQuery(question, context = {}) {
       setTimeout(() => resolve(getMockResponse(question)), MOCK_DELAY_MS)
     })
   }
-  console.log('postAgentQuery', question, context)
-  // 后续联调时改为真实请求
   return request
     .post('/agent/query', { question, context })
     .then((res) => res.data)
+}
+
+export async function bootstrapAgentSession() {
+  if (USE_MOCK) {
+    return {
+      id: 'mock-session',
+      title: '演示对话',
+      permission_mode: 'analyze',
+      messages: [],
+      message_count: 0,
+    }
+  }
+  const listed = await listAgentSessions()
+  const sessions = listed.sessions || []
+  const activeId = listed.active_session_id || (sessions[0] && sessions[0].id)
+  if (activeId) {
+    return getAgentSession(activeId)
+  }
+  return createAgentSession({ permission_mode: 'analyze' })
 }

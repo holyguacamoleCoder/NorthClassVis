@@ -165,8 +165,14 @@ export default {
       const data  = await setConfig(selectedClasses, selectedMajors, weekRange)
       if(data.status === 200){
         console.log('Config updated successfully')
-        // this.closePanel()
-        this.$store.commit('SET_CONFIG_LOADED', Date.now()); // 重置状态以触发重新加载
+        this.$store.commit('setNavScope', {
+          classes: selectedClasses,
+          majors: selectedMajors,
+          weekRange: weekRange,
+          classesLabel: this.displayClassesText,
+          majorsLabel: this.displayMajorsText,
+        })
+        await this.$store.dispatch('applyNavConfig')
         this.weekRangeLocked = true
         this.loading = false
         this.closePanel()

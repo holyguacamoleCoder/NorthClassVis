@@ -21,6 +21,7 @@ MESSAGES_FILE = "messages.jsonl"
 COMPACT_FILE = "compact.json"
 TODO_FILE = "todo.json"
 CONTEXT_FILE = "session_context.json"
+FILTER_CONTEXT_FILE = "filter_context.json"
 
 
 class FileSessionStore:
@@ -43,9 +44,26 @@ class FileSessionStore:
             return []
         if not isinstance(raw, list):
             return []
-        items = [SessionMeta.from_dict(x) for x in raw if isinstance(x, dict)]
+        items: list[SessionMeta] = []
+        for x in raw:
+            if not isinstance(x, dict):
+                continue
+            row = dict(x)
+            if "user_turn_count" not in row and row.get("id"):
+                row["user_turn_count"] = self._peek_user_turn_count(str(row["id"]))
+            items.append(SessionMeta.from_dict(row))
         items.sort(key=lambda m: m.updated_at, reverse=True)
         return items
+
+    def _peek_user_turn_count(self, session_id: str) -> int:
+        meta_path = self._session_dir(session_id) / META_FILE
+        if not meta_path.is_file():
+            return 0
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            return int(meta.get("user_turn_count") or 0) if isinstance(meta, dict) else 0
+        except (json.JSONDecodeError, OSError, TypeError, ValueError):
+            return 0
 
     def _write_index(self, sessions: list[SessionMeta]) -> None:
         payload = [m.to_dict() for m in sorted(sessions, key=lambda m: m.updated_at, reverse=True)]
@@ -91,6 +109,7 @@ class FileSessionStore:
         compact = self._load_compact(sdir / COMPACT_FILE)
         session_context = self._load_context(sdir / CONTEXT_FILE)
         todo_items, todo_round = self._load_todo(sdir / TODO_FILE)
+        filter_context = self._load_filter_context(sdir / FILTER_CONTEXT_FILE)
 
         return ChatSession(
             id=str(meta["id"]),
@@ -103,6 +122,7 @@ class FileSessionStore:
             compact=compact,
             todo_items=todo_items,
             todo_round_since_update=todo_round,
+            filter_context=filter_context,
             user_turn_count=int(meta.get("user_turn_count") or 0),
             messages_count=int(meta.get("messages_count") or 1),
         )
@@ -153,6 +173,13 @@ class FileSessionStore:
             ),
             encoding="utf-8",
         )
+        if session.filter_context is not None:
+            (sdir / FILTER_CONTEXT_FILE).write_text(
+                json.dumps(session.filter_context, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        else:
+            (sdir / FILTER_CONTEXT_FILE).unlink(missing_ok=True)
 
         index = {m.id: m for m in self.list_meta()}
         index[session.id] = session.meta
@@ -225,6 +252,16 @@ class FileSessionStore:
         if isinstance(data, list):
             return [str(x) for x in data if x]
         return []
+
+    @staticmethod
+    def _load_filter_context(path: Path) -> dict[str, Any] | None:
+        if not path.is_file():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return None
+        return data if isinstance(data, dict) else None
 
     @staticmethod
     def _load_todo(path: Path) -> tuple[list[dict[str, str]], int]:
