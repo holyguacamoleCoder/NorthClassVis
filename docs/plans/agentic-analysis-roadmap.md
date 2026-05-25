@@ -19,7 +19,8 @@
 | 1 | `feat/data-resource-registry` | `resource` id → 路径/loader；注册表 `data/meta/resource_registry.yaml`；库 `backend/agent/data/` |
 | 2 | `feat/agent-tools-primitives` | inspect_schema、query_data、aggregate_data；tabular_result + result_ref |
 | 3 | `feat/generic-agent-tools` | filter_context、visual_links 薄适配；停增业务名 tool |
-| 4 | `feat/metrics-runtime` | 按 metrics 定义计算并写入 evidence |
+| 4 | `feat/skills-analysis-tiers` | analysis-* / data-exploration / tiered-report skills；别名保留 |
+| 4b | `feat/metrics-runtime` | 按 metrics 定义计算并写入 evidence |
 | 5 | `feat/analysis-orchestrator` | archetype → 子目标 → 工具序列 |
 | 6 | `feat/thick-student-delivery` | 六章 + 五视图；Portrait/Scatter handler |
 | 7 | `feat/agentic-analysis-e2e` | 薄包装旧 tool；golden 全绿 |
@@ -56,6 +57,18 @@
 - [ ] 无新增第四类「分析」业务工具
 
 **本 Phase 不做**：Orchestrator 自动填 HTTP 顶层 `visual_links[]`、PortraitView 前端 handler、analysis skills（P4/P6/P7）
+
+## Phase 4 验收（`feat/skills-analysis-tiers`）
+
+- [x] `skills/analysis-student|class|major|data-exploration|tiered-report/SKILL.md` — SkillRegistry 可发现
+- [x] `analysis-student` 六章 id 与 `analysis_ontology.yaml` `student_report_sections` 逐字一致
+- [x] `analysis-student` 含五视图 + 反「仅 Student 树」；`analysis-class` 含 distribution / typical_students
+- [x] `tiered-report` 含 student / class / major 三套 `##` 骨架
+- [x] `report-markdown`、`data-csv-analysis` 保留别名，`load_skill` 含迁移提示
+- [x] `backend/agent/common/prompts.py` — 「何时 load_skill」表
+- [x] `py -3.11 -m pytest backend/agent/test/test_skills.py -q` 通过（自 `backend/agent` 目录）
+
+**本 Phase 不做**：改 ontology 语义、实现 `build_visual_links` 编排、大改 `loop.py`
 
 ## Phase 2 历史（已完成）
 

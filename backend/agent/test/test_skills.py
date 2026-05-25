@@ -88,8 +88,58 @@ def test_builtin_skills_present():
     if not repo_skills.is_dir():
         return
     registry = SkillRegistry(skills_dir=repo_skills)
-    assert "report-markdown" in registry.documents
-    assert "data-csv-analysis" in registry.documents
+    for name in (
+        "analysis-student",
+        "analysis-class",
+        "analysis-major",
+        "data-exploration",
+        "tiered-report",
+        "report-markdown",
+        "data-csv-analysis",
+    ):
+        assert name in registry.documents, f"missing skill: {name}"
+
+    catalog = registry.describe_available()
+    for name in (
+        "analysis-student",
+        "analysis-class",
+        "analysis-major",
+        "data-exploration",
+        "tiered-report",
+    ):
+        assert name in catalog
+
+    student_body = registry.documents["analysis-student"].body
+    for section_id in (
+        "scope",
+        "week_trend",
+        "student_structure",
+        "question_anchors",
+        "peer_context",
+        "actions",
+    ):
+        assert section_id in student_body
+    assert "StudentView" in student_body
+    assert "WeekView" in student_body
+    assert "仅 StudentView" in student_body or "反模式" in student_body
+
+    class_body = registry.documents["analysis-class"].body
+    assert "distribution" in class_body
+    assert "typical_students" in class_body
+
+    tiered = registry.load_full_text("tiered-report")
+    assert "模板 A" in tiered or "student" in tiered
+    assert "模板 B" in tiered or "class" in tiered
+    assert "模板 C" in tiered or "major" in tiered
+    for section in ("scope", "week_trend", "actions"):
+        assert section in tiered
+
+    legacy_report = registry.load_full_text("report-markdown")
+    assert "tiered-report" in legacy_report
+    assert "迁移" in legacy_report or "已迁移" in legacy_report
+
+    legacy_csv = registry.load_full_text("data-csv-analysis")
+    assert "data-exploration" in legacy_csv
 
 
 if __name__ == "__main__":

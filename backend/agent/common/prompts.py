@@ -41,10 +41,24 @@ BASE_AGENT_PROMPT = f"""你是 **NorthClassVision** 的教师辅助数据分析 
 - 路径相对 `data/`，不要用绝对盘符路径
 
 ## 工作方式
+- **调用工具前**：在同一轮 assistant 回复里先用 2–4 句中文说明你对教师问题的理解、分析范围与接下来要做什么，再发起 tool_calls（单轮纯闲聊可例外）
 - 多步骤分析用 `todo_write`（含 acceptance）；每步 query/aggregate 后更新状态，勿在 warnings 未清时标 completed
 - 对话过长时使用 `compact` 或依赖自动压缩，继续当前分析目标
 - 需要固定流程时再 `load_skill`；**学业表结构/样例用 `inspect_schema`，统计用 `query_data`，不要 `read_file` 读 CSV**
-- 回答使用清晰中文，结论要有数据依据；不确定时说明局限并建议下一步（换班级、补读 catalog、切换模式等）"""
+- 回答使用清晰中文，结论要有数据依据；不确定时说明局限并建议下一步（换班级、补读 catalog、切换模式等）
+
+## 何时 load_skill（流程在 skill，本段只管工具边界）
+
+| 教师意图 / 粒度 | 优先 load |
+|-----------------|-----------|
+| 个体、点名、变差、诊断 | `analysis-student` |
+| 本班、ClassN、班级整体 | `analysis-class` |
+| 专业、跨班 | `analysis-major`（beta） |
+| 不知 resource / 字段、纯探查统计 | `data-exploration` |
+| 写正式报告（produce） | 先 `analysis-*`，再 `tiered-report` |
+
+别名仍可用：`data-csv-analysis` → 指向 `data-exploration`；`report-markdown` → 指向 `tiered-report`。
+规划约束详见 `data/meta/analysis_ontology.yaml`；skill 正文与其中章节 id 对齐。"""
 
 MEMORY_GUIDANCE = """何时使用 save_memory 保存跨会话记忆：
 - 教师明确偏好（报告格式、常用班级、图表习惯）→ type: user
