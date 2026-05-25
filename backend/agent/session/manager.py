@@ -168,6 +168,32 @@ class SessionManager:
             )
         )
 
+    def restore_turn_snapshot(self, snapshot: dict) -> None:
+        """Revert in-memory session to pre-turn state after user cancellation."""
+        if self._active is None:
+            return
+        session = self._active
+        session.messages = list(snapshot.get("messages") or [])
+        session.title = str(snapshot.get("title") or session.title)
+        session.todo_items = list(snapshot.get("todo_items") or [])
+        session.todo_round_since_update = int(snapshot.get("todo_round_since_update") or 0)
+        session.user_turn_count = int(snapshot.get("user_turn_count") or 0)
+        reset_todo_state()
+        if session.todo_items:
+            apply_todo_snapshot(session.todo_items, session.todo_round_since_update)
+
+    def capture_turn_snapshot(self) -> dict:
+        if self._active is None:
+            return {}
+        session = self._active
+        return {
+            "messages": list(session.messages),
+            "title": session.title,
+            "todo_items": list(session.todo_items or []),
+            "todo_round_since_update": session.todo_round_since_update,
+            "user_turn_count": session.user_turn_count,
+        }
+
     def sync_loop_state(self, loop_state: LoopState) -> None:
         """Copy in-memory loop fields back into the active session."""
         if self._active is None:

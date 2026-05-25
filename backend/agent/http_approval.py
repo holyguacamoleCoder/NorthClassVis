@@ -98,6 +98,19 @@ class ApprovalStore:
         with self._lock:
             self._approvals.pop(approval_id, None)
 
+    def cancel_pending_for_job(self, job_id: str) -> int:
+        """Auto-deny unresolved approvals so a cancelled job unblocks wait_decision."""
+        count = 0
+        with self._lock:
+            for entry in self._approvals.values():
+                if entry.get("job_id") != job_id or entry.get("decision") is not None:
+                    continue
+                entry["decision"] = "deny"
+                entry["remember"] = False
+                entry["event"].set()
+                count += 1
+        return count
+
 
 class HttpApprovalHandler:
     def __init__(self, store: ApprovalStore):

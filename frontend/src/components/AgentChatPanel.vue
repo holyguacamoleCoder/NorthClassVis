@@ -127,7 +127,20 @@
             placeholder="输入问题，如：最近两周链表知识点表现如何？"
             @keydown.enter.prevent="send"
           />
-          <button type="button" class="agent-send" :disabled="loading || !sessionId" @click="send">发送</button>
+          <button
+            v-if="loading"
+            type="button"
+            class="agent-send agent-send--stop"
+            :disabled="!sessionId"
+            @click="stopTurn"
+          >{{ ui.stop }}</button>
+          <button
+            v-else
+            type="button"
+            class="agent-send"
+            :disabled="!sessionId"
+            @click="send"
+          >{{ ui.send }}</button>
         </div>
       </div>
 
@@ -157,6 +170,7 @@ import AgentAssistantMessage from '@/components/agent/AgentAssistantMessage.vue'
 import AgentSidebar from '@/components/agent/AgentSidebar.vue'
 import agentChatCore from '@/mixins/agentChatCore.js'
 import { modeLabel } from '@/utils/agentAdapter.js'
+import { AGENT_UI } from '@/constants/agentUiText.js'
 
 export default {
   name: 'AgentChatPanel',
@@ -183,6 +197,7 @@ export default {
   },
   data() {
     return {
+      ui: AGENT_UI,
       sessionDrawerOpen: false,
       floatSessionOpen: false,
       // 拖拽

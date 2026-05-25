@@ -24,6 +24,7 @@ from session.models import ChatSession
 from session.ui_scope import augment_user_message_with_ui_scope
 from skills import get_registry
 
+from cancel import TurnCancelled
 from .http_adapter import adapt_legacy_query_response, adapt_turn_response
 from .http_approval import ApprovalStore, HttpApprovalHandler
 from .http_progress import empty_job_progress, make_job_progress_handler, merge_progress_patch
@@ -37,6 +38,7 @@ class JobStatus(str, Enum):
     AWAITING_APPROVAL = "awaiting_approval"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 @dataclass
@@ -44,6 +46,7 @@ class AgentJob:
     id: str
     session_id: str
     status: JobStatus = JobStatus.PENDING
+    cancel_requested: bool = False
     approval: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
     error: str | None = None
@@ -180,6 +183,23 @@ class AgentHttpService:
                 return None
             return self._job_payload(job)
 
+    def cancel_job(self, job_id: str) -> bool:
+        with self._jobs_lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return False
+            if job.status in (
+                JobStatus.COMPLETED,
+                JobStatus.FAILED,
+                JobStatus.CANCELLED,
+            ):
+                return False
+            job.cancel_requested = True
+            job.updated_at = time.time()
+        self.approval_store.cancel_pending_for_job(job_id)
+        log_event(_log, logging.INFO, "agent_job_cancel_requested", job_id=job_id)
+        return True
+
     def resolve_approval(
         self,
         approval_id: str,
@@ -246,8 +266,20 @@ class AgentHttpService:
                 job = self._jobs.get(job_id)
                 if job is None:
                     return
+                if job.cancel_requested:
+                    job.status = JobStatus.CANCELLED
+                    job.updated_at = time.time()
+                    return
                 job.status = JobStatus.COMPLETED
                 job.result = result
+                job.updated_at = time.time()
+        except TurnCancelled:
+            log_event(_log, logging.INFO, "agent_job_cancelled", job_id=job_id)
+            with self._jobs_lock:
+                job = self._jobs.get(job_id)
+                if job is None:
+                    return
+                job.status = JobStatus.CANCELLED
                 job.updated_at = time.time()
         except Exception as exc:
             log_event(_log, logging.ERROR, "agent_job_failed", job_id=job_id, error=str(exc))
@@ -269,6 +301,17 @@ class AgentHttpService:
             merge_progress_patch(job.progress, patch)
             job.updated_at = patch.get("updated_at", time.time())
 
+    def _job_cancel_checker(self, job_id: str | None):
+        if not job_id:
+            return None
+
+        def should_cancel() -> bool:
+            with self._jobs_lock:
+                job = self._jobs.get(job_id)
+                return job is not None and job.cancel_requested
+
+        return should_cancel
+
     def _execute_turn(
         self,
         session_id: str,
@@ -283,30 +326,41 @@ class AgentHttpService:
             )
 
         self._ensure_active(session_id)
-        self.session_manager.maybe_set_title_from_message(content)
-        perms = self._make_permission(self.session_manager.active.permission_mode)
-        loop_state = self.session_manager.to_loop_state(perms)
-        loop_state.analysis_context.session_id = loop_state.session_id
-        loop_state.analysis_context.begin_user_turn(content)
-        user_content = augment_user_message_with_ui_scope(
-            content,
-            loop_state.filter_context,
-        )
-        loop_state.messages.append({"role": "user", "content": user_content})
+        snapshot = self.session_manager.capture_turn_snapshot()
+        should_cancel = self._job_cancel_checker(job_id)
 
-        agent_loop = AgentLoop(
-            loop_state,
-            llm_client=self.llm_client,
-            permission=perms,
-            hooks=self.hooks,
-            progress_callback=progress_cb,
-        )
-        agent_loop.run_loop()
-        continue_reason = loop_state.continue_reason
-        loaded_skills = set(loop_state.loaded_skills)
-        self.session_manager.sync_loop_state(loop_state)
-        self.session_manager.persist_active()
-        return continue_reason, loaded_skills
+        try:
+            self.session_manager.maybe_set_title_from_message(content)
+            perms = self._make_permission(self.session_manager.active.permission_mode)
+            loop_state = self.session_manager.to_loop_state(perms)
+            loop_state.analysis_context.session_id = loop_state.session_id
+            loop_state.analysis_context.begin_user_turn(content)
+            user_content = augment_user_message_with_ui_scope(
+                content,
+                loop_state.filter_context,
+            )
+            loop_state.messages.append({"role": "user", "content": user_content})
+
+            agent_loop = AgentLoop(
+                loop_state,
+                llm_client=self.llm_client,
+                permission=perms,
+                hooks=self.hooks,
+                progress_callback=progress_cb,
+                should_cancel=should_cancel,
+            )
+            agent_loop.run_loop()
+            if should_cancel and should_cancel():
+                raise TurnCancelled()
+            continue_reason = loop_state.continue_reason
+            loaded_skills = set(loop_state.loaded_skills)
+            self.session_manager.sync_loop_state(loop_state)
+            self.session_manager.persist_active()
+            return continue_reason, loaded_skills
+        except TurnCancelled:
+            self.session_manager.restore_turn_snapshot(snapshot)
+            self.session_manager.persist_active()
+            raise
 
     def _ensure_active(self, session_id: str) -> ChatSession:
         active = self.session_manager.active

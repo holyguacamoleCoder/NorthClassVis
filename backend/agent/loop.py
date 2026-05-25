@@ -18,6 +18,7 @@ from context import (
 from context.macro_compact import extract_tail_messages
 from hooks import HookManager
 from permission import PermissionManager, filter_tools
+from cancel import TurnCancelled
 from loop_state import LoopState
 from recovery import DEFAULT_RECOVERY_CONFIG, RecoveryHandler
 from skills import SkillRegistry, get_registry
@@ -57,6 +58,7 @@ class AgentLoop:
         hooks: HookManager | None = None,
         recovery_config=DEFAULT_RECOVERY_CONFIG,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ):
         self.llm_client = llm_client or LLMClient()
         self.loop_state = loop_state or LoopState(messages=[])
@@ -77,6 +79,11 @@ class AgentLoop:
         self._recent_tool_error_signatures: deque[tuple[str, ...]] = deque(maxlen=ERROR_LOOP_WINDOW)
         self._recent_aggregate_input_errors: deque[bool] = deque(maxlen=ERROR_LOOP_WINDOW)
         self._progress_callback = progress_callback
+        self._should_cancel = should_cancel
+
+    def _check_cancelled(self) -> None:
+        if self._should_cancel is not None and self._should_cancel():
+            raise TurnCancelled()
 
     def _emit_progress(self, event: dict[str, Any]) -> None:
         if self._progress_callback is not None:
@@ -167,6 +174,7 @@ class AgentLoop:
         )
 
     def run_turn(self):
+        self._check_cancelled()
         self._apply_pre_turn_compaction()
 
         log_event(
@@ -181,6 +189,7 @@ class AgentLoop:
         on_content_delta = None
         if self._progress_callback is not None:
             def on_content_delta(delta: str) -> None:
+                self._check_cancelled()
                 if delta:
                     self._emit_progress({"type": "answer_delta", "delta": delta})
 
@@ -194,6 +203,7 @@ class AgentLoop:
             compact_fn=self._apply_recovery_compaction,
             on_content_delta=on_content_delta,
         )
+        self._check_cancelled()
         if not raw_response or not getattr(raw_response, "choices", None):
             self.loop_state.continue_reason = failure_reason or "llm_no_response"
             log_event(
@@ -328,6 +338,7 @@ class AgentLoop:
             names=[c.get("name") for c in tool_calls],
             args_preview=self._tool_args_preview(tool_calls),
         )
+        self._check_cancelled()
         tool_results = execute_tool_calls(
             tool_calls,
             compact_state=self.loop_state.compact,
@@ -339,6 +350,7 @@ class AgentLoop:
             filter_context=self.loop_state.filter_context,
             on_tool_event=self._emit_progress,
         )
+        self._check_cancelled()
 
         # 错误响应防护
         if self._should_break_error_loop(tool_calls, tool_results):
@@ -606,8 +618,10 @@ class AgentLoop:
             "loop_begin",
             turn=self.loop_state.turn_count,
         )
-        while self.run_turn():
-            pass
+        while True:
+            self._check_cancelled()
+            if not self.run_turn():
+                break
         log_event(
             _log,
             logging.INFO,

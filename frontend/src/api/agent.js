@@ -5,6 +5,36 @@ const JOB_POLL_MS = 400
 const JOB_POLL_MS_FAST = 250
 const JOB_TIMEOUT_MS = 180000
 
+export class JobAbortedError extends Error {
+  constructor(message = '已停止生成') {
+    super(message)
+    this.name = 'JobAbortedError'
+  }
+}
+
+export function createJobAbortHandle() {
+  let aborted = false
+  let jobId = null
+  return {
+    setJobId(id) {
+      jobId = id
+    },
+    getJobId() {
+      return jobId
+    },
+    abort() {
+      aborted = true
+    },
+    isAborted() {
+      return aborted
+    },
+    reset() {
+      aborted = false
+      jobId = null
+    },
+  }
+}
+
 /** Mock 完整契约：complete 场景 */
 function getMockResponseComplete(question) {
   const prefix = question ? `针对「${question}」：` : ''
@@ -94,6 +124,11 @@ export async function getAgentJob(jobId) {
   return res.data
 }
 
+export async function cancelAgentJob(jobId) {
+  const res = await request.post(`/agent/jobs/${jobId}/cancel`)
+  return res.data
+}
+
 export async function resolveAgentApproval(approvalId, decision, remember = false) {
   const res = await request.post(`/agent/approvals/${approvalId}`, {
     decision,
@@ -102,11 +137,14 @@ export async function resolveAgentApproval(approvalId, decision, remember = fals
   return res.data
 }
 
-export async function pollAgentJob(jobId, { onApproval, onProgress } = {}) {
+export async function pollAgentJob(jobId, { onApproval, onProgress, shouldAbort } = {}) {
   const started = Date.now()
   let pendingApprovalId = null
   let lastStepCount = -1
   while (Date.now() - started < JOB_TIMEOUT_MS) {
+    if (shouldAbort?.()) {
+      throw new JobAbortedError()
+    }
     const job = await getAgentJob(jobId)
     if (onProgress && job.progress) {
       const stepCount = (job.progress.tool_steps || []).length
@@ -130,6 +168,9 @@ export async function pollAgentJob(jobId, { onApproval, onProgress } = {}) {
     }
     if (job.status === 'completed') {
       return job.result
+    }
+    if (job.status === 'cancelled') {
+      throw new JobAbortedError()
     }
     if (job.status === 'failed') {
       throw new Error(job.error || 'Agent job failed')
@@ -181,12 +222,20 @@ async function mockStreamResponse(content, onProgress) {
  */
 export async function postAgentMessage(sessionId, content, context = {}, hooks = {}) {
   if (USE_MOCK) {
+    if (hooks.shouldAbort) {
+      for (let i = 0; i < 8; i++) {
+        if (hooks.shouldAbort()) throw new JobAbortedError()
+        await sleep(200)
+      }
+    }
     return mockStreamResponse(content, hooks.onProgress)
   }
   const { job_id: jobId } = await submitAgentMessage(sessionId, content, context)
+  if (hooks.onJobStarted) hooks.onJobStarted(jobId)
   return pollAgentJob(jobId, {
     onApproval: hooks.onApproval,
     onProgress: hooks.onProgress,
+    shouldAbort: hooks.shouldAbort,
   })
 }
 

@@ -77,7 +77,20 @@
               @keydown="onComposerKeydown"
               @input="autoResizeComposer"
             />
-            <button type="button" class="agent-send agent-send--page" :disabled="loading || !sessionId" @click="send">{{ ui.send }}</button>
+            <button
+              v-if="loading"
+              type="button"
+              class="agent-send agent-send--page agent-send--stop"
+              :disabled="!sessionId"
+              @click="stopTurn"
+            >{{ ui.stop }}</button>
+            <button
+              v-else
+              type="button"
+              class="agent-send agent-send--page"
+              :disabled="!sessionId"
+              @click="send"
+            >{{ ui.send }}</button>
           </div>
           <div class="agent-composer-hint">{{ ui.composerHint }}</div>
         </div>

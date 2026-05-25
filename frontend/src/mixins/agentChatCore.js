@@ -8,6 +8,9 @@ import {
   deleteAgentSession,
   postAgentMessage,
   resolveAgentApproval,
+  cancelAgentJob,
+  JobAbortedError,
+  createJobAbortHandle,
 } from '@/api/agent.js'
 import {
   legacyToAssistantMessage,
@@ -37,9 +40,16 @@ export default {
       approvalResolver: null,
       revealTimerId: null,
       streamingMsgIndex: null,
+      turnBaselineMsgCount: 0,
+      pendingSendText: '',
+      jobAbort: null,
+      activeSendId: 0,
       autoScrollLocked: false,
       sampleQuestions: AGENT_UI.sampleQuestions,
     }
+  },
+  created() {
+    this.jobAbort = createJobAbortHandle()
   },
   computed: {
     messageCount() {
@@ -277,10 +287,48 @@ export default {
         this.approvalResolver = null
       }
     },
+    discardInFlightTurn() {
+      const keep = Math.max(0, this.turnBaselineMsgCount || 0)
+      if (this.messages.length > keep) {
+        this.messages.splice(keep)
+      }
+      this.streamingMsgIndex = null
+      this.clearRevealTimer()
+    },
+    async stopTurn() {
+      if (!this.loading) return
+      this.activeSendId += 1
+      this.jobAbort.abort()
+      const jobId = this.jobAbort.getJobId()
+      if (jobId) {
+        try {
+          await cancelAgentJob(jobId)
+        } catch (err) {
+          console.error('cancelAgentJob failed', err)
+        }
+      }
+      this.discardInFlightTurn()
+      if (this.pendingSendText) {
+        this.inputText = this.pendingSendText
+        this.$nextTick(() => this.autoResizeComposer?.())
+      }
+      this.pendingApproval = null
+      if (this.approvalResolver) {
+        this.approvalResolver('deny')
+        this.approvalResolver = null
+      }
+      this.loading = false
+      this.loadingText = '思考中'
+    },
     async send() {
       const text = (this.inputText || '').trim()
       if (!text || this.loading || !this.sessionId) return
       this.clearRevealTimer()
+      const sendId = this.activeSendId + 1
+      this.activeSendId = sendId
+      this.jobAbort.reset()
+      this.pendingSendText = text
+      this.turnBaselineMsgCount = this.messages.length
       this.inputText = ''
       this.autoScrollLocked = false
       this.messages.push(userMessage(text))
@@ -294,7 +342,10 @@ export default {
         const res = await postAgentMessage(this.sessionId, text, this.context, {
           onApproval: (approval) => this.waitForApproval(approval),
           onProgress: (job) => this.applyStreamingProgress(job),
+          shouldAbort: () => this.jobAbort.isAborted(),
+          onJobStarted: (jobId) => this.jobAbort.setJobId(jobId),
         })
+        if (sendId !== this.activeSendId) return
         if (res.session_title) this.sessionTitle = res.session_title
         if (res.permission_mode) this.permissionMode = res.permission_mode
         if (res.todo_items) this.todoItems = res.todo_items
@@ -306,7 +357,14 @@ export default {
           this.scrollToBottom()
         })
       } catch (err) {
-        if (this.streamingMsgIndex !== null) {
+        if (sendId !== this.activeSendId) return
+        if (err instanceof JobAbortedError || this.jobAbort.isAborted()) {
+          this.discardInFlightTurn()
+          if (this.pendingSendText) {
+            this.inputText = this.pendingSendText
+            this.$nextTick(() => this.autoResizeComposer?.())
+          }
+        } else if (this.streamingMsgIndex !== null) {
           Object.assign(this.messages[this.streamingMsgIndex], {
             answer: err.message || '请求失败，请稍后重试。',
             streaming: false,
@@ -327,9 +385,12 @@ export default {
           })
         }
       } finally {
+        if (sendId !== this.activeSendId) return
         this.pendingApproval = null
         this.approvalResolver = null
         this.streamingMsgIndex = null
+        this.pendingSendText = ''
+        this.jobAbort.reset()
         this.loading = false
         this.loadingText = '思考中'
       }

@@ -21,6 +21,8 @@ export const AGENT_UI = {
   composerPlaceholder: '输入问题，Enter 发送，Shift+Enter 换行',
   composerHint: 'Enter 发送 · Shift+Enter 换行',
   send: '发送',
+  stop: '停止',
+  stoppedHint: '已停止生成',
 
   backDashboard: '返回可视化',
   toggleSidebar: '切换会话栏',

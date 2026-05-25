@@ -46,6 +46,11 @@ class AgentRoutes:
             methods=["GET"],
         )
         self.agent_bp.add_url_rule(
+            "/agent/jobs/<job_id>/cancel",
+            view_func=self.cancel_job,
+            methods=["POST"],
+        )
+        self.agent_bp.add_url_rule(
             "/agent/approvals/<approval_id>",
             view_func=self.post_approval,
             methods=["POST"],
@@ -144,6 +149,11 @@ class AgentRoutes:
         if job is None:
             return jsonify({"error": "job not found"}), 404
         return jsonify(job)
+
+    def cancel_job(self, job_id: str):
+        if not self.service.cancel_job(job_id):
+            return jsonify({"error": "job not found or not cancellable"}), 404
+        return jsonify({"ok": True, "job_id": job_id})
 
     def post_approval(self, approval_id: str):
         body = request.get_json(silent=True) or {}
