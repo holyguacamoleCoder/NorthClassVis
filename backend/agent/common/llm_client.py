@@ -31,7 +31,8 @@ class LLMCallError(Exception):
     ):
         super().__init__(message)
         self.cause = cause
-        self.recovery_action = recovery_action or _classify_for_llm_error(cause or self)
+        classify_target = cause if cause is not None else Exception(message)
+        self.recovery_action = recovery_action or _classify_for_llm_error(classify_target)
 
 
 # Avoid circular import at runtime; recovery.classify is the source of truth.
@@ -107,6 +108,9 @@ class LLMClient:
         system_prompt: Optional[str],
         messages: List[Dict[str, Any]],
         max_tokens: int = 1024,
+        *,
+        langfuse_name: str | None = None,
+        langfuse_metadata: dict[str, Any] | None = None,
     ) -> Optional[Any]:
         # 返回文本内容
         resp = self.create_completion(
@@ -115,6 +119,8 @@ class LLMClient:
             tools=None,
             parallel_tool_calls=False,
             max_tokens=max_tokens,
+            langfuse_name=langfuse_name or "llm_text",
+            langfuse_metadata=langfuse_metadata,
         )
         return self.extract_final_text(resp)
 
@@ -144,6 +150,9 @@ class LLMClient:
         parallel_tool_calls: bool = True,
         max_tokens: int = 1024,
         on_content_delta: Optional[Any] = None,
+        *,
+        langfuse_name: str | None = None,
+        langfuse_metadata: dict[str, Any] | None = None,
     ) -> Optional[Any]:
         # 返回raw响应
         client = self.get_client()
@@ -187,10 +196,32 @@ class LLMClient:
                 request_kwargs["tools"] = tools
                 request_kwargs["tool_choice"] = "auto"
                 request_kwargs["parallel_tool_calls"] = parallel_tool_calls
+            from common.langfuse_tracing import end_llm_generation, llm_generation
+
+            gen_name = langfuse_name or ("main_loop" if tools else "llm_text")
             if on_content_delta:
                 request_kwargs["stream"] = True
-                return self._create_completion_stream(client, request_kwargs, on_content_delta)
-            resp = client.chat.completions.create(**request_kwargs)
+                return self._create_completion_stream(
+                    client,
+                    request_kwargs,
+                    on_content_delta,
+                    langfuse_name=gen_name,
+                    langfuse_metadata=langfuse_metadata,
+                    request_messages=request_messages,
+                )
+            with llm_generation(
+                name=gen_name,
+                model=self._config.model,
+                messages=request_messages,
+                tools_count=len(tools) if tools else 0,
+                metadata=langfuse_metadata,
+            ) as gen:
+                try:
+                    resp = client.chat.completions.create(**request_kwargs)
+                except Exception as exc:
+                    end_llm_generation(gen, error=str(exc))
+                    raise
+                end_llm_generation(gen, resp=resp)
 
             if resp and resp.choices:
                 msg = resp.choices[0].message
@@ -222,44 +253,68 @@ class LLMClient:
             log_event(_llm_log, logging.ERROR, "llm_error", error=str(e))
             raise LLMCallError(str(e), cause=e) from e
 
-    def _create_completion_stream(self, client, request_kwargs, on_content_delta):
-        stream = client.chat.completions.create(**request_kwargs)
-        content_parts: list[str] = []
-        tool_calls_acc: dict[int, dict[str, str]] = {}
-        finish_reason = None
+    def _create_completion_stream(
+        self,
+        client,
+        request_kwargs,
+        on_content_delta,
+        *,
+        langfuse_name: str = "main_loop_stream",
+        langfuse_metadata: dict[str, Any] | None = None,
+        request_messages: list[dict[str, Any]] | None = None,
+    ):
+        from common.langfuse_tracing import end_llm_generation, llm_generation
 
-        for chunk in stream:
-            if not chunk.choices:
-                continue
-            choice = chunk.choices[0]
-            if choice.finish_reason:
-                finish_reason = choice.finish_reason
-            delta = choice.delta
-            if not delta:
-                continue
-            if delta.content:
-                content_parts.append(delta.content)
-                on_content_delta(delta.content)
-            if delta.tool_calls:
-                for tc in delta.tool_calls:
-                    idx = tc.index
-                    acc = tool_calls_acc.setdefault(
-                        idx,
-                        {"id": "", "name": "", "arguments": ""},
-                    )
-                    if tc.id:
-                        acc["id"] = tc.id
-                    if tc.function:
-                        if tc.function.name:
-                            acc["name"] += tc.function.name
-                        if tc.function.arguments:
-                            acc["arguments"] += tc.function.arguments
+        with llm_generation(
+            name=langfuse_name,
+            model=request_kwargs.get("model", self._config.model),
+            messages=list(request_messages or request_kwargs.get("messages") or []),
+            tools_count=len(request_kwargs.get("tools") or []),
+            metadata=langfuse_metadata,
+        ) as gen:
+            try:
+                stream = client.chat.completions.create(**request_kwargs)
+                content_parts: list[str] = []
+                tool_calls_acc: dict[int, dict[str, str]] = {}
+                finish_reason = None
 
-        return self._build_streamed_response(
-            content="".join(content_parts),
-            tool_calls_acc=tool_calls_acc,
-            finish_reason=finish_reason,
-        )
+                for chunk in stream:
+                    if not chunk.choices:
+                        continue
+                    choice = chunk.choices[0]
+                    if choice.finish_reason:
+                        finish_reason = choice.finish_reason
+                    delta = choice.delta
+                    if not delta:
+                        continue
+                    if delta.content:
+                        content_parts.append(delta.content)
+                        on_content_delta(delta.content)
+                    if delta.tool_calls:
+                        for tc in delta.tool_calls:
+                            idx = tc.index
+                            acc = tool_calls_acc.setdefault(
+                                idx,
+                                {"id": "", "name": "", "arguments": ""},
+                            )
+                            if tc.id:
+                                acc["id"] = tc.id
+                            if tc.function:
+                                if tc.function.name:
+                                    acc["name"] += tc.function.name
+                                if tc.function.arguments:
+                                    acc["arguments"] += tc.function.arguments
+
+                resp = self._build_streamed_response(
+                    content="".join(content_parts),
+                    tool_calls_acc=tool_calls_acc,
+                    finish_reason=finish_reason,
+                )
+                end_llm_generation(gen, resp=resp)
+                return resp
+            except Exception as exc:
+                end_llm_generation(gen, error=str(exc))
+                raise
 
     @staticmethod
     def _build_streamed_response(*, content: str, tool_calls_acc: dict, finish_reason):

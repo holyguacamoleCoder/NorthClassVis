@@ -328,6 +328,8 @@ def llm_resolve(
             system_prompt=config.system_prompt,
             messages=[{"role": "user", "content": user_body}],
             max_tokens=config.max_tokens,
+            langfuse_name="binding_intent",
+            langfuse_metadata={"purpose": "binding_intent"},
         )
     except Exception as exc:
         log_event(_log, logging.WARNING, "binding_intent_llm_failed", error=str(exc))

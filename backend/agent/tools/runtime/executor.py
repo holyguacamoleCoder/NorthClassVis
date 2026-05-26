@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import runtime_bootstrap  # noqa: F401
 
+from common.langfuse_tracing import end_tool_span, is_tool_result_error, tool_span
 from common.logger import get_logger, log_event, truncate_for_log
 from context.state import CompactState
 from loop_state import AnalysisToolContext, QuerySnapshot
@@ -254,46 +255,57 @@ def execute_tool_calls(
                 {k: v for k, v in dispatch_args.items() if not k.startswith("_")}
             ),
         )
-        try:
-            tool_result = TOOL_DISPATCHER[tool_name](**dispatch_args)
-        except Exception:
-            _log.exception(
-                "tool_exec_failed tool=%s tool_call_id=%s",
-                tool_name,
-                call_id,
-            )
-            if call_id:
-                _store(
-                    prepend_hook_messages(
-                        f"Error: Tool {tool_name} execution failed",
-                        pre_messages,
-                    )
+        tool_result = ""
+        with tool_span(tool=tool_name or "unknown", params=parsed_args) as lf_span:
+            try:
+                tool_result = TOOL_DISPATCHER[tool_name](**dispatch_args)
+            except Exception:
+                _log.exception(
+                    "tool_exec_failed tool=%s tool_call_id=%s",
+                    tool_name,
+                    call_id,
                 )
-            continue
+                tool_result = f"Error: Tool {tool_name} execution failed"
+                end_tool_span(lf_span, output=tool_result, is_error=True)
+                if call_id:
+                    _store(
+                        prepend_hook_messages(
+                            tool_result,
+                            pre_messages,
+                        )
+                    )
+                continue
 
-        tool_result = postprocess_tool_result(
-            tool_name,
-            tool_result,
-            call_id=call_id,
-            parsed_args=parsed_args,
-            compact_state=compact_state,
-            analysis_context=analysis_context,
-            batch_snapshots=batch_snapshots,
-        )
+            tool_result = postprocess_tool_result(
+                tool_name,
+                tool_result,
+                call_id=call_id,
+                parsed_args=parsed_args,
+                compact_state=compact_state,
+                analysis_context=analysis_context,
+                batch_snapshots=batch_snapshots,
+            )
 
-        if hooks is not None:
-            post_ctx: dict[str, Any] = {
-                "tool_name": tool_name or "",
-                "tool_input": dict(parsed_args),
-                "tool_output": tool_result,
-            }
-            post_result = hooks.run_hooks("PostToolUse", post_ctx)
-            tool_result = append_hook_notes(tool_result, post_result.messages)
+            if hooks is not None:
+                post_ctx: dict[str, Any] = {
+                    "tool_name": tool_name or "",
+                    "tool_input": dict(parsed_args),
+                    "tool_output": tool_result,
+                }
+                post_result = hooks.run_hooks("PostToolUse", post_ctx)
+                tool_result = append_hook_notes(tool_result, post_result.messages)
 
-        tool_result = prepend_repair_notes(
-            prepend_hook_messages(tool_result, pre_messages),
-            repair.notes,
-        )
+            tool_result = prepend_repair_notes(
+                prepend_hook_messages(tool_result, pre_messages),
+                repair.notes,
+            )
+            end_tool_span(
+                lf_span,
+                output=tool_result if isinstance(tool_result, str) else str(tool_result),
+                is_error=is_tool_result_error(
+                    tool_result if isinstance(tool_result, str) else ""
+                ),
+            )
 
         log_event(
             _log,

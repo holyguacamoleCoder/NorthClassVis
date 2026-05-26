@@ -5,6 +5,7 @@ import logging
 from collections import deque
 from typing import Any, Dict, List, Callable
 
+from common.langfuse_tracing import agent_turn_span, record_loop_end
 from common.llm_client import LLMClient
 from common.logger import get_logger, log_event, truncate_for_log
 from common.message import coerce_tool_calls_for_api, normalize_message
@@ -27,7 +28,11 @@ from permission.modes import CapabilityMode
 from tools.runtime.pipeline.preprocess import dedupe_tool_calls, parse_args
 from session.turns import resolve_loop_turn_count
 from tools.handlers.compact import format_compact_applied_result
-from tools.handlers.todo_write import get_todo_reminder, mark_round_without_todo_update
+from tools.handlers.todo_write import (
+    export_todo_snapshot,
+    get_todo_reminder,
+    mark_round_without_todo_update,
+)
 from hints.plan_checks import append_data_tool_checks
 
 _log = get_logger("loop")
@@ -94,12 +99,15 @@ class AgentLoop:
 
     def _system_prompt(self) -> str:
         registry = self.loop_state.skills or get_registry()
+        todo_items, _rounds = export_todo_snapshot()
         return self._prompt_builder.build(
             SystemPromptContext(
                 permission_mode=self.permission.mode.value,
                 session_context=list(self.loop_state.session_context),
                 filter_context=self.loop_state.filter_context,
                 skills=registry,
+                loaded_skills=set(self.loop_state.loaded_skills),
+                todo_items=todo_items,
             )
         )
 
@@ -174,6 +182,10 @@ class AgentLoop:
         )
 
     def run_turn(self):
+        with agent_turn_span(turn=self.loop_state.turn_count):
+            return self._run_turn_body()
+
+    def _run_turn_body(self):
         self._check_cancelled()
         self._apply_pre_turn_compaction()
 
@@ -191,7 +203,7 @@ class AgentLoop:
             def on_content_delta(delta: str) -> None:
                 self._check_cancelled()
                 if delta:
-                    self._emit_progress({"type": "answer_delta", "delta": delta})
+                    self._emit_progress({"type": "thinking_delta", "delta": delta})
 
         visible_tools = filter_tools(TOOLS, self.permission.mode)
         raw_response, failure_reason = self._recovery.request_completion(
@@ -240,7 +252,10 @@ class AgentLoop:
                 assistant_message["tool_calls"] = coerce_tool_calls_for_api(
                     response.message.tool_calls
                 )
-            if not (assistant_message.get("content") or "").strip():
+            thinking_text = (assistant_message.get("content") or "").strip()
+            if thinking_text:
+                self._emit_progress({"type": "thinking", "content": thinking_text})
+            elif not (assistant_message.get("content") or "").strip():
                 assistant_message["content"] = None
         elif response.message.content:
             assistant_message["content"] = response.message.content
@@ -250,10 +265,13 @@ class AgentLoop:
             self.loop_state.continue_reason = None
             preview = truncate_for_log(response.message.content or "")
             if response.message.content:
-                self._emit_progress({
+                answer_event: dict[str, Any] = {
                     "type": "answer",
                     "content": response.message.content,
-                })
+                }
+                if self.loop_state.turn_count == 0:
+                    answer_event["clear_thinking"] = True
+                self._emit_progress(answer_event)
             log_event(
                 _log,
                 logging.INFO,
@@ -622,6 +640,10 @@ class AgentLoop:
             self._check_cancelled()
             if not self.run_turn():
                 break
+        record_loop_end(
+            continue_reason=self.loop_state.continue_reason,
+            turn_count=self.loop_state.turn_count,
+        )
         log_event(
             _log,
             logging.INFO,

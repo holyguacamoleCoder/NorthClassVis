@@ -49,6 +49,8 @@ def summarize_history(
         system_prompt=COMPACT_SUMMARY_SYSTEM,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=config.summary_max_tokens,
+        langfuse_name="macro_compact",
+        langfuse_metadata={"purpose": "macro_compact"},
     )
     return (summary or "").strip() or COMPACT_SUMMARY_FALLBACK
 

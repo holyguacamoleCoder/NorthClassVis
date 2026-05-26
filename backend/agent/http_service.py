@@ -12,6 +12,7 @@ from uuid import uuid4
 
 import runtime_bootstrap  # noqa: F401
 
+from common.langfuse_tracing import user_turn_trace
 from common.llm_client import LLMClient
 from common.logger import get_logger, log_event
 from common.memory import get_memory_manager
@@ -27,7 +28,12 @@ from skills import get_registry
 from cancel import TurnCancelled
 from .http_adapter import adapt_legacy_query_response, adapt_turn_response
 from .http_approval import ApprovalStore, HttpApprovalHandler
-from .http_progress import empty_job_progress, make_job_progress_handler, merge_progress_patch
+from .http_progress import (
+    empty_job_progress,
+    make_job_progress_handler,
+    merge_progress_patch,
+    seed_job_progress_from_session,
+)
 
 _log = get_logger("agent_http")
 
@@ -165,7 +171,11 @@ class AgentHttpService:
         session = self._ensure_active(session_id)
         if context:
             self.session_manager.apply_http_context(context)
-        job = AgentJob(id=uuid4().hex, session_id=session.id, progress=empty_job_progress())
+        job = AgentJob(
+            id=uuid4().hex,
+            session_id=session.id,
+            progress=seed_job_progress_from_session(session),
+        )
         with self._jobs_lock:
             self._jobs[job.id] = job
         thread = threading.Thread(
@@ -321,8 +331,13 @@ class AgentHttpService:
     ) -> tuple[str | None, set[str]]:
         progress_cb = None
         if job_id:
+            session = self.session_manager.active
+            initial_skills = (
+                list(session.loaded_skills) if session is not None else []
+            )
             progress_cb = make_job_progress_handler(
-                lambda patch: self._patch_job_progress(job_id, patch)
+                lambda patch: self._patch_job_progress(job_id, patch),
+                initial_loaded_skills=initial_skills,
             )
 
         self._ensure_active(session_id)
@@ -341,22 +356,28 @@ class AgentHttpService:
             )
             loop_state.messages.append({"role": "user", "content": user_content})
 
-            agent_loop = AgentLoop(
-                loop_state,
-                llm_client=self.llm_client,
-                permission=perms,
-                hooks=self.hooks,
-                progress_callback=progress_cb,
-                should_cancel=should_cancel,
-            )
-            agent_loop.run_loop()
-            if should_cancel and should_cancel():
-                raise TurnCancelled()
-            continue_reason = loop_state.continue_reason
-            loaded_skills = set(loop_state.loaded_skills)
-            self.session_manager.sync_loop_state(loop_state)
-            self.session_manager.persist_active()
-            return continue_reason, loaded_skills
+            with user_turn_trace(
+                session_id=session_id,
+                job_id=job_id,
+                user_message=content,
+                permission_mode=self.session_manager.active.permission_mode,
+            ):
+                agent_loop = AgentLoop(
+                    loop_state,
+                    llm_client=self.llm_client,
+                    permission=perms,
+                    hooks=self.hooks,
+                    progress_callback=progress_cb,
+                    should_cancel=should_cancel,
+                )
+                agent_loop.run_loop()
+                if should_cancel and should_cancel():
+                    raise TurnCancelled()
+                continue_reason = loop_state.continue_reason
+                loaded_skills = set(loop_state.loaded_skills)
+                self.session_manager.sync_loop_state(loop_state)
+                self.session_manager.persist_active()
+                return continue_reason, loaded_skills
         except TurnCancelled:
             self.session_manager.restore_turn_snapshot(snapshot)
             self.session_manager.persist_active()
@@ -388,6 +409,7 @@ class AgentHttpService:
             "message_count": len(session.messages),
             "messages": serialize_messages(session.messages),
             "todo_items": list(session.todo_items or []),
+            "loaded_skills": list(session.loaded_skills or []),
             "filter_context": session.filter_context,
         }
 
