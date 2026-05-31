@@ -10,9 +10,13 @@ from hooks import HookManager
 from permission import CapabilityMode, CliApprovalHandler, PermissionManager
 from session import SessionManager
 from skills import get_registry
+from slash_commands import execute_slash_command, parse_slash_command
 
 MODE_HELP = "consult | analyze | produce"
-SESSION_HELP = "/new | /sessions | /session <id> | /rename <title> | /delete [id] | /context <k=v ...>"
+SESSION_HELP = (
+    "/new | /sessions | /session <id> | /rename <title> | /delete [id] | "
+    "/context <k=v ...> | /skill [name]"
+)
 
 
 def _parse_mode(raw: str) -> CapabilityMode | None:
@@ -239,6 +243,23 @@ def pipeline():
                 print(f"[FilterContext: {merge_defaults(ctx).to_dict()}]")
             else:
                 print("Usage: /context classes=Class1 [week_range=10,25] [selected_student_ids=id1,id2]")
+            continue
+
+        slash = parse_slash_command(query)
+        if slash is not None:
+            try:
+                result = execute_slash_command(
+                    session_manager,
+                    skill_registry,
+                    slash,
+                    user_line=query.strip(),
+                )
+                print(result.get("answer") or "")
+                loaded = result.get("loaded_skills") or []
+                if loaded:
+                    print(f"[Loaded skills: {', '.join(loaded)}]")
+            except Exception as exc:
+                print(f"[Skill command failed: {exc}]")
             continue
 
         session_manager.maybe_set_title_from_message(query)

@@ -26,9 +26,10 @@ from session.ui_scope import augment_user_message_with_ui_scope
 from skills import get_registry
 
 from cancel import TurnCancelled
-from .http_adapter import adapt_legacy_query_response, adapt_turn_response
-from .http_approval import ApprovalStore, HttpApprovalHandler
-from .http_progress import (
+from ..slash_commands import SlashCommand, execute_slash_command, list_skills_payload, parse_slash_command
+from .adapter import adapt_legacy_query_response, adapt_turn_response, serialize_messages
+from .approval import ApprovalStore, HttpApprovalHandler
+from .progress import (
     empty_job_progress,
     make_job_progress_handler,
     merge_progress_patch,
@@ -104,6 +105,9 @@ class AgentHttpService:
         handler = HttpApprovalHandler(self.approval_store)
         return PermissionManager(mode=parsed, approval=handler)
 
+    def list_skills(self) -> list[dict[str, str]]:
+        return list_skills_payload(self.skills)
+
     def list_sessions(self) -> list[dict[str, Any]]:
         return [meta.to_dict() for meta in self.session_manager.list_sessions()]
 
@@ -171,6 +175,11 @@ class AgentHttpService:
         session = self._ensure_active(session_id)
         if context:
             self.session_manager.apply_http_context(context)
+
+        slash = parse_slash_command(text)
+        if slash is not None:
+            return self._submit_slash_command(session, slash, user_line=text)
+
         job = AgentJob(
             id=uuid4().hex,
             session_id=session.id,
@@ -243,12 +252,82 @@ class AgentHttpService:
             session = self.session_manager.create_session(permission_mode="analyze")
         if context:
             self.session_manager.apply_http_context(context)
+        text = (question or "").strip()
+        slash = parse_slash_command(text)
+        if slash is not None:
+            if session.id != self.session_manager.active.id:
+                self.session_manager.switch_session(session.id)
+            result = execute_slash_command(
+                self.session_manager,
+                self.skills,
+                slash,
+                user_line=text,
+            )
+            legacy = {
+                k: result[k]
+                for k in (
+                    "answer",
+                    "evidence",
+                    "actions",
+                    "visual_links",
+                    "trace",
+                    "goal_check",
+                    "summary",
+                )
+                if k in result
+            }
+            return legacy
         continue_reason = self._execute_turn(session.id, question)[0]
         session = self.session_manager.active
         return adapt_legacy_query_response(
             session.messages,
             continue_reason=continue_reason,
         )
+
+    def _submit_slash_command(
+        self,
+        session: ChatSession,
+        command: SlashCommand,
+        *,
+        user_line: str,
+    ) -> dict[str, Any]:
+        """Run slash command synchronously; return a completed job envelope."""
+        job = AgentJob(
+            id=uuid4().hex,
+            session_id=session.id,
+            progress=seed_job_progress_from_session(session),
+        )
+        try:
+            result = execute_slash_command(
+                self.session_manager,
+                self.skills,
+                command,
+                user_line=user_line,
+            )
+            job.status = JobStatus.COMPLETED
+            job.result = result
+            job.updated_at = time.time()
+            if result.get("loaded_skills") is not None:
+                merge_progress_patch(
+                    job.progress,
+                    {"loaded_skills": list(result["loaded_skills"])},
+                )
+            if result.get("todo_items") is not None:
+                merge_progress_patch(
+                    job.progress,
+                    {"todo_items": list(result["todo_items"])},
+                )
+        except Exception as exc:
+            job.status = JobStatus.FAILED
+            job.error = str(exc)
+            job.updated_at = time.time()
+        with self._jobs_lock:
+            self._jobs[job.id] = job
+        return {
+            "job_id": job.id,
+            "status": job.status.value,
+            "session_id": session.id,
+        }
 
     def _run_job(self, job_id: str, content: str) -> None:
         with self._jobs_lock:
@@ -398,8 +477,6 @@ class AgentHttpService:
         return self.session_manager.store.load(session_id)
 
     def _session_payload(self, session: ChatSession) -> dict[str, Any]:
-        from .http_adapter import serialize_messages
-
         return {
             "id": session.id,
             "title": session.title,
@@ -430,3 +507,6 @@ class AgentHttpService:
         if job.status in (JobStatus.RUNNING, JobStatus.AWAITING_APPROVAL, JobStatus.COMPLETED):
             payload["progress"] = dict(job.progress or empty_job_progress())
         return payload
+
+
+__all__ = ["AgentHttpService", "AgentJob", "JobStatus"]

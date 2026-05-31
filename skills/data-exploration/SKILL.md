@@ -1,49 +1,44 @@
 ---
 name: data-exploration
-description: 学业逻辑 resource 探查与统计（inspect_schema / query_data / aggregate_data 完整工作流）
+description: 逻辑 resource 探查与统计（inspect_schema、query_data、aggregate_data）；字段不明、选课人数、预览榜单。勿用于正式 diagnosis/overview（produce 改 load analysis-*）。
 ---
 
-# Data Exploration Skill (resource-based)
+# Data Exploration（resource-based）
 
-由 `data-csv-analysis` 演进；**本 skill 为完整正文**。旧名 `data-csv-analysis` 仍 `load_skill` 可得迁移提示。
-
-用于 **student / title / submit-record** 探索与统计（不限报告粒度）。
+用于 **student / title / submit_record** 探索与统计（不限报告粒度）。
 
 ## Modes
 
 | Mode | Tools for tabular data |
 |------|-------------------------|
-| consult | `inspect_schema` only (columns, samples, row count) |
+| consult | `inspect_schema` only |
 | analyze | `inspect_schema` → `query_data` → `aggregate_data`；可选 `list_datasets` |
-| produce | same as analyze + write reports |
+| produce | 同 analyze；写报告另 `load_skill` `analysis-*` |
 
 **Do not** `read_file` raw `Data_*.csv` or `Data_SubmitRecord/*.csv`.
 
 ## Resources
 
 - `student_info`, `title_info` — no class filter
-- `submit_record` — **single entry** (joined title + student)
-  - Required: `class="Class1"` **or** `classes=["Class1"]`
-  - Optional: `majors=["J23517"]`
-- `week_aggregation` — weekly trend; needs `classes`
+- `submit_record` — requires `class="Class1"` **or** `classes=["Class1"]`; optional `majors`
+- `week_aggregation` — needs `classes`
 
-Registry: `data/meta/resource_registry.yaml`. SessionStart injects `meta/data_catalog.md` summary.
+Registry: `data/meta/resource_registry.yaml`. SessionStart injects `meta/data_catalog.md`.
 
 ## Field rules
 
-- **Major codes** → `majors=[...]` or `where.field="major"`.
-- **Never** put major code in `student_ID`.
-- Use **`where`**, not `filter`.
+- Major codes → `majors=[...]` or `where.field="major"`; never in `student_ID`
+- Use **`where`**, not `filter`
 
 ---
 
 ## Workflow P — Plan then compute
 
-1. **`todo_write`** — 3–5 steps with `acceptance`.
-2. One `in_progress` at a time.
-3. **`query_data`** — omit `limit` for full scans; never `limit: 0`.
-4. **`aggregate_data`** — one call, all metrics.
-5. **`todo_write`** — complete only if `meta.warnings` empty.
+1. **`todo_write`** — 3–5 steps with `acceptance`
+2. One `in_progress` at a time
+3. **`query_data`** — omit `limit` for full scans; never `limit: 0`
+4. **`aggregate_data`** — one call, all metrics
+5. **`todo_write`** — complete only if `meta.warnings` empty
 
 ### Enrollment by major (Class1)
 
@@ -63,20 +58,11 @@ Registry: `data/meta/resource_registry.yaml`. SessionStart injects `meta/data_ca
 
 ## Workflow A — Statistics only
 
-**Exactly 2 tool calls.**
-
-1. One `query_data` with metric columns only; omit `limit` for full stats.
-2. One `aggregate_data` on that `result_ref`.
-
----
+**Exactly 2 tool calls:** one `query_data` (omit `limit`) → one `aggregate_data`.
 
 ## Workflow B — Explore first
 
-1. `inspect_schema` when columns uncertain.
-2. One `query_data`.
-3. One `aggregate_data` if needed.
-
----
+`inspect_schema` → `query_data` → `aggregate_data` if needed.
 
 ## Workflow C — Preview / ranked lists
 
@@ -94,7 +80,7 @@ Registry: `data/meta/resource_registry.yaml`. SessionStart injects `meta/data_ca
 | `where` | DSL conditions |
 | `limit` | Preview only; omit when aggregating |
 
-Binding: `bind=chain` vs `fresh` vs `dataset_id` — see session catalog. 「这些记录」→ chain；「全班概况」→ fresh full query.
+Binding: `bind=chain` vs `fresh` vs `dataset_id` — see session catalog.
 
 ---
 
@@ -118,7 +104,8 @@ Binding: `bind=chain` vs `fresh` vs `dataset_id` — see session catalog. 「这
 
 ---
 
-## 与 tiered 报告的关系
+## 与正式报告
 
 - 探查/统计：本 skill
-- 个体/班/专业 **正式章节**：先 `analysis-student` / `analysis-class` / `analysis-major`，再 `tiered-report`
+- 正式报告：`load_skill` `analysis-student` | `analysis-class` | `analysis-major`，并 `load_skill report-delivery`（`skills/reference/`）
+- **勿** `read_file` `reports/` 作参考；`reports/` 仅产出写入

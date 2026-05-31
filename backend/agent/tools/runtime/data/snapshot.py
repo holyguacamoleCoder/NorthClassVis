@@ -92,7 +92,10 @@ def _limit_from_args_or_meta(
 ) -> int | None:
     if parsed_args is not None and parsed_args.get("limit") is not None:
         try:
-            return int(parsed_args["limit"])
+            raw = int(parsed_args["limit"])
+            if raw == 0:
+                return None
+            return raw
         except (TypeError, ValueError):
             pass
     meta = payload.get("meta") or {}

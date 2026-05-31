@@ -8,11 +8,11 @@ import sys
 
 import pytest
 
-_AGENT_ROOT = os.path.join(os.path.dirname(__file__), "..")
-if _AGENT_ROOT not in sys.path:
-    sys.path.insert(0, _AGENT_ROOT)
+_BACKEND_ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
+if _BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, _BACKEND_ROOT)
 
-from http_adapter import (  # noqa: E402
+from agent.http.adapter import (  # noqa: E402
     adapt_legacy_query_response,
     extract_tool_steps,
     serialize_messages,

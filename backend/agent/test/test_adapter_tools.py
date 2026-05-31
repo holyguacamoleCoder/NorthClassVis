@@ -87,6 +87,63 @@ def test_build_visual_links_rejects_bad_view():
     assert "QuestionView" in views
 
 
+def test_build_visual_links_question_view_title_ids():
+    raw = run_build_visual_links(
+        links=[
+            {
+                "view": "QuestionView",
+                "params": {
+                    "title_ids": [
+                        "Question_QRm48lXxzdP7Tn1WgNOf",
+                        "Question_UXqN1F7G3Sbldz02vZne",
+                    ],
+                },
+            },
+        ],
+    )
+    payload = json.loads(raw)
+    assert len(payload["visual_links"]) == 1
+    params = payload["visual_links"][0]["params"]
+    assert len(params["title_ids"]) == 2
+    assert "knowledge" not in params
+
+
+def test_build_visual_links_rejects_placeholder_knowledge():
+    raw = run_build_visual_links(
+        links=[{"view": "QuestionView", "params": {"knowledge": "some_knowledge"}}],
+    )
+    payload = json.loads(raw)
+    assert payload["rejected"]
+
+
+def test_build_visual_links_injects_week_range_from_filter_context(data_dir, monkeypatch):
+    monkeypatch.chdir(BACKEND_ROOT.parent)
+    fc = FilterContext(classes=("Class1",), week_range=(10, 13), source="http_body")
+    raw = run_build_visual_links(
+        links=[{"view": "WeekView", "params": {}}],
+        _filter_context=fc,
+    )
+    payload = json.loads(raw)
+    assert len(payload["visual_links"]) == 1
+    assert payload["visual_links"][0]["params"]["week_range"] == [10, 13]
+    assert any("student_ids" in w for w in payload.get("warnings") or [])
+
+
+def test_build_visual_links_no_student_ids_warning_when_single_selected():
+    fc = FilterContext(
+        classes=("Class1",),
+        week_range=(0, 15),
+        selected_student_ids=("stu1",),
+        source="http_body",
+    )
+    raw = run_build_visual_links(
+        links=[{"view": "WeekView", "params": {"week_range": [0, 15]}}],
+        _filter_context=fc,
+    )
+    payload = json.loads(raw)
+    assert not any("student_ids" in w and "建议" in w for w in payload.get("warnings") or [])
+
+
 def test_build_visual_links_archetype_warnings():
     raw = run_build_visual_links(
         links=[

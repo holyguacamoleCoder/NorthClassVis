@@ -10,7 +10,7 @@ from data.filter_context import FilterContext
 from data.inspect import inspect_resource
 from data.param_validation import normalize_query_resource, validate_resolve_params
 from data.query import QuerySpec, execute_query
-from data.result_hints import enrich_aggregate_payload, enrich_query_payload, reject_limit_zero
+from data.result_hints import enrich_aggregate_payload, enrich_query_payload, normalize_limit
 
 _RESOLVE_KEYS = frozenset({"class", "classes", "majors", "week_range", "student_ids"})
 
@@ -257,9 +257,13 @@ def run_query_data(
     if where is None and filter is not None:
         where = filter
     filter_context = _pop_filter_context(kwargs)
+    limit_notes: list[str] = []
     try:
-        reject_limit_zero(limit)
+        limit, limit_note = normalize_limit(limit)
+        if limit_note:
+            limit_notes.append(limit_note)
         resource, kwargs, notes = normalize_query_resource(resource, kwargs, where=where)
+        notes = list(notes) + limit_notes
         resolve = _resolve_params_with_context(kwargs, filter_context, resource=resource)
         validate_resolve_params(resource, resolve)
         spec = QuerySpec(
@@ -408,5 +412,11 @@ def run_aggregate_data(
         return _json_result(result)
     except DataResourceError as exc:
         return _format_data_error(exc, next_tool="query_data then aggregate_data")
+    except InvalidParameterError as exc:
+        return _format_data_error(
+            exc,
+            next_tool="inspect_schema",
+            example='先 inspect_schema(resource=...) 确认列名，再 query_data → aggregate_data',
+        )
     except Exception as exc:
         return f"Error: aggregate_data failed: {exc}"

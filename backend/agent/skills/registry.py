@@ -39,8 +39,24 @@ class SkillRegistry:
         if not self.skills_dir.exists():
             return
         for path in sorted(self.skills_dir.rglob("SKILL.md")):
+            if "reference" in path.parts:
+                continue
             meta, body = _parse_frontmatter(path.read_text(encoding="utf-8"))
             name = meta.get("name", path.parent.name)
+            description = meta.get("description", "No description")
+            manifest = SkillManifest(name=name, description=description, path=path)
+            self.documents[name] = SkillDocument(manifest=manifest, body=body.strip())
+        self._load_reference_docs()
+
+    def _load_reference_docs(self) -> None:
+        ref_dir = self.skills_dir / "reference"
+        if not ref_dir.is_dir():
+            return
+        for path in sorted(ref_dir.glob("*.md")):
+            meta, body = _parse_frontmatter(path.read_text(encoding="utf-8"))
+            name = meta.get("name", path.stem)
+            if name in self.documents:
+                continue
             description = meta.get("description", "No description")
             manifest = SkillManifest(name=name, description=description, path=path)
             self.documents[name] = SkillDocument(manifest=manifest, body=body.strip())

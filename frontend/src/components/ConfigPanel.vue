@@ -48,7 +48,7 @@ import config from '@/assets/config/config.json'
 import CheckboxDropdown from './CheckboxDropdown.vue'
 import LoadingSpinner from './LoadingSpinner.vue'
 import { setConfig, getConfig } from '@/api/ConfigPanel.js'
-import { mapActions } from 'vuex'
+import { mapActions, mapGetters } from 'vuex'
 export default {
   name: 'ConfigPanel',
   components: {
@@ -102,7 +102,27 @@ export default {
   },
   mounted(){
   },
+  watch: {
+    getNavWeekRange(wr) {
+      if (!wr || wr.length < 2 || this.weekRangeMax <= this.weekRangeMin) return
+      const start = Math.max(this.weekRangeMin, Math.min(this.weekRangeMax, Number(wr[0])))
+      const end = Math.max(this.weekRangeMin, Math.min(this.weekRangeMax, Number(wr[1])))
+      this.weekStart = start
+      this.weekEnd = end
+      if (this.weekStart > this.weekEnd) this.weekStart = this.weekEnd
+    },
+    getNavConfigRevision() {
+      const wr = this.getNavWeekRange
+      if (!wr || wr.length < 2 || this.weekRangeMax <= this.weekRangeMin) return
+      const start = Math.max(this.weekRangeMin, Math.min(this.weekRangeMax, Number(wr[0])))
+      const end = Math.max(this.weekRangeMin, Math.min(this.weekRangeMax, Number(wr[1])))
+      this.weekStart = start
+      this.weekEnd = end
+      if (this.weekStart > this.weekEnd) this.weekStart = this.weekEnd
+    },
+  },
   computed: {
+    ...mapGetters(['getNavWeekRange', 'getNavConfigRevision']),
     totalSpan() {
       const s = this.weekRangeMax - this.weekRangeMin
       return s <= 0 ? 1 : s

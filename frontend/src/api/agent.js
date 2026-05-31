@@ -86,6 +86,11 @@ export async function listAgentSessions() {
   return res.data
 }
 
+export async function listAgentSkills() {
+  const res = await request.get('/agent/skills')
+  return res.data
+}
+
 export async function createAgentSession(payload = {}) {
   const res = await request.post('/agent/sessions', payload)
   return res.data
@@ -129,6 +134,25 @@ export async function cancelAgentJob(jobId) {
   return res.data
 }
 
+export async function fetchDeliverable(relPath) {
+  const encoded = String(relPath || '')
+    .split('/')
+    .map((seg) => encodeURIComponent(seg))
+    .join('/')
+  const res = await request.get(`/agent/deliverables/${encoded}`)
+  return res.data
+}
+
+export function deliverableDownloadUrl(relPath) {
+  const base = import.meta.env.VUE_APP_API_BASE_URL ?? '/api'
+  const encoded = String(relPath || '')
+    .split('/')
+    .map((seg) => encodeURIComponent(seg))
+    .join('/')
+  const root = base.endsWith('/') ? base.slice(0, -1) : base
+  return `${root}/agent/deliverables/${encoded}/download`
+}
+
 export async function resolveAgentApproval(approvalId, decision, remember = false) {
   const res = await request.post(`/agent/approvals/${approvalId}`, {
     decision,
@@ -140,22 +164,26 @@ export async function resolveAgentApproval(approvalId, decision, remember = fals
 export async function pollAgentJob(jobId, { onApproval, onProgress, shouldAbort } = {}) {
   const started = Date.now()
   let pendingApprovalId = null
-  let lastStepCount = -1
+  let lastProgressKey = ''
   while (Date.now() - started < JOB_TIMEOUT_MS) {
     if (shouldAbort?.()) {
       throw new JobAbortedError()
     }
     const job = await getAgentJob(jobId)
     if (onProgress && job.progress) {
-      const stepCount = (job.progress.tool_steps || []).length
-      const hasRunning = !!job.progress.running_tool
-      if (
-        stepCount !== lastStepCount ||
-        hasRunning ||
-        job.progress.phase === 'llm' ||
-        job.progress.answer
-      ) {
-        lastStepCount = stepCount
+      const p = job.progress
+      const progressKey = JSON.stringify({
+        steps: (p.tool_steps || []).length,
+        running: p.running_tool?.tool || null,
+        phase: p.phase,
+        thinking: p.thinking || '',
+        answer: p.answer || '',
+        todo: p.todo_items || [],
+        skills: p.loaded_skills || [],
+        reports: p.report_links || [],
+      })
+      if (progressKey !== lastProgressKey) {
+        lastProgressKey = progressKey
         onProgress(job)
       }
     }

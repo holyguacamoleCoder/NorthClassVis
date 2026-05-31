@@ -122,6 +122,9 @@ class FileSessionStore:
             compact=compact,
             todo_items=todo_items,
             todo_round_since_update=todo_round,
+            loaded_skills=[
+                str(s) for s in (meta.get("loaded_skills") or []) if str(s).strip()
+            ],
             filter_context=filter_context,
             user_turn_count=int(meta.get("user_turn_count") or 0),
             messages_count=int(meta.get("messages_count") or 1),
@@ -140,6 +143,7 @@ class FileSessionStore:
             "updated_at": session.updated_at,
             "user_turn_count": session.user_turn_count,
             "messages_count": session.messages_count,
+            "loaded_skills": list(session.loaded_skills or []),
         }
         (sdir / META_FILE).write_text(
             json.dumps(meta, ensure_ascii=False, indent=2),

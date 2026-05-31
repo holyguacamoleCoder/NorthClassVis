@@ -16,10 +16,13 @@ export const AGENT_UI = {
   deleteConfirm: (title) => `确定删除「${title}」？`,
 
   emptyTitle: '开始新的分析',
-  emptyDesc: '基于班级数据提问，Agent 将查询数据并给出解读。',
+  emptyDesc: '基于班级数据提问，或使用 /skill 加载分析流程技能。',
+  emptySkillList: '/skill 列出技能',
 
-  composerPlaceholder: '输入问题，Enter 发送，Shift+Enter 换行',
-  composerHint: 'Enter 发送 · Shift+Enter 换行',
+  composerPlaceholder: '输入问题；/skill 列出技能，/skill analysis-class 加载技能',
+  composerHint: 'Enter 发送 · Shift+Enter 换行 · /skill · /skill <技能名>',
+  skillSlashListing: '列出技能',
+  skillSlashLoading: (name) => `加载技能 ${name}`,
   send: '发送',
   stop: '停止',
   stoppedHint: '已停止生成',
@@ -57,6 +60,20 @@ export const AGENT_UI = {
   modeAnalyze: '分析 — 查询统计',
   modeProduce: '产出 — 可写文件',
   railPlan: '执行计划',
+  railSkills: '已加载技能',
+  todoStepTitle: '更新计划',
+  todoStepDone: '已完成',
+  todoAcceptance: '验收',
+  skillStepTitle: '加载技能',
+  reportSection: '报告与导出',
+  reportPreview: '预览',
+  reportExport: '导出',
+  reportExportMd: '下载 Markdown',
+  reportExportHtml: '导出 HTML（含图表）',
+  reportExporting: '正在导出…',
+  reportPreviewTitle: '报告预览',
+  reportLoading: '正在加载报告…',
+  reportEmpty: '暂无内容',
   railMeta: '会话信息',
   railMessageCount: '消息数',
 
@@ -79,6 +96,10 @@ export const AGENT_UI = {
   toolStatusDenied: '拒绝',
   toolStatusBlocked: '拦截',
   toolStatusRunning: '执行中',
+
+  sectionPlan: '分析计划',
+  sectionProcess: '执行过程',
+  sectionConclusion: '分析结论',
 
   sampleQuestions: [
     '最近两周链表知识点表现如何？',

@@ -5,6 +5,7 @@ import runtime_bootstrap  # noqa: F401, E402
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 AGENT_ROOT = BACKEND_ROOT / "agent"
+REPO_ROOT = AGENT_ROOT.parents[1]
 
 from permission import CapabilityMode, filter_tools
 from permission.modes import MODE_TOOL_ALLOWLIST
@@ -38,6 +39,18 @@ def test_registry_discovers_skills(tmp_path):
     assert "Do the thing." in loaded
 
 
+def test_registry_discovers_reference_docs(tmp_path):
+    ref = tmp_path / "reference"
+    ref.mkdir()
+    (ref / "demo-ref.md").write_text(
+        "---\nname: demo-ref\ndescription: A reference doc skill\n---\n\nRef body.\n",
+        encoding="utf-8",
+    )
+    registry = SkillRegistry(skills_dir=tmp_path)
+    assert "demo-ref" in registry.documents
+    assert "Ref body." in registry.load_full_text("demo-ref")
+
+
 def test_registry_unknown_skill(tmp_path):
     registry = SkillRegistry(skills_dir=tmp_path)
     result = registry.load_full_text("missing")
@@ -57,9 +70,10 @@ def test_load_skill_tool_with_registry(tmp_path):
         _FALLBACK_LOADED.clear()
         loaded: set[str] = set()
         first = run_load_skill("alpha", _loaded_skills=loaded)
-        assert "Alpha body." in first
         assert "[Skill loaded: alpha]" in first
-        assert "already loaded" in run_load_skill("alpha", _loaded_skills=loaded)
+        assert "已加载技能" in first
+        second = run_load_skill("alpha", _loaded_skills=loaded)
+        assert "Skill active: alpha" in second or "already" in second.lower()
         assert "Error" in run_load_skill("")
         assert "Unknown skill" in run_load_skill("nope")
         assert "load_skill" in TOOL_DISPATCHER
@@ -84,7 +98,7 @@ def test_filter_tools_includes_load_skill_in_analyze():
 
 
 def test_builtin_skills_present():
-    repo_skills = AGENT_ROOT.parents[1] / "skills"
+    repo_skills = REPO_ROOT / "skills"
     if not repo_skills.is_dir():
         return
     registry = SkillRegistry(skills_dir=repo_skills)
@@ -93,11 +107,11 @@ def test_builtin_skills_present():
         "analysis-class",
         "analysis-major",
         "data-exploration",
-        "tiered-report",
-        "report-markdown",
-        "data-csv-analysis",
+        "report-delivery",
     ):
         assert name in registry.documents, f"missing skill: {name}"
+
+    assert "tiered-report" not in registry.documents
 
     catalog = registry.describe_available()
     for name in (
@@ -105,9 +119,13 @@ def test_builtin_skills_present():
         "analysis-class",
         "analysis-major",
         "data-exploration",
-        "tiered-report",
+        "report-delivery",
     ):
         assert name in catalog
+
+    for name in ("analysis-student", "analysis-class", "analysis-major", "data-exploration"):
+        desc = registry.documents[name].manifest.description
+        assert len(desc) >= 80, f"{name} description too short: {len(desc)}"
 
     student_body = registry.documents["analysis-student"].body
     for section_id in (
@@ -119,27 +137,32 @@ def test_builtin_skills_present():
         "actions",
     ):
         assert section_id in student_body
-    assert "StudentView" in student_body
-    assert "WeekView" in student_body
-    assert "仅 StudentView" in student_body or "反模式" in student_body
+    assert "reports/student" in student_body
+    assert "report-delivery" in student_body
+    assert student_body.count("```report-chart") == 0
+    assert "每章：结论" not in student_body
+    assert "read_file" in student_body and "reports/" in student_body
 
     class_body = registry.documents["analysis-class"].body
     assert "distribution" in class_body
     assert "typical_students" in class_body
+    assert "reports/class" in class_body
+    assert "academic_analysis_<ClassN>_reference" not in class_body
+    assert "作版式参考" not in class_body
+    assert "dashboard_views" not in class_body
+    assert class_body.count("```report-chart") == 0
 
-    tiered = registry.load_full_text("tiered-report")
-    assert "模板 A" in tiered or "student" in tiered
-    assert "模板 B" in tiered or "class" in tiered
-    assert "模板 C" in tiered or "major" in tiered
-    for section in ("scope", "week_trend", "actions"):
-        assert section in tiered
+    major_body = registry.documents["analysis-major"].body
+    assert "reports/major" in major_body
+    assert major_body.count("```report-chart") == 0
 
-    legacy_report = registry.load_full_text("report-markdown")
-    assert "tiered-report" in legacy_report
-    assert "迁移" in legacy_report or "已迁移" in legacy_report
+    delivery_doc = registry.documents["report-delivery"]
+    assert delivery_doc.manifest.path.name == "report-delivery.md"
+    assert (repo_skills / "reference" / "report-delivery.md").is_file()
+    assert "报告 Markdown 结构" in delivery_doc.body
+    assert "禁止" in delivery_doc.body and "read_file" in delivery_doc.body
 
-    legacy_csv = registry.load_full_text("data-csv-analysis")
-    assert "data-exploration" in legacy_csv
+    assert not (REPO_ROOT / "data" / "meta" / "report_delivery.md").is_file()
 
 
 if __name__ == "__main__":
@@ -148,6 +171,8 @@ if __name__ == "__main__":
     test_parse_frontmatter()
     with tempfile.TemporaryDirectory() as tmp:
         test_registry_discovers_skills(Path(tmp))
+    with tempfile.TemporaryDirectory() as tmp:
+        test_registry_discovers_reference_docs(Path(tmp))
     with tempfile.TemporaryDirectory() as tmp:
         test_registry_unknown_skill(Path(tmp))
     with tempfile.TemporaryDirectory() as tmp:

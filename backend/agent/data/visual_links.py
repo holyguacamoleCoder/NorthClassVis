@@ -6,6 +6,8 @@ from typing import Any
 
 import yaml
 
+from .filter_context import FilterContext, _coerce_week_range
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_CONTRACT_PATH = _PROJECT_ROOT / "data" / "meta" / "visual_link_contract.yaml"
 
@@ -32,9 +34,51 @@ def _view_params_spec(contract: dict[str, Any], view: str) -> dict[str, Any]:
     return {k: v for k, v in raw.items() if isinstance(v, dict) and k != "example"}
 
 
+_PLACEHOLDER_KNOWLEDGE = frozenset(
+    {"some_knowledge", "某知识点", "knowledge", "unknown", "n/a", "na"}
+)
+
+
+def normalize_question_params(params: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    knowledge_raw = params.get("knowledge")
+    knowledge = (
+        knowledge_raw.strip()
+        if isinstance(knowledge_raw, str) and knowledge_raw.strip()
+        else None
+    )
+    if knowledge and knowledge.lower() in _PLACEHOLDER_KNOWLEDGE:
+        knowledge = None
+
+    title_ids = params.get("title_ids")
+    clean_ids: list[str] = []
+    if title_ids is not None:
+        if not isinstance(title_ids, list):
+            return None, "QuestionView: title_ids must be an array"
+        clean_ids = [str(x).strip() for x in title_ids if x is not None and str(x).strip()]
+        if not clean_ids:
+            return None, "QuestionView: title_ids must not be empty when provided"
+
+    if clean_ids:
+        out: dict[str, Any] = {"title_ids": clean_ids[:8]}
+        if knowledge:
+            out["knowledge"] = knowledge
+        return out, None
+    if knowledge:
+        return {"knowledge": knowledge}, None
+    return None, "QuestionView: title_ids or knowledge required"
+
+
+def _week_range_in_params(params: dict[str, Any]) -> dict[str, Any]:
+    wr = _coerce_week_range(params.get("week_range"))
+    if wr is not None:
+        return {"week_range": [wr[0], wr[1]]}
+    return {}
+
+
 def normalize_week_params(params: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
     kind = params.get("kind")
     cluster = params.get("cluster")
+    week_extra = _week_range_in_params(params)
     if kind is not None and cluster is not None:
         return None, "WeekView: kind and cluster are mutually exclusive"
     if cluster is not None:
@@ -44,7 +88,7 @@ def normalize_week_params(params: dict[str, Any]) -> tuple[dict[str, Any] | None
             return None, "WeekView: cluster must be integer 0|1|2"
         if cluster_int not in (0, 1, 2):
             return None, "WeekView: cluster must be 0, 1, or 2"
-        return {"kind": cluster_int + 1}, None
+        return {"kind": cluster_int + 1, **week_extra}, None
     if kind is not None:
         try:
             kind_int = int(kind)
@@ -52,9 +96,9 @@ def normalize_week_params(params: dict[str, Any]) -> tuple[dict[str, Any] | None
             return None, "WeekView: kind must be integer 1|2|3"
         if kind_int not in (1, 2, 3):
             return None, "WeekView: kind must be 1, 2, or 3"
-        return {"kind": kind_int}, None
+        return {"kind": kind_int, **week_extra}, None
     # 无 kind/cluster：展示当前选中学生的全部簇（勿一次推 3 个 kind 按钮）
-    return {}, None
+    return {**week_extra}, None
 
 
 def normalize_link(
@@ -85,10 +129,10 @@ def normalize_link(
         params = normalized or {}
 
     elif view == "QuestionView":
-        knowledge = params.get("knowledge")
-        if not isinstance(knowledge, str) or not knowledge.strip():
-            return None, "QuestionView: knowledge is required"
-        params = {"knowledge": knowledge.strip()}
+        normalized, err = normalize_question_params(params)
+        if err:
+            return None, err
+        params = normalized or {}
 
     elif view == "StudentView":
         ids = params.get("student_ids")
@@ -163,6 +207,7 @@ def consolidate_week_view_links(
         return visual_links, None
 
     kinds: set[int] = set()
+    merged_params: dict[str, Any] = {}
     for link in week_links:
         params = link.get("params") or {}
         kind = params.get("kind")
@@ -171,18 +216,23 @@ def consolidate_week_view_links(
                 kinds.add(int(kind))
             except (TypeError, ValueError):
                 pass
+        if "week_range" not in merged_params:
+            wr = _coerce_week_range(params.get("week_range"))
+            if wr is not None:
+                merged_params["week_range"] = [wr[0], wr[1]]
 
     if len(kinds) == 1:
         only = next(iter(kinds))
+        merged_params["kind"] = only
         merged = {
             "view": "WeekView",
-            "params": {"kind": only},
+            "params": merged_params,
             "label": f"查看周趋势（簇 {only - 1}）",
         }
     else:
         merged = {
             "view": "WeekView",
-            "params": {},
+            "params": merged_params,
             "label": "查看周趋势",
         }
 
@@ -230,3 +280,51 @@ def validate_links(
         "warnings": warnings,
         "rejected": rejected,
     }
+
+
+def warn_week_view_missing_student_ids(
+    visual_links: list[dict[str, Any]],
+    filter_context: FilterContext | None,
+) -> list[str]:
+    """Advise when WeekView links omit student_ids (report embed needs explicit IDs)."""
+    selected = (
+        list(filter_context.selected_student_ids)
+        if filter_context and filter_context.selected_student_ids
+        else []
+    )
+    warnings: list[str] = []
+    for link in visual_links:
+        if link.get("view") != "WeekView":
+            continue
+        params = link.get("params") or {}
+        ids = params.get("student_ids")
+        if isinstance(ids, list) and [x for x in ids if str(x).strip()]:
+            continue
+        if len(selected) == 1:
+            continue
+        warnings.append(
+            "WeekView: 建议 params.student_ids（个体仅目标 1 人；班级 2–3 代表生）；"
+            "省略时报告内嵌 WeekView 可能无法渲染。"
+        )
+    return warnings
+
+
+def enrich_week_view_week_range(
+    visual_links: list[dict[str, Any]],
+    filter_context: FilterContext | None,
+) -> list[dict[str, Any]]:
+    """Inject session week_range into WeekView links when the model omitted it."""
+    if filter_context is None or filter_context.week_range is None:
+        return visual_links
+    wr = [filter_context.week_range[0], filter_context.week_range[1]]
+    out: list[dict[str, Any]] = []
+    for link in visual_links:
+        if link.get("view") != "WeekView":
+            out.append(link)
+            continue
+        params = dict(link.get("params") or {})
+        if "week_range" not in params:
+            params["week_range"] = wr
+            link = {**link, "params": params}
+        out.append(link)
+    return out

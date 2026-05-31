@@ -8,13 +8,13 @@ import threading
 
 import pytest
 
-_AGENT_ROOT = os.path.join(os.path.dirname(__file__), "..")
-if _AGENT_ROOT not in sys.path:
-    sys.path.insert(0, _AGENT_ROOT)
+_BACKEND_ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
+if _BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, _BACKEND_ROOT)
 
 from cancel import TurnCancelled  # noqa: E402
-from http_approval import ApprovalStore  # noqa: E402
-from http_service import AgentHttpService, AgentJob, JobStatus  # noqa: E402
+from agent.http.approval import ApprovalStore  # noqa: E402
+from agent.http.service import AgentHttpService, AgentJob, JobStatus  # noqa: E402
 from loop import AgentLoop  # noqa: E402
 from loop_state import LoopState  # noqa: E402
 from permission import PermissionManager  # noqa: E402

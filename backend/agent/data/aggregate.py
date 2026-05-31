@@ -5,6 +5,11 @@ from typing import Any
 
 import pandas as pd
 
+from .column_aliases import (
+    format_missing_columns_error,
+    resolve_columns,
+    resolve_metrics_columns,
+)
 from .exceptions import InvalidParameterError
 from .limits import QueryLimits
 from .registry import default_limits
@@ -56,6 +61,45 @@ def execute_aggregate(
 ) -> dict:
     limits = limits or default_limits()
     df, resource = _load_input_df(spec)
+    available = list(df.columns)
+    repair_notes: list[str] = []
+
+    metrics = list(spec.metrics)
+    dimensions = list(spec.dimensions or [])
+    if dimensions:
+        dimensions, missing_dims, dim_notes = resolve_columns(dimensions, available)
+        repair_notes.extend(dim_notes)
+        if missing_dims:
+            raise InvalidParameterError(
+                format_missing_columns_error(
+                    param="dimensions",
+                    missing=missing_dims,
+                    available=available,
+                    resource=resource,
+                    repair_notes=repair_notes or None,
+                ),
+                param="dimensions",
+            )
+    metrics, missing_metrics, metric_notes = resolve_metrics_columns(metrics, available)
+    repair_notes.extend(metric_notes)
+    if missing_metrics:
+        raise InvalidParameterError(
+            format_missing_columns_error(
+                param="metrics",
+                missing=missing_metrics,
+                available=available,
+                resource=resource,
+                repair_notes=repair_notes or None,
+            ),
+            param="metrics",
+        )
+    spec = AggregateSpec(
+        input=spec.input,
+        metrics=metrics,
+        dimensions=dimensions or None,
+        window=spec.window,
+        resource=spec.resource or resource,
+    )
 
     if spec.window:
         field = spec.window.get("field")
@@ -75,10 +119,6 @@ def execute_aggregate(
             df[name] = rolled
 
     group_cols = list(spec.dimensions or [])
-    if group_cols:
-        missing = [c for c in group_cols if c not in df.columns]
-        if missing:
-            raise InvalidParameterError(f"dimensions 列不存在: {missing}", param="dimensions")
 
     agg_map: dict[str, list[str]] = {}
     rename: dict[tuple[str, str], str] = {}

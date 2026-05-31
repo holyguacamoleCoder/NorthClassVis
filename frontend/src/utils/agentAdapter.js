@@ -7,6 +7,13 @@ import {
   mergeVisualLinks,
   stripVisualLinkMarkdown,
 } from '@/utils/visualLinks.js'
+import {
+  extractReportLinksFromToolMessages,
+  mergeReportLinks,
+  stripReportLinkMarkdown,
+} from '@/utils/reportLinks.js'
+import { enrichToolStep, summarizeToolContent } from '@/utils/agentPlanUtils.js'
+import { buildTurnTimeline } from '@/utils/agentTimeline.js'
 
 const MODE_LABELS = {
   consult: '咨询',
@@ -18,19 +25,116 @@ export function modeLabel(mode) {
   return MODE_LABELS[mode] || mode || '分析'
 }
 
-export function legacyToAssistantMessage(res) {
-  const visual_links = mergeVisualLinks(res.visual_links || [], [])
-  const hasLinks = visual_links.length > 0
-  const actions = (res.actions || []).filter(
-    (a) => !hasLinks || !/点击下方图表入口/.test(String(a)),
-  )
+function stripAnswerMarkdown(answer, visualLinks, reportLinks) {
+  const hasLinks = (visualLinks || []).length > 0
+  const hasReports = (reportLinks || []).length > 0
+  let text = stripVisualLinkMarkdown(answer || '', hasLinks)
+  text = stripReportLinkMarkdown(text, hasReports)
+  return text
+}
+
+function buildAssistantUiFromTurn(turnMsgs) {
+  const callParams = {}
+  const toolMessages = []
+  let firstToolIdx = -1
+
+  for (let i = 0; i < turnMsgs.length; i++) {
+    const msg = turnMsgs[i]
+    if (msg.role === 'tool' && firstToolIdx < 0) {
+      firstToolIdx = i
+    }
+  }
+
+  let thinking = ''
+  const postTexts = []
+
+  for (let i = 0; i < turnMsgs.length; i++) {
+    const msg = turnMsgs[i]
+    if (msg.role === 'assistant') {
+      const text = (msg.content || '').trim()
+      const toolCalls = msg.toolCalls || []
+      for (const tc of toolCalls) {
+        if (tc.id) {
+          callParams[tc.id] = {
+            name: tc.name,
+            params: tc.arguments || {},
+          }
+        }
+      }
+      if (!text) continue
+      if (firstToolIdx < 0 || i < firstToolIdx) {
+        if (!thinking) thinking = text
+      } else {
+        postTexts.push(text)
+      }
+      continue
+    }
+    if (msg.role === 'tool') {
+      const info = callParams[msg.toolCallId] || {}
+      toolMessages.push({
+        name: msg.name || info.name,
+        content: msg.content,
+        status: msg.status,
+        params: info.params || {},
+      })
+    }
+  }
+
+  let answer = ''
+  let closing = ''
+  if (postTexts.length === 1) {
+    closing = postTexts[0]
+  } else if (postTexts.length > 1) {
+    answer = postTexts[0]
+    closing = postTexts[postTexts.length - 1]
+  }
+
+  const visual_links = extractVisualLinksFromToolMessages(toolMessages)
+  const report_links = extractReportLinksFromToolMessages(toolMessages)
+  const timeline = buildTurnTimeline(turnMsgs)
+
   return {
     role: 'assistant',
-    answer: stripVisualLinkMarkdown(res.answer || '', hasLinks),
+    thinking: thinking.trim(),
+    answer: stripAnswerMarkdown(answer, visual_links, report_links),
+    closing: stripAnswerMarkdown(closing, visual_links, report_links),
+    evidence: [],
+    actions: [],
+    visual_links,
+    report_links,
+    trace: { steps: toolMessages.map(toolMsgToStep) },
+    timeline,
+    goal_check: null,
+    summary: null,
+    revealPhase: 5,
+    isHistory: true,
+  }
+}
+
+export function legacyToAssistantMessage(res) {
+  const visual_links = mergeVisualLinks(res.visual_links || [], [])
+  const report_links = mergeReportLinks(res.report_links || [], [])
+  const hasLinks = visual_links.length > 0
+  const hasReports = report_links.length > 0
+  const actions = (res.actions || []).filter((a) => {
+    const text = String(a)
+    if (hasLinks && /点击下方图表入口/.test(text)) return false
+    if (hasReports && /预览.*导出/.test(text)) return false
+    return true
+  })
+  const answer = stripAnswerMarkdown(res.answer || '', visual_links, report_links)
+  const closing = stripAnswerMarkdown(res.closing || '', visual_links, report_links)
+  return {
+    role: 'assistant',
+    thinking: (res.thinking || '').trim(),
+    answer,
+    closing,
     evidence: res.evidence || [],
     actions,
     visual_links,
+    report_links,
     trace: res.trace || null,
+    timeline: Array.isArray(res.timeline) ? res.timeline : [],
     goal_check: res.goal_check || null,
     summary: res.summary || null,
     continue_reason: res.continue_reason || null,
@@ -42,9 +146,11 @@ export function turnResultToAssistantMessage(result) {
   if (!result) {
     return legacyToAssistantMessage({
       answer: '未收到 Agent 响应。',
+      closing: '',
       evidence: [],
       actions: [],
       visual_links: [],
+      report_links: [],
       trace: { steps: [] },
     })
   }
@@ -58,99 +164,56 @@ export function userMessage(text) {
 export function sessionMessagesToUi(messages) {
   if (!Array.isArray(messages)) return []
   const ui = []
-  let pendingTools = []
-  const callParams = {}
+  let turn = []
 
-  const flushAssistant = (content) => {
-    if (pendingTools.length) {
-      const visual_links = extractVisualLinksFromToolMessages(pendingTools)
-      const hasLinks = visual_links.length > 0
-      ui.push({
-        role: 'assistant',
-        answer: stripVisualLinkMarkdown(content || '', hasLinks),
-        evidence: [],
-        actions: [],
-        visual_links,
-        trace: { steps: pendingTools.map(toolMsgToStep) },
-        goal_check: null,
-        summary: null,
-        revealPhase: 5,
-        isHistory: true,
-      })
-      pendingTools = []
-      return
+  const flushTurn = () => {
+    if (!turn.length) return
+    const firstUser = turn.find((m) => m.role === 'user')
+    if (firstUser) ui.push(userMessage(firstUser.content))
+    const rest = turn.filter((m) => m.role !== 'user')
+    if (rest.length) {
+      const assistant = buildAssistantUiFromTurn(rest)
+      if (
+        assistant.thinking ||
+        assistant.answer ||
+        assistant.closing ||
+        (assistant.trace?.steps?.length)
+      ) {
+        ui.push(assistant)
+      }
     }
-    if (content) {
-      ui.push({
-        role: 'assistant',
-        answer: content,
-        evidence: [],
-        actions: [],
-        visual_links: [],
-        trace: null,
-        goal_check: null,
-        summary: null,
-        revealPhase: 5,
-        isHistory: true,
-      })
-    }
+    turn = []
   }
 
   for (const msg of messages) {
     if (msg.role === 'user') {
-      flushAssistant('')
-      ui.push(userMessage(msg.content))
+      flushTurn()
+      turn = [msg]
       continue
     }
-    if (msg.role === 'assistant') {
-      if (msg.toolCalls && msg.toolCalls.length) {
-        for (const tc of msg.toolCalls) {
-          if (tc.id) {
-            callParams[tc.id] = {
-              name: tc.name,
-              params: tc.arguments || {},
-            }
-          }
-        }
-        continue
-      }
-      flushAssistant(msg.content || '')
-      continue
-    }
-    if (msg.role === 'tool') {
-      const info = callParams[msg.toolCallId] || {}
-      pendingTools.push({
-        name: msg.name || info.name,
-        content: msg.content,
-        status: msg.status,
-        params: info.params || {},
-      })
-    }
+    turn.push(msg)
   }
-  flushAssistant('')
+  flushTurn()
+
   return ui.filter(
     (m) =>
       m.role === 'user' ||
       (m.trace && m.trace.steps && m.trace.steps.length) ||
-      (m.answer && m.answer.trim()),
+      (m.timeline && m.timeline.length) ||
+      (m.thinking && m.thinking.trim()) ||
+      (m.answer && m.answer.trim()) ||
+      (m.closing && m.closing.trim()),
   )
 }
 
 function toolMsgToStep(msg) {
-  return {
+  return enrichToolStep({
     tool: msg.name || 'unknown',
     params: msg.params || {},
     summary: summarizeToolContent(msg.name, msg.content),
     status: msg.status || 'ok',
     error: msg.status !== 'ok' ? msg.content : '',
-  }
-}
-
-function summarizeToolContent(name, content) {
-  const text = String(content || '').trim()
-  if (!text) return `${name || 'tool'} 无返回`
-  if (text.length > 120) return text.slice(0, 119) + '…'
-  return text
+  })
 }
 
 export const RECOVERY_HINTS = {
@@ -166,11 +229,15 @@ export const RECOVERY_HINTS = {
 export function createStreamingAssistantMessage() {
   return {
     role: 'assistant',
+    thinking: '',
     answer: '',
+    closing: '',
     evidence: [],
     actions: [],
     visual_links: [],
+    report_links: [],
     trace: { steps: [] },
+    timeline: [],
     goal_check: null,
     summary: null,
     continue_reason: null,
@@ -182,17 +249,34 @@ export function createStreamingAssistantMessage() {
 
 export function progressToTraceSteps(progress) {
   if (!progress) return []
-  const steps = Array.isArray(progress.tool_steps) ? [...progress.tool_steps] : []
+  const steps = (Array.isArray(progress.tool_steps) ? progress.tool_steps : []).map(
+    (s) => enrichToolStep(s),
+  )
   if (progress.running_tool) {
-    steps.push({
-      call_id: progress.running_tool.call_id,
-      tool: progress.running_tool.tool || 'tool',
-      params: progress.running_tool.params || {},
-      summary: '执行中…',
-      status: 'running',
-    })
+    const rt = progress.running_tool
+    const tool = rt.tool || 'tool'
+    steps.push(
+      enrichToolStep({
+        call_id: rt.call_id,
+        tool,
+        params: rt.params || {},
+        summary: tool === 'todo_write' ? '更新计划中…' : tool === 'load_skill' ? '加载技能中…' : '执行中…',
+        status: 'running',
+      }),
+    )
   }
   return steps
+}
+
+/** Sync session-level todo / skills from job progress while streaming. */
+export function applyJobSessionMeta(ctx, progress) {
+  if (!ctx || !progress) return
+  if (Array.isArray(progress.todo_items)) {
+    ctx.todoItems = progress.todo_items
+  }
+  if (Array.isArray(progress.loaded_skills)) {
+    ctx.loadedSkills = progress.loaded_skills
+  }
 }
 
 export function applyProgressToMessage(msg, job) {
@@ -200,8 +284,23 @@ export function applyProgressToMessage(msg, job) {
   if (!msg || !progress) return
   msg.statusHint = progress.hint || msg.statusHint
   msg.trace = { steps: progressToTraceSteps(progress) }
+  if (Array.isArray(progress.timeline)) {
+    msg.timeline = progress.timeline.map((item) =>
+      item.kind === 'tool' && item.step ? { ...item, step: enrichToolStep(item.step) } : item,
+    )
+  }
+  msg._runningTool = progress.running_tool || null
+  if (progress.thinking !== undefined && progress.thinking !== null && progress.thinking !== '') {
+    msg.thinking = progress.thinking
+  }
   if (progress.answer !== undefined && progress.answer !== null && progress.answer !== '') {
     msg.answer = progress.answer
+  }
+  if (progress.closing !== undefined && progress.closing !== null && progress.closing !== '') {
+    msg.closing = progress.closing
+  }
+  if (Array.isArray(progress.report_links) && progress.report_links.length) {
+    msg.report_links = mergeReportLinks(msg.report_links, progress.report_links)
   }
 }
 

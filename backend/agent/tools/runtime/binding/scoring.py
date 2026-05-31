@@ -4,7 +4,48 @@ from __future__ import annotations
 
 from typing import Any
 
+from data.column_aliases import RESOURCE_COLUMNS
+
 from .types import SLICE_MAX_ROWS, BindMode, BindingCandidate, CROSS_TURN_PENALTY
+
+
+def _fields_needed(
+    metrics: list[dict[str, Any]],
+    dimensions: list[str] | None,
+) -> set[str]:
+    needed: set[str] = set(dimensions or [])
+    for m in metrics:
+        field = m.get("field")
+        if field:
+            needed.add(str(field))
+    return needed
+
+
+def _resource_column_set(resource: str | None) -> set[str] | None:
+    if not resource:
+        return None
+    cols = RESOURCE_COLUMNS.get(resource)
+    return set(cols) if cols else None
+
+
+def _resource_field_compatibility(
+    candidate: BindingCandidate,
+    metrics: list[dict[str, Any]],
+    dimensions: list[str] | None,
+) -> float:
+    """Bonus when candidate resource owns the requested fields."""
+    needed = _fields_needed(metrics, dimensions)
+    if not needed:
+        return 0.0
+    allowed = _resource_column_set(candidate.resource)
+    if not allowed:
+        return 0.0
+    if needed <= allowed:
+        return 3.0
+    overlap = len(needed & allowed)
+    if overlap == 0:
+        return -4.0
+    return -1.0 * (len(needed) - overlap)
 
 
 def _metrics_wants_class_scale(metrics: list[dict[str, Any]]) -> bool:
@@ -70,6 +111,8 @@ def compatibility_score(
 
     if dimensions and candidate.is_broad_scan:
         score += 1.0
+
+    score += _resource_field_compatibility(candidate, metrics, dimensions)
 
     return score
 

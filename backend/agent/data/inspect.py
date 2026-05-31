@@ -5,6 +5,7 @@ from typing import Any
 import pandas as pd
 
 from .registry import resolve
+from .column_aliases import RESOURCE_COLUMNS
 from .tabular import _cell_value, _infer_column_type
 
 
@@ -40,4 +41,5 @@ def inspect_resource(
         "columns": columns,
         "sample_rows": sample_rows,
         "row_count_estimate": len(df),
+        "column_hint": list(RESOURCE_COLUMNS.get(resource, ())),
     }

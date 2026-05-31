@@ -51,9 +51,17 @@
   max-width: 100%;
 }
 
+.agent-messages--page.agent-messages--empty {
+  justify-content: center;
+}
+
 .agent-empty-state {
   text-align: center;
-  padding: 48px 24px 32px;
+  padding: 32px 24px;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .agent-empty-title {
@@ -70,22 +78,27 @@
 }
 
 .agent-empty-chips {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
   width: 100%;
-  max-width: 640px;
+  max-width: 480px;
   margin: 0 auto;
 }
 
-@media (min-width: 900px) {
-  .agent-empty-chips {
-    grid-template-columns: 1fr 1fr;
-    max-width: 100%;
-  }
+.agent-empty-chips--skills {
+  margin-top: 4px;
+}
+
+.agent-empty-chip--cmd {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
 }
 
 .agent-empty-chip {
+  width: 100%;
+  box-sizing: border-box;
   padding: 10px 14px;
   border: 1px solid #dde3ea;
   border-radius: 10px;

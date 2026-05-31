@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .column_aliases import RESOURCE_COLUMNS
 from .result_store import load_result
 
 _LIMIT_ZERO_MSG = "limit=0 会返回 0 行。全量统计请省略 limit；仅需预览时请使用 limit≥1。"
@@ -14,6 +15,15 @@ def reject_limit_zero(limit: int | None) -> None:
 
     if limit is not None and limit == 0:
         raise InvalidParameterError(_LIMIT_ZERO_MSG, param="limit")
+
+
+def normalize_limit(limit: int | None) -> tuple[int | None, str | None]:
+    """Treat limit=0 as omitted (full scan) with a normalization note."""
+    if limit is None:
+        return None, None
+    if limit == 0:
+        return None, "limit=0 已自动忽略，等价于省略 limit（全量查询）。"
+    return limit, None
 
 
 def _load_input_meta(inp: dict[str, Any] | None) -> dict[str, Any]:
@@ -56,6 +66,12 @@ def enrich_query_payload(
         meta["metric_hint"] = (
             "count 统计的是行数（提交次数）；各专业「选课人数/学生数」请用 "
             "aggregate_data 的 count_distinct，field=student_ID，并按 major 分组。"
+            " score/title_ID/knowledge 在本 resource 可用。"
+        )
+    elif resource == "week_aggregation":
+        meta["metric_hint"] = (
+            "week_aggregation 列: student_ID, week_index, peak_value, direction。"
+            " 班均周趋势用 mean(peak_value) 按 week_index 分组；勿用 week 或 score。"
         )
     elif resource == "student_info":
         meta["metric_hint"] = (
@@ -71,6 +87,10 @@ def enrich_query_payload(
 
     if warnings:
         meta["warnings"] = warnings
+
+    cols = RESOURCE_COLUMNS.get(resource)
+    if cols:
+        meta["columns"] = list(cols)
 
 
 def enrich_aggregate_payload(

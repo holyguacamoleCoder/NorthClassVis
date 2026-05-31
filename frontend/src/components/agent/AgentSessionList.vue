@@ -23,12 +23,10 @@
           :class="{ 'agent-session-row--active': s.id === activeId }"
           @click="$emit('select', s.id)"
         >
-          <div class="agent-session-row-body">
-            <span class="agent-session-row-title">{{ s.title || ui.defaultSessionTitle }}</span>
-            <span class="agent-session-row-meta">
-              {{ sessionListMeta(s) }}
-            </span>
-          </div>
+          <span class="agent-session-row-title">{{ s.title || ui.defaultSessionTitle }}</span>
+          <span class="agent-session-row-meta">
+            {{ sessionListMeta(s) }}
+          </span>
           <div class="agent-session-row-actions" @click.stop>
             <button type="button" class="agent-session-action-btn" :title="ui.rename" @click="startRename(s)">&#9998;</button>
             <button type="button" class="agent-session-action-btn agent-session-action-btn--danger" :title="ui.delete" @click="confirmDelete(s)">&#10005;</button>
@@ -164,9 +162,11 @@ export default {
 }
 
 .agent-session-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: 4px;
+  row-gap: 2px;
   padding: 8px 10px;
   margin-bottom: 2px;
   border-radius: 8px;
@@ -183,28 +183,33 @@ export default {
   }
 }
 
-.agent-session-row-body { flex: 1; min-width: 0; }
-
 .agent-session-row-title {
-  display: block;
+  grid-column: 1;
+  grid-row: 1;
   font-size: 13px;
   font-weight: 600;
   color: #222;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  line-height: 24px;
 }
 
 .agent-session-row-meta {
-  display: block;
+  grid-column: 1;
+  grid-row: 2;
   font-size: 11px;
   color: #888;
-  margin-top: 2px;
+  min-width: 0;
 }
 
 .agent-session-row-actions {
+  grid-column: 2;
+  grid-row: 1;
   display: flex;
   gap: 2px;
+  align-self: center;
   opacity: 0;
   flex-shrink: 0;
   transition: opacity 0.15s;

@@ -78,9 +78,11 @@
       </div>
 
       <div v-if="todoItems.length" class="agent-plan-bar">
-        <span class="agent-plan-label">计划</span>
+        <span class="agent-plan-label">
+          计划<span v-if="planBarMeta" class="agent-plan-meta">（{{ planBarMeta }}）</span>
+        </span>
         <span
-          v-for="(item, ti) in todoItems.slice(0, 4)"
+          v-for="(item, ti) in planBarItems"
           :key="ti"
           class="agent-plan-chip"
           :class="'agent-plan-chip--' + (item.status || 'pending')"
@@ -105,7 +107,10 @@
                 :recovery-hint="recoveryHint"
                 :summary-status-text="summaryStatusText"
                 :visual-link-label="visualLinkLabel"
+                :running-tool="msg.streaming ? (msg._runningTool || null) : null"
                 @visual-link-click="onVisualLinkClick"
+                @report-preview="openReportPreview"
+                @report-download="downloadReport"
               />
             </template>
           </div>
@@ -144,6 +149,17 @@
         </div>
       </div>
 
+      <AgentReportPreviewModal
+        :open="reportPreview.open"
+        :loading="reportPreview.loading"
+        :title="reportPreview.title"
+        :path="reportPreview.path"
+        :content="reportPreview.content"
+        :error="reportPreview.error"
+        @close="closeReportPreview"
+        @download="downloadReport()"
+      />
+
       <div v-if="pendingApproval" class="agent-permission-modal">
         <div class="agent-permission-card" @mousedown.stop>
           <div class="agent-permission-title">需要权限确认</div>
@@ -168,8 +184,10 @@ import AgentStreamingMarkdown from '@/components/agent/AgentStreamingMarkdown.vu
 import AgentToolBubbles from '@/components/agent/AgentToolBubbles.vue'
 import AgentAssistantMessage from '@/components/agent/AgentAssistantMessage.vue'
 import AgentSidebar from '@/components/agent/AgentSidebar.vue'
+import AgentReportPreviewModal from '@/components/agent/AgentReportPreviewModal.vue'
 import agentChatCore from '@/mixins/agentChatCore.js'
 import { modeLabel } from '@/utils/agentAdapter.js'
+import { planProgress, planProgressLabel } from '@/utils/agentPlanUtils.js'
 import { AGENT_UI } from '@/constants/agentUiText.js'
 
 export default {
@@ -180,6 +198,7 @@ export default {
     AgentToolBubbles,
     AgentAssistantMessage,
     AgentSidebar,
+    AgentReportPreviewModal,
   },
   mixins: [agentChatCore],
   props: {
@@ -236,6 +255,16 @@ export default {
         base.bottom = 'auto'
       }
       return base
+    },
+    planBarMeta() {
+      return planProgressLabel(this.todoItems)
+    },
+    planBarItems() {
+      const items = [...(this.todoItems || [])]
+      const { inProgress } = planProgress(items)
+      const active = inProgress ? [inProgress] : []
+      const rest = items.filter((i) => i !== inProgress)
+      return [...active, ...rest].slice(0, 4)
     },
   },
   watch: {

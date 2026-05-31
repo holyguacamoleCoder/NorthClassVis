@@ -7,10 +7,12 @@ from typing import TYPE_CHECKING
 
 from common.memory import MemoryManager, get_memory_manager
 from common.prompts import (
-    BASE_AGENT_PROMPT,
     MEMORY_GUIDANCE,
+    build_base_agent_prompt,
     format_filter_context_section,
+    format_loaded_skills_section,
     format_permission_mode,
+    format_session_plan_section,
     format_session_section,
     format_skills_section,
 )
@@ -28,6 +30,8 @@ class SystemPromptContext:
     session_context: list[str] = field(default_factory=list)
     filter_context: "FilterContext | None" = None
     skills: SkillRegistry | None = None
+    loaded_skills: set[str] | list[str] = field(default_factory=list)
+    todo_items: list[dict[str, str]] = field(default_factory=list)
     include_memory_guidance: bool = True
 
 
@@ -42,7 +46,7 @@ class SystemPromptBuilder:
 
     def build(self, ctx: SystemPromptContext | None = None) -> str:
         ctx = ctx or SystemPromptContext()
-        parts: list[str] = [BASE_AGENT_PROMPT.strip()]
+        parts: list[str] = [build_base_agent_prompt(ctx.permission_mode).strip()]
 
         memory_section = self.memory.load_memory_prompt()
         if memory_section:
@@ -58,6 +62,16 @@ class SystemPromptBuilder:
 
         if ctx.skills is not None:
             parts.append(format_skills_section(ctx.skills.describe_available()))
+            if ctx.loaded_skills:
+                pinned = format_loaded_skills_section(
+                    ctx.skills, ctx.loaded_skills
+                )
+                if pinned:
+                    parts.append(pinned)
+
+        plan_block = format_session_plan_section(ctx.todo_items)
+        if plan_block:
+            parts.append(plan_block)
 
         if ctx.include_memory_guidance:
             parts.append(MEMORY_GUIDANCE.strip())

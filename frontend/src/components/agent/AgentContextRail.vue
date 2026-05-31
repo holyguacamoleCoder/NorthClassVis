@@ -19,7 +19,10 @@
     </section>
 
     <section v-if="todoItems.length" class="agent-rail-section">
-      <h3 class="agent-rail-heading">{{ ui.railPlan }}</h3>
+      <h3 class="agent-rail-heading">
+        {{ ui.railPlan }}
+        <span v-if="planLabel" class="agent-rail-plan-progress">{{ planLabel }}</span>
+      </h3>
       <ul class="agent-rail-todos">
         <li
           v-for="(item, i) in todoItems"
@@ -28,9 +31,20 @@
           :class="'agent-rail-todo--' + (item.status || 'pending')"
         >
           <span class="agent-rail-todo-icon">{{ todoIcon(item.status) }}</span>
-          <span class="agent-rail-todo-text">{{ item.content || '' }}</span>
+          <div class="agent-rail-todo-body">
+            <span class="agent-rail-todo-text">{{ item.content || '' }}</span>
+            <span
+              v-if="item.status === 'in_progress' && item.active_form"
+              class="agent-rail-todo-active"
+            >{{ item.active_form }}</span>
+          </div>
         </li>
       </ul>
+    </section>
+
+    <section v-if="loadedSkills.length" class="agent-rail-section">
+      <h3 class="agent-rail-heading">{{ ui.railSkills }}</h3>
+      <AgentSkillTags :skills="loadedSkills" />
     </section>
 
     <section class="agent-rail-section agent-rail-section--meta">
@@ -46,20 +60,28 @@
 <script>
 import { mapActions } from 'vuex'
 import { AGENT_UI } from '@/constants/agentUiText.js'
+import { planProgressLabel, todoIcon } from '@/utils/agentPlanUtils.js'
 import AgentScopeFilter from '@/components/agent/AgentScopeFilter.vue'
 import AgentScatterRail from '@/components/agent/AgentScatterRail.vue'
+import AgentSkillTags from '@/components/agent/AgentSkillTags.vue'
 
 export default {
   name: 'AgentContextRail',
-  components: { AgentScopeFilter, AgentScatterRail },
+  components: { AgentScopeFilter, AgentScatterRail, AgentSkillTags },
   props: {
     permissionMode: { type: String, default: 'analyze' },
     todoItems: { type: Array, default: () => [] },
+    loadedSkills: { type: Array, default: () => [] },
     messageCount: { type: Number, default: 0 },
   },
   emits: ['update:permissionMode', 'open-dashboard'],
   data() {
-    return { ui: AGENT_UI }
+    return { ui: AGENT_UI, todoIcon }
+  },
+  computed: {
+    planLabel() {
+      return planProgressLabel(this.todoItems)
+    },
   },
   methods: {
     ...mapActions(['syncDashboardFromAgentScope']),
@@ -77,11 +99,6 @@ export default {
     },
     async onScopeApplied() {
       await this.$store.dispatch('fetchClusterData')
-    },
-    todoIcon(status) {
-      if (status === 'completed') return '\u2713'
-      if (status === 'in_progress') return '\u25D0'
-      return '\u25CB'
     },
   },
 }
@@ -117,6 +134,14 @@ export default {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin: 0 0 10px;
+}
+
+.agent-rail-plan-progress {
+  font-weight: 500;
+  color: #888;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 4px;
 }
 
 .agent-rail-select {
@@ -161,9 +186,21 @@ export default {
   text-align: center;
 }
 
+.agent-rail-todo-body {
+  flex: 1;
+  min-width: 0;
+}
+
 .agent-rail-todo-text {
   line-height: 1.4;
   color: #333;
+}
+
+.agent-rail-todo-active {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #856404;
 }
 
 .agent-rail-meta-row {

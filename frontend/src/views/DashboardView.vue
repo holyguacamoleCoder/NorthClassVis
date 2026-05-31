@@ -121,14 +121,20 @@ export default {
       if (params && params.knowledge) suffix = `（${params.knowledge}）`
       else if (params && params.kind != null) suffix = `（簇 ${Number(params.kind) - 1}）`
       else if (params && params.cluster_id != null) suffix = `（cluster ${params.cluster_id}）`
-      else if (params && Array.isArray(params.student_ids) && params.student_ids.length) {
+      else if (params && Array.isArray(params.week_range) && params.week_range.length >= 2) {
+        suffix = `（第 ${params.week_range[0]}–${params.week_range[1]} 周）`
+      } else if (params && Array.isArray(params.student_ids) && params.student_ids.length) {
         suffix = '（建议关注学生）'
       }
       return `已跳转到${name}${suffix}`
     },
     async onAgentVisualLinkClick({ view, params }) {
-      await this.$store.dispatch('applyAgentVisualLinkNavigation', { view, params: params || {} })
-      const feedback = this.buildJumpFeedbackText({ view, params })
+      const merged = { ...(params || {}) }
+      if (view === 'WeekView' && !merged.week_range && this.getNavWeekRange?.length >= 2) {
+        merged.week_range = [...this.getNavWeekRange]
+      }
+      await this.$store.dispatch('applyAgentVisualLinkNavigation', { view, params: merged })
+      const feedback = this.buildJumpFeedbackText({ view, params: merged })
       this.$store.commit('setAgentJumpFeedback', feedback)
       if (this._agentFeedbackTimer) clearTimeout(this._agentFeedbackTimer)
       this._agentFeedbackTimer = setTimeout(() => {

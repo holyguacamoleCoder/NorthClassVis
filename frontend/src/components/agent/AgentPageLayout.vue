@@ -23,7 +23,12 @@
 
     <div class="agent-page-chat">
       <div class="agent-panel-body agent-panel-body--page">
-        <div class="agent-messages agent-messages--page" ref="messagesEl" @scroll="onMessagesScroll">
+        <div
+          class="agent-messages agent-messages--page"
+          :class="{ 'agent-messages--empty': !messages.length && !loading }"
+          ref="messagesEl"
+          @scroll="onMessagesScroll"
+        >
           <div v-if="!messages.length && !loading" class="agent-empty-state">
             <h2 class="agent-empty-title">{{ ui.emptyTitle }}</h2>
             <p class="agent-empty-desc">{{ ui.emptyDesc }}</p>
@@ -35,6 +40,21 @@
                 class="agent-empty-chip"
                 @click="fillSampleQuestion(q)"
               >{{ q }}</button>
+            </div>
+            <div v-if="catalogSkills.length" class="agent-empty-chips agent-empty-chips--skills">
+              <button
+                type="button"
+                class="agent-empty-chip agent-empty-chip--cmd"
+                @click="fillSkillCommand()"
+              >{{ ui.emptySkillList }}</button>
+              <button
+                v-for="s in catalogSkills"
+                :key="s.name"
+                type="button"
+                class="agent-empty-chip agent-empty-chip--cmd"
+                :title="s.description"
+                @click="fillSkillCommand(s.name)"
+              >/skill {{ s.name }}</button>
             </div>
           </div>
 
@@ -54,7 +74,10 @@
                 :recovery-hint="recoveryHint"
                 :summary-status-text="summaryStatusText"
                 :visual-link-label="visualLinkLabel"
+                :running-tool="msg.streaming ? (msg._runningTool || null) : null"
                 @visual-link-click="onVisualLinkClick"
+                @report-preview="openReportPreview"
+                @report-download="downloadReport"
               />
             </template>
           </div>
@@ -101,11 +124,23 @@
       <AgentContextRail
         :permission-mode="permissionMode"
         :todo-items="todoItems"
+        :loaded-skills="loadedSkills"
         :message-count="messageCount"
         @update:permission-mode="onRailModeChange"
         @open-dashboard="goDashboard"
       />
     </template>
+
+    <AgentReportPreviewModal
+      :open="reportPreview.open"
+      :loading="reportPreview.loading"
+      :title="reportPreview.title"
+      :path="reportPreview.path"
+      :content="reportPreview.content"
+      :error="reportPreview.error"
+      @close="closeReportPreview"
+      @download="downloadReport()"
+    />
 
     <div v-if="pendingApproval" class="agent-permission-modal agent-permission-modal--page">
       <div class="agent-permission-card" @mousedown.stop>
@@ -130,6 +165,7 @@ import AgentPageShell from '@/components/agent/AgentPageShell.vue'
 import AgentSidebar from '@/components/agent/AgentSidebar.vue'
 import AgentContextRail from '@/components/agent/AgentContextRail.vue'
 import AgentAssistantMessage from '@/components/agent/AgentAssistantMessage.vue'
+import AgentReportPreviewModal from '@/components/agent/AgentReportPreviewModal.vue'
 import { AGENT_UI } from '@/constants/agentUiText.js'
 
 export default {
@@ -139,6 +175,7 @@ export default {
     AgentSidebar,
     AgentContextRail,
     AgentAssistantMessage,
+    AgentReportPreviewModal,
   },
   mixins: [agentChatCore],
   props: {

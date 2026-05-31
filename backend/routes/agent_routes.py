@@ -1,6 +1,7 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 
-from agent.http_service import AgentHttpService
+from agent.http import AgentHttpService
+from agent.report_delivery import deliverable_disk_path, read_deliverable
 
 
 class AgentRoutes:
@@ -13,6 +14,7 @@ class AgentRoutes:
 
     def register_routes(self):
         self.agent_bp.add_url_rule("/agent/query", view_func=self.post_query, methods=["POST"])
+        self.agent_bp.add_url_rule("/agent/skills", view_func=self.list_skills, methods=["GET"])
         self.agent_bp.add_url_rule("/agent/sessions", view_func=self.list_sessions, methods=["GET"])
         self.agent_bp.add_url_rule("/agent/sessions", view_func=self.create_session, methods=["POST"])
         self.agent_bp.add_url_rule(
@@ -56,6 +58,37 @@ class AgentRoutes:
             methods=["POST"],
         )
         self.agent_bp.add_url_rule("/meta/knowledge_points", view_func=self.get_knowledge_points, methods=["GET"])
+        self.agent_bp.add_url_rule(
+            "/agent/deliverables/<path:rel_path>/download",
+            view_func=self.download_deliverable,
+            methods=["GET"],
+        )
+        self.agent_bp.add_url_rule(
+            "/agent/deliverables/<path:rel_path>",
+            view_func=self.get_deliverable,
+            methods=["GET"],
+        )
+
+    def get_deliverable(self, rel_path: str):
+        try:
+            return jsonify(read_deliverable(rel_path))
+        except FileNotFoundError:
+            return jsonify({"error": "file not found"}), 404
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    def download_deliverable(self, rel_path: str):
+        try:
+            full = deliverable_disk_path(rel_path)
+            return send_file(
+                full,
+                as_attachment=True,
+                download_name=full.name,
+            )
+        except FileNotFoundError:
+            return jsonify({"error": "file not found"}), 404
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
     def get_knowledge_points(self):
         q = request.args.get("q", default="", type=str).strip()
@@ -91,6 +124,9 @@ class AgentRoutes:
                 "visual_links": [],
                 "trace": {"steps": []},
             }), 500
+
+    def list_skills(self):
+        return jsonify({"skills": self.service.list_skills()})
 
     def list_sessions(self):
         return jsonify({

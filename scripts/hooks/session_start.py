@@ -1,35 +1,39 @@
 #!/usr/bin/env python3
-"""SessionStart: inject data catalog summary into the agent session context."""
+"""SessionStart: inject slim data index into the agent session context."""
 
 from __future__ import annotations
 
-from _lib import DATA_CATALOG, ROOT, write_json_stdout
+from _lib import write_json_stdout
 
-POLICY = (
-    "Analysis policy: paths are relative to data/. "
-    "Structured academic data: use logical resource ids from meta/resource_registry.yaml "
-    "(inspect_schema, then query_data / aggregate_data in analyze mode). "
-    "Do NOT read_file raw Data_StudentInfo.csv, Data_TitleInfo.csv, or Data_SubmitRecord/*.csv. "
-    "Catalog: meta/data_catalog.md (summary below). "
-    "Deliverables: reports/ or exports/ in produce mode only."
-)
+# Compact session index (~600 chars). Full catalog: read_file meta/data_catalog.md in analyze/produce.
+SESSION_DATA_INDEX = """# 数据索引（Session）
+
+## 逻辑 resource（analyze：inspect_schema → query_data → aggregate_data）
+| id | 用途 |
+|----|------|
+| student_info | 学生维度 |
+| title_info | 题目维度 |
+| submit_record | 提交明细（需 class 或 classes） |
+| week_aggregation | 周聚合 |
+
+## 原始资产（只读；Agent 禁止 read_file 打开）
+| 资产 | 路径 |
+|------|------|
+| 学生 | Data_StudentInfo.csv |
+| 题目 | Data_TitleInfo.csv |
+| 提交 | Data_SubmitRecord/SubmitRecord-{Class}.csv |
+
+**关联键**：student_ID、title_ID、class、major
+
+**契约**：meta/resource_registry.yaml、meta/analysis_ontology.yaml、meta/visual_link_contract.yaml
+
+**详情**：analyze/produce 下用 inspect_schema，或 read_file `meta/data_catalog.md`
+
+**交付物（produce）**：仅**写入** reports/、exports/（勿 read 参考）；load `analysis-*` + `report-delivery`（skills/reference/）"""
 
 
 def build_context() -> str:
-    parts: list[str] = []
-    if DATA_CATALOG.is_file():
-        text = DATA_CATALOG.read_text(encoding="utf-8")
-        if len(text) > 4500:
-            text = text[:4500] + "\n\n...(catalog truncated for session context)"
-        parts.append("# Data catalog\n\n" + text.strip())
-    else:
-        parts.append(
-            "# Data catalog\n\n"
-            f"(missing {DATA_CATALOG.relative_to(ROOT).as_posix()}; "
-            "use list_files and read_file to explore data/)"
-        )
-    parts.append("\n# " + POLICY)
-    return "\n".join(parts)
+    return SESSION_DATA_INDEX.strip()
 
 
 def main() -> None:

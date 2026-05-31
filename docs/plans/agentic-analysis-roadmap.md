@@ -19,7 +19,7 @@
 | 1 | `feat/data-resource-registry` | `resource` id → 路径/loader；注册表 `data/meta/resource_registry.yaml`；库 `backend/agent/data/` |
 | 2 | `feat/agent-tools-primitives` | inspect_schema、query_data、aggregate_data；tabular_result + result_ref |
 | 3 | `feat/generic-agent-tools` | filter_context、visual_links 薄适配；停增业务名 tool |
-| 4 | `feat/skills-analysis-tiers` | analysis-* / data-exploration / tiered-report skills；别名保留 |
+| 4 | `feat/skills-analysis-tiers` | analysis-* / data-exploration；交付 SSOT 在 `skills/reference/report-delivery.md` |
 | 4b | `feat/metrics-runtime` | 按 metrics 定义计算并写入 evidence |
 | 5 | `feat/analysis-orchestrator` | archetype → 子目标 → 工具序列 |
 | 6 | `feat/thick-student-delivery` | 六章 + 五视图；Portrait/Scatter handler |
@@ -60,11 +60,10 @@
 
 ## Phase 4 验收（`feat/skills-analysis-tiers`）
 
-- [x] `skills/analysis-student|class|major|data-exploration|tiered-report/SKILL.md` — SkillRegistry 可发现
+- [x] `skills/analysis-student|class|major|data-exploration/SKILL.md` — SkillRegistry 可发现
 - [x] `analysis-student` 六章 id 与 `analysis_ontology.yaml` `student_report_sections` 逐字一致
 - [x] `analysis-student` 含五视图 + 反「仅 Student 树」；`analysis-class` 含 distribution / typical_students
-- [x] `tiered-report` 含 student / class / major 三套 `##` 骨架
-- [x] `report-markdown`、`data-csv-analysis` 保留别名，`load_skill` 含迁移提示
+- [x] 各 `analysis-*` 含本粒度章节；`skills/reference/report-delivery.md` 为共用交付规范（`load_skill report-delivery`）
 - [x] `backend/agent/common/prompts.py` — 「何时 load_skill」表
 - [x] `py -3.11 -m pytest backend/agent/test/test_skills.py -q` 通过（自 `backend/agent` 目录）
 

@@ -3,7 +3,7 @@
 > **定位**：本文件是数据资产的**元数据说明**（catalog），不是业务交付报告。  
 > Agent 产出报告请写入 `data/reports/`。  
 > **运行时状态**（会话、审计、工具大块输出等）存放在 `backend/.agent/`，不在 `data/` 内，Agent 工具无法通过 `read_file` 访问。  
-> **注入策略**：`SessionStart` hook 会注入本文的摘要；完整字段与关联见下文。按需 `read_file` 路径 `meta/data_catalog.md`（可带 `limit` 分段阅读）。
+> **注入策略**：`SessionStart` hook 注入精简「数据索引」（resource 表 + 契约路径）；完整字段见下文。Agent 在 analyze/produce 下按需 `read_file` 本文件（可带 `limit` 分段阅读）。
 
 ## 快速索引（Session 摘要用）
 
@@ -13,10 +13,11 @@
 | 题目主数据 | `Data_TitleInfo.csv` | 题目分值、知识点层级 |
 | 提交记录 | `Data_SubmitRecord/SubmitRecord-{Class}.csv` | 按班级的答题/提交明细（学业分析核心事实表） |
 | 本目录 | `meta/data_catalog.md` | 数据结构说明（只读参考） |
+| 报告交付规范 | `skills/reference/report-delivery.md` | produce：`load_skill report-delivery`；勿 read `reports/` 参考 |
 
 **关联键**：`student_ID`（提交记录 <-> 学生）、`title_ID`（提交记录 <-> 题目）。
 
-**读取策略**：`Data_*.csv` 与 `Data_SubmitRecord/*.csv` 均为只读；体积大，探索时 `read_file` 必须带 `limit`；学业报告通常先选 1～2 个班级文件抽样，勿一次读全量。
+**Agent 读取策略**：原始 CSV 只读且**禁止** Agent `read_file` 打开；学业分析用逻辑 resource（`meta/resource_registry.yaml`）经 `inspect_schema` / `query_data` / `aggregate_data`。人工调试若必须读 CSV，须带 `limit`，勿一次全量。
 
 ---
 
@@ -57,7 +58,7 @@
 
 - **格式**：每个班级一个 CSV，命名 `SubmitRecord-{ClassName}.csv`（如 `SubmitRecord-Class1.csv` … `SubmitRecord-Class15.csv`）
 - **粒度**：一次提交/作答一行（同一学生对多题有多行）
-- **体积**：单文件约 1.5～2.5 MB，**禁止无 limit 全量 read**
+- **体积**：单文件约 1.5～2.5 MB；Agent 经 `submit_record` resource 查询，勿 `read_file` 本文件
 - **字段**：
   - `index`：行序号
   - `class`：班级名（与文件名一致，如 `Class1`）
@@ -81,12 +82,12 @@
 - `first_dataDes.docx`：人工数据说明文档（可选参考，勿当作机器可读表）
 - `test.txt`：测试用文本，非生产数据集
 
-## 5. 学业情况报告的数据组合建议
+## 5. 学业分析的数据组合建议（Agent）
 
-1. `Data_StudentInfo.csv`：样本学生画像（专业、年龄分布）
-2. `Data_TitleInfo.csv`：知识点与分值结构
-3. `Data_SubmitRecord/SubmitRecord-Class{N}.csv`：选一个或多个班级的提交明细（得分、正误、耗时）
-4. 合并逻辑：以 `student_ID`、`title_ID` 为键做叙述性汇总（当前 agent 无 SQL/聚合引擎，需抽样 + 分班级阅读）
+1. `student_info` / `title_info` / `submit_record`（`classes`）/ `week_aggregation` — 见 `resource_registry.yaml`
+2. 统计：`query_data`（全量省略 `limit`）→ `aggregate_data`（`input.result_ref`）；人数用 `count_distinct(student_ID)`
+3. 报告与图表：produce 模式写 `reports/`，配合 `build_visual_links` 与 ` ```report-chart ` 块
+4. 关联键：`student_ID`、`title_ID`、`class`、`major`
 
 ## 6. 写入与权限
 
@@ -95,6 +96,6 @@
 
 ## 7. 学业分析契约（Agent）
 
-> CSV 只读不变。契约共 **4 处**：`meta/analysis_ontology.yaml`（含个体六章）、`meta/visual_link_contract.yaml`、`meta/metrics/_index.yaml`、`backend/agent/contracts/tabular_result.schema.json`。逻辑资源注册表：**`meta/resource_registry.yaml`**（Phase 1，`backend/agent/data/registry.py` 加载）。Phase 表见 `docs/plans/agentic-analysis-roadmap.md`。
+> CSV 只读不变。契约：`meta/analysis_ontology.yaml`、`meta/visual_link_contract.yaml`、`meta/metrics/_index.yaml`、`backend/agent/contracts/tabular_result.schema.json`；逻辑资源 **`meta/resource_registry.yaml`**。正式报告：`load_skill` `analysis-*` + `report-delivery`（`skills/reference/report-delivery.md`）；`reports/` 仅产出勿 read 参考。
 
 **Phase 3 薄适配工具**：`get_current_filter_context`（当前 Nav/会话分析范围，不算指标）与 `build_visual_links`（按 `visual_link_contract.yaml` 校验五视图跳转参数，不渲染图表）。

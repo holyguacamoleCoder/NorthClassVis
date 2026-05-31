@@ -18,11 +18,16 @@ def run_load_skill(
     skill_name = str(name).strip()
     if skill_name in loaded:
         return (
-            f"Skill '{skill_name}' is already loaded in this session context. "
-            "Use query_data / aggregate_data directly unless you need another skill."
+            f"[Skill active: {skill_name}] Full instructions are in the system prompt "
+            "section 「已加载技能」 on every model turn. Proceed with query_data / "
+            "aggregate_data, or load_skill another name if needed."
         )
-    content = get_registry().load_full_text(skill_name)
-    if not content.startswith("Error:"):
-        loaded.add(skill_name)
-        return f"[Skill loaded: {skill_name}]\n{content}"
-    return content
+    document = get_registry().documents.get(skill_name)
+    if document is None:
+        return get_registry().load_full_text(skill_name)
+    loaded.add(skill_name)
+    return (
+        f"[Skill loaded: {skill_name}] Workflow is pinned in the system prompt "
+        "section 「已加载技能」 on every following turn (not only this tool message). "
+        "Follow that section for steps, sections, and report paths."
+    )

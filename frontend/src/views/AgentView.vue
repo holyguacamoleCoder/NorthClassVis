@@ -31,10 +31,14 @@ export default {
   methods: {
     ...mapActions(['fetchClusterData', 'syncDashboardFromAgentScope', 'applyAgentVisualLinkNavigation']),
     async onVisualLinkClick({ view, params }) {
+      const merged = { ...(params || {}) }
+      if (view === 'WeekView' && !merged.week_range && this.getNavWeekRange?.length >= 2) {
+        merged.week_range = [...this.getNavWeekRange]
+      }
       await this.syncDashboardFromAgentScope()
       await this.$router.push('/')
       await this.$nextTick()
-      await this.applyAgentVisualLinkNavigation({ view, params: params || {} })
+      await this.applyAgentVisualLinkNavigation({ view, params: merged })
     },
   },
 }

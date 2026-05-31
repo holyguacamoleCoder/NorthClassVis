@@ -34,7 +34,7 @@
 | **3 不适用场景** | ❌ | 无 Do NOT。 | 补：**勿用 load_skill 代替 inspect/query**；**同一 skill 已成功加载后勿再调**（与 handler 行为一致）；system prompt 已有 skill 摘要时不必重复 load。 |
 | **7 缺参：追问 vs 硬编** | ⚠️ | 缺 `name` → `Error: skill name is required`（硬错误，合理）。已加载 → 返回「already loaded…Use query_data…」（**未写入 manifest 描述**）。**`_LOADED_SKILLS` 为模块级全局 set**，非 `LoopState`，多 session/长进程可能串。 | 描述写上「重复 load 将返回提示」；实现将 loaded set 迁入 session；`name` 缺失时 Error 可附带「可用技能见 system prompt 技能列表」。 |
 | **14 与 skill 列表联动** | ⚠️ | `name` description：「from available skills list in system prompt」。`system_prompt` 有 `SECTION_SKILLS` + `describe_available()`。**schema 无 enum**，可编造 skill 名。 | 构建 manifest 时把 skill 目录名注入 **`name.enum`**；或 description 动态拼接当前 catalog。与 `skills/registry.py` 单一来源联动。 |
-| **14 暴露面** | ⚠️ | consult / analyze / produce **均暴露**。`loop.py` 空转 guard 包含 `load_skill`。 | analyze 可考虑默认不暴露，仅「写报告/用户点名流程」时启用；或强化 prompt：有 `data-csv-analysis` 摘要时先 query 再按需 load。 |
+| **14 暴露面** | ⚠️ | consult / analyze / produce **均暴露**。`loop.py` 空转 guard 包含 `load_skill`。 | analyze 可考虑默认不暴露，仅「写报告/用户点名流程」时启用；或强化 prompt：先 query 再按需 load。 |
 
 **本工具额外说明**
 

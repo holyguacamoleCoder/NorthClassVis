@@ -323,16 +323,18 @@ def test_aggregate_on_small_query_ref_not_whole_class(data_dir, monkeypatch):
     assert row.get("avg") == 0.0
 
 
-def test_query_rejects_limit_zero(data_dir, monkeypatch):
+def test_query_normalizes_limit_zero(data_dir, monkeypatch):
     monkeypatch.chdir(BACKEND_ROOT.parent)
     raw = run_query_data(
         resource="student_info",
         limit=0,
         data_dir=data_dir,
     )
-    assert raw.startswith("Error:")
-    assert "limit" in raw.lower()
-    assert "省略" in raw or "omit" in raw.lower()
+    assert not raw.startswith("Error:"), raw
+    payload = json.loads(raw)
+    notes = payload.get("normalization_notes") or payload.get("meta", {}).get("normalization_notes") or []
+    assert payload["meta"].get("rows_scanned", 0) > 0
+    assert any("limit=0" in n for n in notes)
 
 
 def test_aggregate_count_distinct_by_major_class1(data_dir, monkeypatch):

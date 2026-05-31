@@ -8,10 +8,10 @@ if str(AGENT_ROOT) not in sys.path:
 
 from common.memory import MemoryManager
 from common.prompts import (
-    BASE_AGENT_PROMPT,
     MEMORY_GUIDANCE,
     PERMISSION_MODE_TEMPLATE,
     SECTION_SESSION,
+    build_base_agent_prompt,
     format_permission_mode,
 )
 from common.system_prompt import SystemPromptBuilder, SystemPromptContext
@@ -49,7 +49,7 @@ def test_system_prompt_builder_includes_sections(tmp_path=None):
             skills=registry,
         )
     )
-    assert BASE_AGENT_PROMPT.strip() in prompt
+    assert build_base_agent_prompt("analyze").strip() in prompt
     assert "NorthClassVision" in prompt
     assert format_permission_mode("analyze") in prompt
     assert SECTION_SESSION in prompt
@@ -63,8 +63,19 @@ def test_prompt_templates_are_complete():
     assert "{mode_hint}" in PERMISSION_MODE_TEMPLATE
     consult = format_permission_mode("consult")
     assert "consult" in consult
-    assert "只读" in consult
+    assert "inspect_schema" in consult
     assert "produce" in format_permission_mode("produce")
+    assert "report-chart" in build_base_agent_prompt("produce")
+    assert "不可用" in build_base_agent_prompt("consult")
+    assert "report-chart" not in build_base_agent_prompt("consult")
+
+
+def test_base_prompt_mode_slices_differ():
+    consult = build_base_agent_prompt("consult")
+    produce = build_base_agent_prompt("produce")
+    assert "consult" in consult.lower()
+    assert "report-chart" in produce
+    assert consult != produce
 
 
 def test_save_memory_in_analyze_mode():

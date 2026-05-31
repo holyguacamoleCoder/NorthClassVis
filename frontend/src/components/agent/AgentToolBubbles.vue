@@ -1,15 +1,30 @@
 <template>
   <TransitionGroup name="agent-bubble-fade" tag="div" class="agent-tool-bubbles">
+    <template v-for="(step, i) in steps" :key="stepKey(step, i)">
+    <AgentTodoStepCard
+      v-if="stepKind(step) === 'todo'"
+      :step="step"
+      :default-expanded="defaultExpanded"
+      :style="{ animationDelay: Math.min(i * 0.05, 0.25) + 's' }"
+    />
+    <AgentSkillStepChip
+      v-else-if="stepKind(step) === 'skill'"
+      :step="step"
+      :style="{ animationDelay: Math.min(i * 0.05, 0.25) + 's' }"
+    />
     <div
-      v-for="(step, i) in steps"
-      :key="stepKey(step, i)"
+      v-else
       class="agent-tool-bubble"
-      :class="'agent-tool-bubble--' + (step.status || 'ok')"
+      :class="[
+        'agent-tool-bubble--' + (step.status || 'ok'),
+        stepKind(step) === 'data' ? 'agent-tool-bubble--data' : '',
+      ]"
       :style="{ animationDelay: Math.min(i * 0.05, 0.25) + 's' }"
     >
       <button type="button" class="agent-tool-bubble-header" @click="toggle(i)">
-        <span class="agent-tool-bubble-icon">&#9881;</span>
+        <span class="agent-tool-bubble-icon">{{ toolIcon(step) }}</span>
         <span class="agent-tool-bubble-name">{{ step.tool }}</span>
+        <span v-if="step.resource" class="agent-tool-bubble-resource">{{ step.resource }}</span>
         <span class="agent-tool-bubble-summary">{{ step.summary }}</span>
         <span class="agent-tool-bubble-status">{{ statusLabel(step.status) }}</span>
         <span class="agent-tool-bubble-chevron">{{ expanded[i] ? chevronDown : chevronRight }}</span>
@@ -21,18 +36,22 @@
         </div>
         <div v-if="step.error" class="agent-tool-bubble-row agent-tool-bubble-row--error">
           <span class="agent-tool-bubble-label">{{ ui.toolError }}</span>
-          <span>{{ step.error }}</span>
+          <pre class="agent-tool-bubble-pre agent-tool-bubble-pre--error">{{ step.error }}</pre>
         </div>
       </div>
     </div>
+    </template>
   </TransitionGroup>
 </template>
 
 <script>
 import { AGENT_UI } from '@/constants/agentUiText.js'
+import AgentTodoStepCard from '@/components/agent/AgentTodoStepCard.vue'
+import AgentSkillStepChip from '@/components/agent/AgentSkillStepChip.vue'
 
 export default {
   name: 'AgentToolBubbles',
+  components: { AgentTodoStepCard, AgentSkillStepChip },
   props: {
     steps: { type: Array, default: () => [] },
     defaultExpanded: { type: Boolean, default: false },
@@ -50,9 +69,12 @@ export default {
       immediate: true,
       handler(steps) {
         const next = { ...this.expanded }
-        ;(steps || []).forEach((_, i) => {
+        ;(steps || []).forEach((step, i) => {
+          const failed = ['fail', 'denied', 'blocked'].includes(step?.status)
           if (!(i in next)) {
-            next[i] = this.defaultExpanded
+            next[i] = this.defaultExpanded || failed
+          } else if (failed) {
+            next[i] = true
           }
         })
         Object.keys(next).forEach((k) => {
@@ -63,6 +85,27 @@ export default {
     },
   },
   methods: {
+    stepKind(step) {
+      if (!step) return 'default'
+      if (step.kind === 'todo' || step.tool === 'todo_write') return 'todo'
+      if (step.kind === 'skill' || step.tool === 'load_skill') return 'skill'
+      if (
+        step.kind === 'data' ||
+        step.tool === 'query_data' ||
+        step.tool === 'aggregate_data' ||
+        step.tool === 'inspect_schema'
+      ) {
+        return 'data'
+      }
+      return 'default'
+    },
+    toolIcon(step) {
+      const tool = step?.tool || ''
+      if (tool === 'query_data') return '\u{1F50D}'
+      if (tool === 'aggregate_data') return '\u03A3'
+      if (tool === 'inspect_schema') return '\u2637'
+      return '\u2699'
+    },
     stepKey(step, i) {
       return step.call_id || `${step.tool}-${i}-${step.status || 'ok'}`
     },
@@ -136,11 +179,26 @@ export default {
   color: #004085;
 }
 
-.agent-tool-bubble--fail,
-.agent-tool-bubble--denied,
-.agent-tool-bubble--blocked {
+.agent-tool-bubble--data {
+  border-color: #c5dff5;
+}
+
+.agent-tool-bubble--data.agent-tool-bubble--fail {
   border-color: #f5c6cb;
-  background: #fffafa;
+}
+
+.agent-tool-bubble-resource {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #e8f4fc;
+  color: #1a5a8a;
+  flex-shrink: 0;
+}
+
+.agent-tool-bubble--fail .agent-tool-bubble-resource {
+  background: #fdecea;
+  color: #842029;
 }
 
 .agent-tool-bubble-header {
@@ -208,7 +266,19 @@ export default {
   font-size: 12px;
 }
 
-.agent-tool-bubble-row--error { color: #721c24; }
+.agent-tool-bubble--fail,
+.agent-tool-bubble--denied,
+.agent-tool-bubble--blocked {
+  border-color: #f5c6cb;
+  background: #fffafa;
+}
+
+.agent-tool-bubble-pre--error {
+  background: #fff5f5;
+  color: #721c24;
+  max-height: 180px;
+  overflow-y: auto;
+}
 
 .agent-tool-bubble-label {
   display: block;

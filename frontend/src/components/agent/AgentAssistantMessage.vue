@@ -1,26 +1,72 @@
 <template>
   <div class="agent-msg-bubble agent-msg-bubble--assistant agent-msg-bubble--enter">
-    <div v-if="msg.streaming && msg.statusHint && !displaySteps(msg).length && !msg.answer" class="agent-stream-hint">
+    <div
+      v-if="msg.streaming && msg.statusHint && !hasAnyContent(msg)"
+      class="agent-stream-hint"
+    >
       {{ msg.statusHint }}
     </div>
-    <AgentToolBubbles
-      v-if="displaySteps(msg).length"
-      :steps="displaySteps(msg)"
-      :default-expanded="false"
+
+    <!-- ① 计划段 -->
+    <div v-if="showPlan(msg)" class="agent-plan-block">
+      <div class="agent-section-label">{{ ui.sectionPlan }}</div>
+      <AgentStreamingMarkdown
+        v-if="msg.streaming && msg.thinking"
+        :source="msg.thinking"
+        :active="true"
+        class="agent-thinking-md"
+      />
+      <AgentMarkdown
+        v-else-if="msg.thinking"
+        :source="msg.thinking"
+        class="agent-thinking-md"
+      />
+    </div>
+
+    <!-- ② 过程段（timeline 穿插） -->
+    <AgentProcessTimeline
+      v-if="showProcess(msg)"
+      :items="processItems(msg)"
+      :running-tool="msg.streaming ? runningTool : null"
+      :streaming="!!msg.streaming"
+      :default-expanded="processDefaultExpanded(msg)"
     />
-    <AgentStreamingMarkdown
-      v-if="msg.streaming && msg.answer"
-      :source="displayAnswer(msg)"
-      :active="true"
-      class="agent-answer-md"
-      @link-click="onMarkdownLinkClick"
-    />
-    <AgentMarkdown
-      v-else-if="revealPhase(msg) >= 1 && msg.answer"
-      :source="displayAnswer(msg)"
-      class="agent-reveal agent-answer-md"
-      @link-click="onMarkdownLinkClick"
-    />
+
+    <!-- ③ 结论段 -->
+    <div v-if="showConclusion(msg)" class="agent-conclusion-block">
+      <div class="agent-section-label">{{ ui.sectionConclusion }}</div>
+      <AgentStreamingMarkdown
+        v-if="msg.streaming && msg.answer"
+        :source="displayAnswer(msg)"
+        :active="true"
+        class="agent-answer-md"
+        @link-click="onMarkdownLinkClick"
+        @report-link-click="onReportLinkClick"
+      />
+      <AgentMarkdown
+        v-else-if="revealPhase(msg) >= 1 && msg.answer"
+        :source="displayAnswer(msg)"
+        class="agent-reveal agent-answer-md"
+        @link-click="onMarkdownLinkClick"
+        @report-link-click="onReportLinkClick"
+      />
+      <AgentStreamingMarkdown
+        v-if="msg.streaming && msg.closing"
+        :source="displayClosing(msg)"
+        :active="true"
+        class="agent-closing-md"
+        @link-click="onMarkdownLinkClick"
+        @report-link-click="onReportLinkClick"
+      />
+      <AgentMarkdown
+        v-else-if="revealPhase(msg) >= 1 && msg.closing"
+        :source="displayClosing(msg)"
+        class="agent-reveal agent-closing-md"
+        @link-click="onMarkdownLinkClick"
+        @report-link-click="onReportLinkClick"
+      />
+    </div>
+
     <div v-if="msg.continue_reason && recoveryHint(msg.continue_reason)" class="agent-recovery-hint agent-reveal">
       {{ recoveryHint(msg.continue_reason) }}
     </div>
@@ -57,6 +103,13 @@
         <li v-for="(a, i) in msg.actions" :key="i" class="agent-stagger">{{ a }}</li>
       </ul>
     </div>
+    <AgentDeliverableLinks
+      v-if="showReportLinks(msg)"
+      class="agent-reveal"
+      :links="msg.report_links"
+      @preview="$emit('report-preview', $event)"
+      @download="$emit('report-download', $event)"
+    />
     <div
       v-if="showVisualLinks(msg)"
       class="agent-visual-links agent-reveal"
@@ -76,12 +129,21 @@
 <script>
 import AgentMarkdown from '@/components/agent/AgentMarkdown.vue'
 import AgentStreamingMarkdown from '@/components/agent/AgentStreamingMarkdown.vue'
-import AgentToolBubbles from '@/components/agent/AgentToolBubbles.vue'
+import AgentProcessTimeline from '@/components/agent/AgentProcessTimeline.vue'
+import AgentDeliverableLinks from '@/components/agent/AgentDeliverableLinks.vue'
+import { AGENT_UI } from '@/constants/agentUiText.js'
+import { processTimelineItems, processTimelineStats } from '@/utils/agentTimeline.js'
 import { stripVisualLinkMarkdown, findVisualLinkFromMarkdownClick } from '@/utils/visualLinks.js'
+import { stripReportLinkMarkdown, findReportLinkFromMarkdownClick } from '@/utils/reportLinks.js'
 
 export default {
   name: 'AgentAssistantMessage',
-  components: { AgentMarkdown, AgentStreamingMarkdown, AgentToolBubbles },
+  components: {
+    AgentMarkdown,
+    AgentStreamingMarkdown,
+    AgentProcessTimeline,
+    AgentDeliverableLinks,
+  },
   props: {
     msg: { type: Object, required: true },
     displaySteps: { type: Function, required: true },
@@ -89,14 +151,64 @@ export default {
     recoveryHint: { type: Function, required: true },
     summaryStatusText: { type: Function, required: true },
     visualLinkLabel: { type: Function, required: true },
+    runningTool: { type: Object, default: null },
   },
-  emits: ['visual-link-click'],
+  emits: ['visual-link-click', 'report-preview', 'report-download'],
+  data() {
+    return { ui: AGENT_UI }
+  },
   methods: {
+    processItems(msg) {
+      return processTimelineItems(msg)
+    },
+    hasAnyContent(msg) {
+      return (
+        (msg.thinking && msg.thinking.trim()) ||
+        (msg.answer && msg.answer.trim()) ||
+        (msg.closing && msg.closing.trim()) ||
+        this.processItems(msg).length > 0
+      )
+    },
+    showPlan(msg) {
+      const text = (msg.thinking || '').trim()
+      if (!text) return false
+      if (msg.streaming) return true
+      return this.revealPhase(msg) >= 1
+    },
+    showProcess(msg) {
+      if (this.processItems(msg).length) return true
+      if (msg.streaming && this.runningTool) return true
+      return false
+    },
+    processDefaultExpanded(msg) {
+      const { failed } = processTimelineStats(this.processItems(msg))
+      return failed > 0 || !!msg.streaming
+    },
+    showConclusion(msg) {
+      const has = (msg.answer && msg.answer.trim()) || (msg.closing && msg.closing.trim())
+      if (!has) return false
+      if (msg.streaming) return true
+      return this.revealPhase(msg) >= 1
+    },
     displayAnswer(msg) {
-      const text = msg.answer || ''
+      return this.stripNarrativeMarkdown(msg.answer || '', msg)
+    },
+    displayClosing(msg) {
+      return this.stripNarrativeMarkdown(msg.closing || '', msg)
+    },
+    stripNarrativeMarkdown(text, msg) {
       const hasLinks = (msg.visual_links || []).length > 0
+      const hasReports = (msg.report_links || []).length > 0
       const hasFakeSection = /\n#{1,3}\s*可点击入口/i.test(text)
-      return stripVisualLinkMarkdown(text, hasLinks || hasFakeSection)
+      let out = stripVisualLinkMarkdown(text, hasLinks || hasFakeSection)
+      out = stripReportLinkMarkdown(out, hasReports || hasFakeSection)
+      return out
+    },
+    showReportLinks(msg) {
+      if (msg.streaming) return false
+      const links = msg.report_links || []
+      if (!links.length) return false
+      return this.revealPhase(msg) >= 1
     },
     showVisualLinks(msg) {
       if (msg.streaming) return false
@@ -105,15 +217,40 @@ export default {
       return this.revealPhase(msg) >= 1
     },
     onMarkdownLinkClick(href) {
+      const report = findReportLinkFromMarkdownClick(href, this.msg.report_links)
+      if (report) {
+        this.$emit('report-preview', report)
+        return
+      }
       const link = findVisualLinkFromMarkdownClick(href, this.msg.visual_links)
       if (link) this.$emit('visual-link-click', link)
+    },
+    onReportLinkClick(link) {
+      if (link) this.$emit('report-preview', link)
     },
   },
 }
 </script>
 
 <style scoped lang="less">
-.agent-answer-md { margin-top: 4px; }
+.agent-plan-block {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  background: rgba(55, 126, 184, 0.06);
+  border-left: 3px solid #377eb8;
+  border-radius: 4px;
+}
+.agent-conclusion-block {
+  margin-top: 10px;
+  padding-top: 4px;
+}
+.agent-thinking-md,
+.agent-answer-md,
+.agent-closing-md {
+  margin-top: 4px;
+  font-size: 14px;
+}
+.agent-thinking-md { color: #444; }
 .agent-stream-hint {
   font-size: 13px;
   color: #666;

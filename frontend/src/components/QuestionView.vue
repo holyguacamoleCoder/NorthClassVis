@@ -1,6 +1,6 @@
 <template>
-  <div id="question-view" :class="{ 'agent-highlight': highlighted }">
-    <div class="title">
+  <div id="question-view" :class="{ 'agent-highlight': highlighted, embedded }">
+    <div v-if="!embedded" class="title">
       <span>Question View</span>
       <span v-if="isAgentTarget" class="agent-target-badge">来自 Agent 推荐</span>
       <!-- 困难度排序按钮 -->
@@ -63,8 +63,8 @@
 
     </div>
     
-    <Simplebar style="height: 555px">
-      <div id="visualizationQ">
+    <Simplebar :style="embedded ? 'height: 360px' : 'height: 555px'">
+      <div :id="containerId">
         <LoadingSpinner v-if="loading"/>
       </div>
     </Simplebar>
@@ -87,6 +87,11 @@ export default {
     DropdownContent,
     LoadingSpinner
   },
+  props: {
+    embedded: { type: Boolean, default: false },
+    chartParams: { type: Object, default: null },
+    containerId: { type: String, default: 'visualizationQ' },
+  },
   data() {
     return {
       debugger: true,
@@ -104,6 +109,8 @@ export default {
       submissionMax: null,
       scoreMin: null,
       scoreMax: null,
+      /** 非空时仅渲染这些 title_id（报告锚定题目） */
+      titleIdFilter: null,
     };
   },
   async mounted() {
@@ -117,6 +124,7 @@ export default {
     ...mapState(['configLoaded']),
     ...mapGetters(['getAgentVisualLink', 'getAgentHighlightAt']),
     highlighted() {
+      if (this.embedded) return false
       const link = this.getAgentVisualLink
       if (!link || link.view !== 'QuestionView') return false
       return (this.highlightTick - (this.getAgentHighlightAt || 0)) < 2500
@@ -132,6 +140,52 @@ export default {
     }
   },
   methods: {
+    vizSel() {
+      return `#${this.containerId}`
+    },
+    applyChartParams(params) {
+      if (!params || typeof params !== 'object') return false
+      if (Array.isArray(params.title_ids) && params.title_ids.length) {
+        return this.focusTitleIds(params.title_ids)
+      }
+      if (params.knowledge) {
+        return this.focusKnowledge(params.knowledge)
+      }
+      return false
+    },
+    focusTitleIds(titleIds) {
+      const want = new Set(
+        titleIds.map((id) => String(id).trim()).filter(Boolean),
+      )
+      if (!want.size || !this.QuestionData?.length) return false
+      const matched = this.QuestionData.filter((q) =>
+        want.has(String(q.title_id)),
+      )
+      if (!matched.length) return false
+      this.titleIdFilter = want
+      const knowledges = new Set(matched.map((q) => q.knowledge))
+      Object.keys(this.selectedKnowledge).forEach((k) => {
+        this.selectedKnowledge[k] = knowledges.has(k)
+      })
+      this.selectAllKnowledge = false
+      const d3 = this.$d3
+      d3.select(this.vizSel()).selectAll('*').remove()
+      this.renderQuestion()
+      return true
+    },
+    focusKnowledge(knowledge) {
+      if (!knowledge || !this.uniqueKnowledge?.length) return false
+      if (!this.uniqueKnowledge.includes(knowledge)) return false
+      this.titleIdFilter = null
+      Object.keys(this.selectedKnowledge).forEach((k) => {
+        this.selectedKnowledge[k] = k === knowledge
+      })
+      this.selectAllKnowledge = false
+      const d3 = this.$d3
+      d3.select(this.vizSel()).selectAll('*').remove()
+      this.renderQuestion()
+      return true
+    },
     async getQuestionData() {
       // 获取问题数据
       const { data } = await getQuestions()
@@ -169,6 +223,9 @@ export default {
           return w1 * submissionNorm + w2 * scoreNorm; // 范围 [0, 1]
         }
       this.renderQuestion()
+      if (this.embedded && this.chartParams) {
+        this.$nextTick(() => this.applyChartParams(this.chartParams))
+      }
     },
     // 渲染题目视图数据
     renderQuestion() {
@@ -181,7 +238,12 @@ export default {
       const distributionHeight = 20
       const QuestionTitleHeight = 28
       const QuestionPanelHeight = QuestionTitleHeight + timelineHeight + distributionHeight + padding * 5
-      const filteredData = this.QuestionData.filter(q => this.selectedKnowledge[q.knowledge])
+      let filteredData = this.QuestionData.filter((q) => this.selectedKnowledge[q.knowledge])
+      if (this.titleIdFilter && this.titleIdFilter.size > 0) {
+        filteredData = filteredData.filter((q) =>
+          this.titleIdFilter.has(String(q.title_id)),
+        )
+      }
       // console.log('Filtered Data:', filteredData)
       // 困难度排序
       if (this.sortAscending) {
@@ -198,7 +260,7 @@ export default {
         })
       }      
       // 获取可视化目标容器
-      const main = d3.select('#visualizationQ')
+      const main = d3.select(this.vizSel())
 
       // 给容器添加组
       const g = main.append('g')
@@ -551,7 +613,7 @@ export default {
     handleKnowledgeCheck() {
       this.selectAllKnowledge = Object.values(this.selectedKnowledge).every(Boolean)
       const d3 = this.$d3
-      d3.select('#visualizationQ').selectAll('*').remove()
+      d3.select(this.vizSel()).selectAll('*').remove()
       // 重新渲染图表
       this.renderQuestion()
     },
@@ -560,20 +622,20 @@ export default {
         this.selectedKnowledge[key] = this.selectAllKnowledge
       })
       const d3 = this.$d3
-      d3.select('#visualizationQ').selectAll('*').remove()
+      d3.select(this.vizSel()).selectAll('*').remove()
       // 重新渲染图表
       this.renderQuestion()
     },
     toggleSortOrder() {
       this.sortAscending = !this.sortAscending
       const d3 = this.$d3
-      d3.select('#visualizationQ').selectAll('*').remove()
+      d3.select(this.vizSel()).selectAll('*').remove()
       // 重新渲染图表
       this.renderQuestion()
     },
     async loadData() {
       this.loading = true
-      this.$d3.select('#visualizationQ').selectAll('*').remove()
+      this.$d3.select(this.vizSel()).selectAll('*').remove()
       await this.getQuestionData()
       this.loading = false
     }
@@ -586,21 +648,21 @@ export default {
       }
     },
     async getAgentVisualLink(newLink) {
-      if (!newLink || newLink.view !== 'QuestionView' || !newLink.params || !newLink.params.knowledge) return
+      if (!newLink || newLink.view !== 'QuestionView' || !newLink.params) return
       if (JSON.stringify(newLink) === JSON.stringify(this.lastAppliedAgentLink)) return
-      const knowledge = newLink.params.knowledge
-      if (!this.uniqueKnowledge || this.uniqueKnowledge.length === 0) {
+      if (!this.QuestionData?.length) {
         await this.loadData()
         await this.$nextTick()
       }
-      if (!this.uniqueKnowledge || !this.uniqueKnowledge.includes(knowledge)) return
       this.lastAppliedAgentLink = { ...newLink }
-      Object.keys(this.selectedKnowledge).forEach(k => { this.selectedKnowledge[k] = false })
-      this.selectedKnowledge[knowledge] = true
-      this.selectAllKnowledge = false
-      const d3 = this.$d3
-      d3.select('#visualizationQ').selectAll('*').remove()
-      this.renderQuestion()
+      const params = newLink.params || {}
+      if (Array.isArray(params.title_ids) && params.title_ids.length) {
+        this.applyChartParams(params)
+        return
+      }
+      const knowledge = params.knowledge
+      if (!knowledge || !this.uniqueKnowledge?.includes(knowledge)) return
+      this.focusKnowledge(knowledge)
     },
   }
 };

@@ -41,7 +41,7 @@ class BindingCandidate:
 
     @property
     def is_slice(self) -> bool:
-        if self.query_limit is not None:
+        if self.query_limit is not None and self.query_limit > 0:
             return True
         return self.result_rows <= SLICE_MAX_ROWS
 

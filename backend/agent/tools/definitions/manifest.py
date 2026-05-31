@@ -494,7 +494,7 @@ _QUERY_DATA_PARAMS = {
             "description": (
                 f"Optional cap on rows scanned (1–{_MAX_QUERY_ROWS}). "
                 f"Omit limit for full matching set (required for correct count/mean). "
-                f"Do NOT use limit:0 (rejected). Preview ~{_PREVIEW_ROWS} rows; "
+                f"Do NOT use limit:0 (auto-normalized to full scan). Preview ~{_PREVIEW_ROWS} rows; "
                 f"full data via meta.result_ref when truncated."
             ),
         },
@@ -721,8 +721,11 @@ MANIFEST: tuple[ToolDefinition, ...] = (
         description=(
             "Validate and normalize frontend visual navigation links per visual_link_contract.yaml. "
             "Use after analysis when suggesting chart/student/knowledge drill-downs. "
-            "Provide concrete params (knowledge, student_ids; WeekView: at most ONE link, omit kind unless "
-            "highlighting a single cluster—never three links for kind 1/2/3). Do not invent view names. "
+            "WeekView: ONE link only; include week_range; student diagnosis MUST include "
+            "student_ids with exactly the target student; class reports should pass 2–3 representative "
+            "student_ids—never omit student_ids (embedded chart would be empty). "
+            "QuestionView: prefer title_ids (1–5). StudentView: student_ids required. "
+            "Omit kind unless one cluster—never three WeekView links for kind 1/2/3. "
             "Does NOT render charts or write business conclusions. "
             "Returns visual_links, warnings, and rejected items."
         ),

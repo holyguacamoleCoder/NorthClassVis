@@ -2,6 +2,7 @@ import { mapActions, mapGetters } from 'vuex'
 import {
   bootstrapAgentSession,
   createAgentSession,
+  listAgentSkills,
   listAgentSessions,
   activateAgentSession,
   updateAgentSession,
@@ -11,6 +12,8 @@ import {
   cancelAgentJob,
   JobAbortedError,
   createJobAbortHandle,
+  fetchDeliverable,
+  deliverableDownloadUrl,
 } from '@/api/agent.js'
 import {
   legacyToAssistantMessage,
@@ -19,8 +22,10 @@ import {
   userMessage,
   createStreamingAssistantMessage,
   applyProgressToMessage,
+  applyJobSessionMeta,
 } from '@/utils/agentAdapter.js'
 import { AGENT_UI } from '@/constants/agentUiText.js'
+import { isSkillSlashCommand, skillCommandLoadingText } from '@/utils/agentSlashCommands.js'
 
 export default {
   data() {
@@ -46,6 +51,15 @@ export default {
       activeSendId: 0,
       autoScrollLocked: false,
       sampleQuestions: AGENT_UI.sampleQuestions,
+      catalogSkills: [],
+      reportPreview: {
+        open: false,
+        loading: false,
+        path: '',
+        title: '',
+        content: '',
+        error: '',
+      },
     }
   },
   created() {
@@ -60,6 +74,7 @@ export default {
     this.clearRevealTimer()
   },
   methods: {
+    ...mapActions(['syncNavScopeFromFilterContext']),
     recoveryHint,
     displaySteps(msg) {
       if (!msg || !msg.trace || !msg.trace.steps) return []
@@ -79,17 +94,53 @@ export default {
       })
     },
     applyStreamingProgress(job) {
-      if (this.streamingMsgIndex === null) return
+      if (!this.loading || this.streamingMsgIndex === null) return
       const msg = this.messages[this.streamingMsgIndex]
-      if (!msg) return
+      if (!msg || !msg.streaming) return
       applyProgressToMessage(msg, job)
+      applyJobSessionMeta(this, job?.progress)
       this.scrollToBottom()
+    },
+    async abortInFlightWork({ restoreComposer = false } = {}) {
+      const hadWork =
+        this.loading ||
+        this.streamingMsgIndex !== null ||
+        !!this.jobAbort?.getJobId?.()
+      if (!hadWork) return
+
+      this.activeSendId += 1
+      this.jobAbort.abort()
+      const jobId = this.jobAbort.getJobId()
+      if (jobId) {
+        try {
+          await cancelAgentJob(jobId)
+        } catch (err) {
+          console.error('cancelAgentJob failed', err)
+        }
+      }
+      this.discardInFlightTurn()
+      if (restoreComposer && this.pendingSendText) {
+        this.inputText = this.pendingSendText
+        this.$nextTick(() => this.autoResizeComposer?.())
+      }
+      this.pendingApproval = null
+      if (this.approvalResolver) {
+        this.approvalResolver('deny')
+        this.approvalResolver = null
+      }
+      this.loading = false
+      this.loadingText = '思考中'
+      this.pendingSendText = ''
+      this.jobAbort.reset()
     },
     finalizeStreamingMessage(idx, res) {
       const msg = this.messages[idx]
       if (!msg) return
       const final = legacyToAssistantMessage(res)
-      Object.assign(msg, final, { streaming: false, revealPhase: 1, statusHint: '' })
+      Object.assign(msg, final, { streaming: false, revealPhase: 1, statusHint: '', _runningTool: null })
+      if (res?.filter_context) {
+        this.syncNavScopeFromFilterContext(res.filter_context)
+      }
     },
     revealPhase(msg) {
       if (msg.role !== 'assistant') return 5
@@ -146,9 +197,50 @@ export default {
     onVisualLinkClick(link) {
       this.$emit('visual-link-click', { view: link.view, params: link.params || {} })
     },
+    async openReportPreview(link) {
+      const path = link?.path
+      if (!path) return
+      this.reportPreview = {
+        open: true,
+        loading: true,
+        path,
+        title: link.label || path,
+        content: '',
+        error: '',
+      }
+      try {
+        const data = await fetchDeliverable(path)
+        this.reportPreview.title = data.title || link.label || path
+        this.reportPreview.content = data.content || ''
+      } catch (err) {
+        this.reportPreview.error = err.message || '报告加载失败'
+      } finally {
+        this.reportPreview.loading = false
+      }
+    },
+    closeReportPreview() {
+      this.reportPreview.open = false
+    },
+    downloadReport(link) {
+      const path = link?.path || this.reportPreview.path
+      if (!path) return
+      window.open(deliverableDownloadUrl(path), '_blank')
+    },
     fillSampleQuestion(q) {
       this.inputText = q
       this.$nextTick(() => this.autoResizeComposer?.())
+    },
+    fillSkillCommand(name) {
+      this.inputText = name ? `/skill ${name}` : '/skill'
+      this.$nextTick(() => this.autoResizeComposer?.())
+    },
+    async fetchCatalogSkills() {
+      try {
+        const data = await listAgentSkills()
+        this.catalogSkills = data.skills || []
+      } catch (err) {
+        console.error('fetchCatalogSkills failed', err)
+      }
     },
     onComposerKeydown(e) {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -167,7 +259,7 @@ export default {
       try {
         const session = await bootstrapAgentSession()
         this.applySession(session)
-        await this.refreshSessions()
+        await Promise.all([this.refreshSessions(), this.fetchCatalogSkills()])
       } catch (err) {
         console.error('initSession failed', err)
       } finally {
@@ -180,8 +272,12 @@ export default {
       this.sessionTitle = session.title || '教师问答 Agent'
       this.permissionMode = session.permission_mode || 'analyze'
       this.todoItems = session.todo_items || []
+      this.loadedSkills = session.loaded_skills || []
       this.messages = sessionMessagesToUi(session.messages || [])
       this.autoScrollLocked = false
+      if (session.filter_context) {
+        this.syncNavScopeFromFilterContext(session.filter_context)
+      }
     },
     async refreshSessions() {
       try {
@@ -193,9 +289,12 @@ export default {
     },
     async createNewSession() {
       try {
+        await this.abortInFlightWork({ restoreComposer: false })
         const session = await createAgentSession({ permission_mode: this.permissionMode })
         this.applySession(session)
         this.messages = []
+        this.todoItems = session.todo_items || []
+        this.loadedSkills = session.loaded_skills || []
         await this.refreshSessions()
       } catch (err) {
         console.error('createNewSession failed', err)
@@ -204,6 +303,7 @@ export default {
     async switchSession(sessionId) {
       if (!sessionId || sessionId === this.sessionId) return
       try {
+        await this.abortInFlightWork({ restoreComposer: false })
         const session = await activateAgentSession(sessionId)
         this.applySession(session)
       } catch (err) {
@@ -297,28 +397,7 @@ export default {
     },
     async stopTurn() {
       if (!this.loading) return
-      this.activeSendId += 1
-      this.jobAbort.abort()
-      const jobId = this.jobAbort.getJobId()
-      if (jobId) {
-        try {
-          await cancelAgentJob(jobId)
-        } catch (err) {
-          console.error('cancelAgentJob failed', err)
-        }
-      }
-      this.discardInFlightTurn()
-      if (this.pendingSendText) {
-        this.inputText = this.pendingSendText
-        this.$nextTick(() => this.autoResizeComposer?.())
-      }
-      this.pendingApproval = null
-      if (this.approvalResolver) {
-        this.approvalResolver('deny')
-        this.approvalResolver = null
-      }
-      this.loading = false
-      this.loadingText = '思考中'
+      await this.abortInFlightWork({ restoreComposer: true })
     },
     async send() {
       const text = (this.inputText || '').trim()
@@ -336,7 +415,9 @@ export default {
       this.messages.push(createStreamingAssistantMessage())
       this.streamingMsgIndex = streamIdx
       this.loading = true
-      this.loadingText = '思考中'
+      this.loadingText = isSkillSlashCommand(text)
+        ? skillCommandLoadingText(text)
+        : '思考中'
       this.scrollToBottom()
       try {
         const res = await postAgentMessage(this.sessionId, text, this.context, {
@@ -348,8 +429,8 @@ export default {
         if (sendId !== this.activeSendId) return
         if (res.session_title) this.sessionTitle = res.session_title
         if (res.permission_mode) this.permissionMode = res.permission_mode
-        if (res.todo_items) this.todoItems = res.todo_items
-        if (res.loaded_skills) this.loadedSkills = res.loaded_skills
+        if (Array.isArray(res.todo_items)) this.todoItems = res.todo_items
+        if (Array.isArray(res.loaded_skills)) this.loadedSkills = res.loaded_skills
         this.finalizeStreamingMessage(streamIdx, res)
         await this.refreshSessions()
         this.$nextTick(() => {
@@ -370,6 +451,7 @@ export default {
             streaming: false,
             revealPhase: 5,
             trace: this.messages[this.streamingMsgIndex].trace || { steps: [] },
+            closing: '',
           })
         } else {
           this.messages.push({

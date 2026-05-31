@@ -1,6 +1,6 @@
 <template>
-  <div id="week-view" :class="{ 'agent-highlight': highlighted }">
-    <div class="title">
+  <div id="week-view" :class="{ 'agent-highlight': highlighted, embedded }">
+    <div v-if="!embedded" class="title">
       <span>Week View</span>
       <span v-if="isAgentTarget" class="agent-target-badge">来自 Agent 推荐</span>
       <span v-if="weekRangeLabel" class="week-range-badge">{{ weekRangeLabel }}</span>
@@ -26,11 +26,11 @@
       </select>
       <div class="limit">kind:</div>
     </div>
-    <Simplebar style="height: 550px; width: 98%">
+    <Simplebar :style="simplebarStyle">
       <LoadingSpinner v-if=loading />
       <div class="wait-prompt" v-if="isWaiting">请先在散点图中点选学生，或从 Agent 图表入口跳转</div>
       <div class="empty-prompt" v-else-if="!loading && !hasRenderableData">暂无周视图数据（请确认已选中学生）</div>
-      <div id="visualizationW"></div>
+      <div :id="containerId"></div>
     </Simplebar>
   </div>
 </template>
@@ -47,6 +47,11 @@ export default {
   components: {
     Simplebar,
     LoadingSpinner
+  },
+  props: {
+    embedded: { type: Boolean, default: false },
+    chartParams: { type: Object, default: null },
+    containerId: { type: String, default: 'visualizationW' },
   },
   data() {
     return {
@@ -84,7 +89,12 @@ export default {
       if (!wr || wr.length < 2) return ''
       return `第 ${wr[0]}–${wr[1]} 周`
     },
+    simplebarStyle() {
+      const h = this.embedded ? '320px' : '550px'
+      return { height: h, width: '98%' }
+    },
     highlighted() {
+      if (this.embedded) return false
       const link = this.getAgentVisualLink
       if (!link || link.view !== 'WeekView') return false
       return (this.highlightTick - (this.getAgentHighlightAt || 0)) < 2500
@@ -114,25 +124,47 @@ export default {
   async created() {
   },
   methods: {
+    vizSel() {
+      return `#${this.containerId}`
+    },
+    applyChartParams(params) {
+      if (!params || typeof params !== 'object') return false
+      if (params.kind !== undefined) {
+        const num = Number(params.kind)
+        if (num >= 1 && num <= 3) this.selectedKind = num
+      } else if (params.cluster !== undefined) {
+        const num = Number(params.cluster) + 1
+        if (num >= 1 && num <= 3) this.selectedKind = num
+      } else if (this.embedded) {
+        this.selectedKind = ''
+      }
+      return true
+    },
     isAllKinds() {
       const k = this.selectedKind
       return k === '' || k === null || k === undefined || k === 'All kinds'
     },
     applyAgentVisualLink() {
       const link = this.getAgentVisualLink
-      if (!link || link.view !== 'WeekView' || !link.params) return false
-      if (link.params.kind === undefined && link.params.cluster === undefined) return false
+      if (!link || link.view !== 'WeekView') return false
+      const params = link.params || {}
       if (JSON.stringify(link) === JSON.stringify(this.lastAppliedAgentLink)) return false
-      this.lastAppliedAgentLink = { ...link }
-      const kind = link.params.kind !== undefined ? link.params.kind : (link.params.cluster + 1)
-      const num = Number(kind)
-      if (num >= 1 && num <= 3) {
-        this.selectedKind = num
+      this.lastAppliedAgentLink = { ...link, params: { ...params } }
+      if (params.kind !== undefined) {
+        const num = Number(params.kind)
+        if (num >= 1 && num <= 3) this.selectedKind = num
+      } else if (params.cluster !== undefined) {
+        const num = Number(params.cluster) + 1
+        if (num >= 1 && num <= 3) this.selectedKind = num
+      } else {
+        this.selectedKind = ''
       }
       return true
     },
     async bootstrapFromStore() {
-      const applied = this.applyAgentVisualLink()
+      const applied = this.embedded && this.chartParams
+        ? this.applyChartParams(this.chartParams)
+        : this.applyAgentVisualLink()
       const ids = this.getSelectedIds || []
       if (!ids.length) {
         this.isWaiting = true
@@ -165,7 +197,7 @@ export default {
       const margin = { top: 20, bottom: 20, left: 20, right: 20 }
       const stu_icon = 40
       const weekLabelHeight = 20
-      const root = document.getElementById('visualizationW')
+      const root = document.getElementById(this.containerId)
       const avail = (root && root.clientWidth) ? root.clientWidth : 1000
       const minCol = 64
       const maxCol = 120
@@ -203,7 +235,7 @@ export default {
       const d3 = this.$d3
       const filteredWeekData = this.filteredWeekData
       if (!filteredWeekData.length || !filteredWeekData[0]?.weeks?.length) {
-        d3.select('#visualizationW').selectAll('*').remove()
+        d3.select(this.vizSel()).selectAll('*').remove()
         return
       }
       const numWeeks = d3.max(filteredWeekData, d => d.weeks.length)
@@ -220,7 +252,7 @@ export default {
       } = layout
       const width = plotWidth
 
-      const svg = d3.select('#visualizationW')
+      const svg = d3.select(this.vizSel())
         .append('svg')
         .attr('width', svgWidth)
         .attr('height', svgHeight)
@@ -421,7 +453,7 @@ export default {
       const d3 = this.$d3;
       const filteredPeakData = this.filteredPeakData;
       if (!filteredPeakData.length || !filteredPeakData[0]?.weeks?.length) {
-        d3.select('#visualizationW').selectAll('*').remove();
+        d3.select(this.vizSel()).selectAll('*').remove();
         return;
       }
       const numWeeks = d3.max(filteredPeakData, d =>
@@ -440,7 +472,7 @@ export default {
       } = layout;
       const width = plotWidth;
 
-      const svg = d3.select('#visualizationW')
+      const svg = d3.select(this.vizSel())
         .append('svg')
         .attr('width', svgWidth)
         .attr('height', svgHeight);
@@ -633,7 +665,7 @@ export default {
     updateKind() {
       // 清除之前的SVG元素
       const d3 = this.$d3
-      d3.select('#visualizationW').selectAll('*').remove()
+      d3.select(this.vizSel()).selectAll('*').remove()
       if (this.showPeakView) {
       this.renderPeakData();
       } else {
@@ -642,7 +674,7 @@ export default {
     },
     async loadData(render = true) {
       this.loading = true
-      this.$d3.select('#visualizationW').selectAll('*').remove()
+      this.$d3.select(this.vizSel()).selectAll('*').remove()
       this.WeekData = []
       this.PeakData = []
       if (render) {

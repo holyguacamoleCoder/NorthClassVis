@@ -3,6 +3,40 @@ import { getClusterEveryone } from '@/api/ParallelView.js'
 import { getSelectedData } from '@/api/NavHeader.js'
 import { setConfig } from '@/api/ConfigPanel.js'
 
+export function coerceWeekRange(value) {
+  if (value == null) return null
+  if (Array.isArray(value) && value.length >= 2) {
+    const start = Number(value[0])
+    const end = Number(value[1])
+    if (!Number.isNaN(start) && !Number.isNaN(end)) return [start, end]
+  }
+  return null
+}
+
+/** 链接 params → store → 已有 navWeekRange */
+function resolveWeekRangeForNavigation(state, params = {}) {
+  return coerceWeekRange(params.week_range) || coerceWeekRange(state.navWeekRange)
+}
+
+/** WeekView 空 params 表示「当前选中学生的全部簇」；无选中时用 nav 聚类全集 */
+function resolveVisualLinkStudentIds(state, view, params = {}) {
+  const fromParams = Array.isArray(params.student_ids)
+    ? params.student_ids.map(String).filter(Boolean)
+    : []
+  if (fromParams.length) return fromParams
+
+  const selected = state.selectedStudentIds || []
+  if (selected.length) return [...selected]
+
+  const suggested = state.agentSuggestedStudentIds || []
+  if (suggested.length) return [...suggested]
+
+  if (view === 'WeekView') {
+    const cluster = state.studentClusterInfo || {}
+    return Object.keys(cluster).filter(Boolean)
+  }
+  return []
+}
 
 export default createStore({
   state: {
@@ -156,25 +190,52 @@ export default createStore({
       context.commit('setAgentVisualLink', payload)
       context.commit('setAgentHighlightAt', Date.now())
     },
+    /** 会话 filter_context → Nav 右栏 / 面板周次（classes、majors、week_range） */
+    syncNavScopeFromFilterContext(context, filterContext) {
+      if (!filterContext || typeof filterContext !== 'object') return
+      const payload = {}
+      if (Array.isArray(filterContext.classes) && filterContext.classes.length) {
+        payload.classes = filterContext.classes
+      }
+      if (Array.isArray(filterContext.majors) && filterContext.majors.length) {
+        payload.majors = filterContext.majors
+      }
+      const wr = coerceWeekRange(filterContext.week_range)
+      if (wr) payload.weekRange = wr
+      if (Object.keys(payload).length) {
+        context.commit('setNavScope', payload)
+      }
+    },
     /** 图表入口点击：写入链接、同步选中学生并拉取详情 */
     async applyAgentVisualLinkNavigation(context, { view, params = {} }) {
-      context.commit('setAgentVisualLink', { view, params })
+      const weekRange = resolveWeekRangeForNavigation(context.state, params)
+      const linkParams = { ...params }
+      if (weekRange) linkParams.week_range = weekRange
+
+      context.commit('setAgentVisualLink', { view, params: linkParams })
       context.commit('setAgentHighlightAt', Date.now())
 
-      const ids = Array.isArray(params.student_ids) ? params.student_ids : []
-      if (view === 'StudentView' && ids.length > 0) {
+      if (view === 'WeekView') {
+        if (weekRange) {
+          context.commit('setNavScope', { weekRange })
+        }
+        const clusterKeys = Object.keys(context.state.studentClusterInfo || {})
+        if (!clusterKeys.length) {
+          await context.dispatch('fetchClusterData')
+        }
+      }
+
+      const ids = resolveVisualLinkStudentIds(context.state, view, linkParams)
+      if (ids.length > 0) {
         context.commit('setAgentSuggestedStudentIds', ids)
         context.commit('setSelectedStudents', ids)
-        await context.dispatch('fetchSelectedData')
-      } else if (ids.length > 0) {
-        context.commit('setAgentSuggestedStudentIds', ids)
+        if (view === 'WeekView' || view === 'StudentView') {
+          await context.dispatch('fetchSelectedData')
+        }
       }
 
       if (view === 'WeekView') {
         await context.dispatch('pushNavScopeToServer')
-        if (context.state.selectedStudentIds?.length) {
-          await context.dispatch('fetchSelectedData')
-        }
       }
     },
     applyAgentSuggestedStudents(context) {

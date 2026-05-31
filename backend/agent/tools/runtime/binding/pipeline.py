@@ -249,7 +249,9 @@ def resolve_aggregate_binding(
     return AggregateBinding(
         error=(
             "Error: aggregate_data 缺少可用的本回合 query 结果。"
-            "请先 query_data，再 aggregate 或 list_datasets。"
+            "请先 query_data（省略 limit 做全量），再 aggregate；"
+            "或 list_datasets 后传 input.dataset_id。"
+            "列名不确定时先 inspect_schema。"
             + (f"\n{hint}" if hint else "")
         ),
         trace=trace,

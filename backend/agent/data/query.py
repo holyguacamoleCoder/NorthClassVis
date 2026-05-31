@@ -6,7 +6,7 @@ from typing import Any
 import pandas as pd
 
 from .exceptions import InvalidParameterError
-from .result_hints import reject_limit_zero
+from .result_hints import normalize_limit
 from .filter_context import FilterContext
 from .limits import QueryLimits
 from .registry import default_limits, resolve
@@ -163,12 +163,13 @@ def execute_query(
     working = _apply_order_by(working, spec.order_by)
 
     if spec.limit is not None:
-        reject_limit_zero(spec.limit)
-        if spec.limit < 0:
-            raise InvalidParameterError("limit 须 >= 0", param="limit")
-        working = working.head(int(spec.limit))
-        if len(working) > limits.max_rows:
-            working = working.iloc[: limits.max_rows].copy()
+        effective_limit, _ = normalize_limit(spec.limit)
+        if effective_limit is not None:
+            if effective_limit < 0:
+                raise InvalidParameterError("limit 须 >= 0", param="limit")
+            working = working.head(int(effective_limit))
+            if len(working) > limits.max_rows:
+                working = working.iloc[: limits.max_rows].copy()
     # omit limit: keep full matching set in result_ref (preview may still truncate)
 
     result = _build_tabular_from_df(

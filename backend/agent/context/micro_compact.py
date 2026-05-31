@@ -9,6 +9,25 @@ from .tool_result_summary import extract_tabular_summary
 
 _log = get_logger("context.micro")
 
+# Tool results kept verbatim in message history (canonical state is also in system prompt).
+_PINNED_TOOL_NAMES = frozenset({"load_skill", "todo_write"})
+
+
+def _tool_names_by_call_id(messages: list[dict[str, Any]]) -> dict[str, str]:
+    names: dict[str, str] = {}
+    for msg in messages:
+        if msg.get("role") != "assistant":
+            continue
+        for call in msg.get("tool_calls") or []:
+            call_id = call.get("id")
+            if not call_id:
+                continue
+            fn = call.get("function") or {}
+            tool_name = call.get("name") or fn.get("name") or ""
+            if tool_name:
+                names[str(call_id)] = str(tool_name)
+    return names
+
 
 def collect_tool_message_indices(messages: list[dict[str, Any]]) -> list[int]:
     return [i for i, msg in enumerate(messages) if msg.get("role") == "tool"]
@@ -36,9 +55,13 @@ def micro_compact_messages(
         return 0
 
     to_compact = tool_indices[: -config.keep_recent_tool_results]
+    tool_names = _tool_names_by_call_id(messages)
     compacted = 0
     for index in to_compact:
         msg = messages[index]
+        call_id = str(msg.get("tool_call_id") or "")
+        if tool_names.get(call_id) in _PINNED_TOOL_NAMES:
+            continue
         content = msg.get("content", "")
         if not isinstance(content, str):
             continue

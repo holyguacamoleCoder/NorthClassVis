@@ -44,7 +44,10 @@ def test_session_start_emits_catalog_json():
     ctx = out["additionalContext"]
     assert "Data_StudentInfo" in ctx
     assert "Data_SubmitRecord" in ctx
-    assert "meta/data_catalog" in ctx or "data_catalog" in ctx
+    assert "resource_registry" in ctx
+    assert "student_info" in ctx
+    assert "report-delivery" in ctx
+    assert "analysis-class" in ctx
 
 
 def test_audit_read_logs_and_hints_without_limit(tmp_path):
