@@ -4,9 +4,104 @@ from typing import Any
 
 import pandas as pd
 
+from .column_aliases import resolve_column
 from .exceptions import InvalidParameterError
 
 _ALLOWED_OPS = frozenset({"eq", "in", "gte", "lte", "and"})
+_WEEK_FIELD_TOKENS = frozenset({"week", "week_index"})
+
+
+def _week_field_token(field: str) -> str:
+    from .column_aliases import normalize_identifier
+
+    return normalize_identifier(field)
+
+
+def _raise_week_on_submit_record(field: str) -> None:
+    raise InvalidParameterError(
+        f"submit_record 无 {field!r} 列。按周次分析请改用 resource=week_aggregation，"
+        "传 classes 与 week_range=[start,end]，或对 week_index 使用 where "
+        '(例: {"op":"and","conditions":[{"field":"week_index","op":"gte","value":13},...]})。',
+        param="where",
+    )
+
+
+def _normalize_leaf_field(
+    field: str,
+    *,
+    resource: str | None,
+    allowed_columns: list[str],
+) -> tuple[str, str | None]:
+    token = _week_field_token(field)
+    if resource == "submit_record" and token in _WEEK_FIELD_TOKENS:
+        _raise_week_on_submit_record(field)
+
+    resolved = resolve_column(field, allowed_columns)
+    if resolved:
+        note = f"where.field {field!r} 已规范为 {resolved!r}" if resolved != field else None
+        return resolved, note
+
+    if token in _WEEK_FIELD_TOKENS and resource == "week_aggregation":
+        raise InvalidParameterError(
+            f"where 字段 {field!r} 无法映射；week_aggregation 请使用 week_index 或传 week_range。",
+            param="where",
+        )
+
+    raise InvalidParameterError(
+        f"where 字段 {field!r} 不在 resource 白名单内",
+        param="where",
+    )
+
+
+def normalize_where(
+    where: dict[str, Any] | None,
+    *,
+    resource: str | None,
+    allowed_columns: list[str],
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Normalize where DSL field names (e.g. week → week_index) before apply_where."""
+    if not where:
+        return None, []
+
+    if not isinstance(where, dict):
+        raise InvalidParameterError("where 须为 object", param="where")
+
+    op = where.get("op")
+    if op == "and":
+        conditions = where.get("conditions")
+        if not isinstance(conditions, list) or not conditions:
+            raise InvalidParameterError("and 需要非空 conditions 列表", param="where")
+        normalized: list[dict[str, Any]] = []
+        notes: list[str] = []
+        for sub in conditions:
+            if not isinstance(sub, dict):
+                raise InvalidParameterError("and conditions 项须为 object", param="where")
+            norm_sub, sub_notes = normalize_where(
+                sub,
+                resource=resource,
+                allowed_columns=allowed_columns,
+            )
+            if norm_sub is not None:
+                normalized.append(norm_sub)
+            notes.extend(sub_notes)
+        return {"op": "and", "conditions": normalized}, notes
+
+    if op not in _ALLOWED_OPS - frozenset({"and"}):
+        raise InvalidParameterError(f"不支持的 where 操作: {op!r}", param="where")
+
+    field = where.get("field")
+    if not field or not isinstance(field, str):
+        raise InvalidParameterError("条件需要 string 类型 field", param="where")
+
+    canonical, note = _normalize_leaf_field(
+        field,
+        resource=resource,
+        allowed_columns=allowed_columns,
+    )
+    out = dict(where)
+    out["field"] = canonical
+    notes = [note] if note else []
+    return out, notes
 
 
 def _validate_field(field: str, allowed_columns: frozenset[str]) -> None:
@@ -19,7 +114,7 @@ def _validate_field(field: str, allowed_columns: frozenset[str]) -> None:
 
 def _apply_condition(df: pd.DataFrame, condition: dict, allowed_columns: frozenset[str]) -> pd.Series:
     op = condition.get("op")
-    if op not in _ALLOWED_OPS - {"and"}:
+    if op not in _ALLOWED_OPS:
         raise InvalidParameterError(f"不支持的 where 操作: {op!r}", param="where")
 
     if op == "and":
@@ -53,10 +148,18 @@ def _apply_condition(df: pd.DataFrame, condition: dict, allowed_columns: frozens
     raise InvalidParameterError(f"未处理的 where 操作: {op!r}", param="where")
 
 
-def apply_where(df: pd.DataFrame, where: dict | None, allowed_columns: list[str]) -> pd.DataFrame:
+def apply_where(
+    df: pd.DataFrame,
+    where: dict | None,
+    allowed_columns: list[str],
+    *,
+    resource: str | None = None,
+) -> tuple[pd.DataFrame, list[str]]:
     """应用安全 where DSL；字段须在 allowed_columns 白名单内。"""
     if not where:
-        return df
+        return df, []
+
+    where, notes = normalize_where(where, resource=resource, allowed_columns=allowed_columns)
     allowed = frozenset(allowed_columns)
     mask = _apply_condition(df, where, allowed)
-    return df.loc[mask].copy()
+    return df.loc[mask].copy(), notes

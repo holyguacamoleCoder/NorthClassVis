@@ -19,6 +19,7 @@ from ..handlers.data_tools import (
     run_resolve_dataset_binding,
 )
 from ..handlers.load_skill import run_load_skill
+from ..handlers.load_reference import run_load_reference
 from ..handlers.save_memory import run_save_memory
 from ..handlers.todo_write import run_todo_write
 
@@ -58,7 +59,9 @@ _WHERE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "description": (
         "Safe filter DSL. Leaf: {op, field, value} with op in eq|in|gte|lte. "
-        "Combine: {op: and, conditions: [<leaf>, ...]}. Fields must exist on the resource."
+        "Combine: {op: and, conditions: [<leaf>, ...]}. Fields must exist on the resource. "
+        "Week ranges: use week_aggregation + week_range=[start,end], or where on week_index "
+        "(week aliases to week_index on week_aggregation only; submit_record has no week column)."
     ),
     "properties": {
         "op": {"type": "string", "enum": ["eq", "in", "gte", "lte", "and"]},
@@ -172,6 +175,8 @@ GLOBAL_ARG_ALIASES: dict[str, str] = {
     "file": "path",
     "skill_name": "name",
     "skill": "name",
+    "reference": "name",
+    "reference_name": "name",
 }
 
 CONCURRENCY_LIMIT = 10
@@ -185,6 +190,7 @@ CONCURRENCY_SAFE_TOOL = frozenset({
     "aggregate_data",
     "get_current_filter_context",
     "build_visual_links",
+    "load_reference",
 })
 CONCURRENCY_UNSAFE_TOOL = frozenset({"write_file", "edit_file"})
 
@@ -357,6 +363,21 @@ _LOAD_SKILL_PARAMS = {
     "type": "object",
     "properties": {
         "name": _skill_name_property(),
+    },
+    "required": ["name"],
+}
+
+_LOAD_REFERENCE_PARAMS = {
+    "type": "object",
+    "properties": {
+        "name": {
+            "type": "string",
+            "description": (
+                "Reference id/path to pin in system prompt. "
+                "Examples: student, class, major, freeform, "
+                "report-writing/references/student.md."
+            ),
+        },
     },
     "required": ["name"],
 }
@@ -684,6 +705,18 @@ MANIFEST: tuple[ToolDefinition, ...] = (
         ),
         parameters=_LOAD_SKILL_PARAMS,
         handler=run_load_skill,
+        pass_through_kwargs=True,
+    ),
+    ToolDefinition(
+        name="load_reference",
+        description=(
+            "Progressively load a reference markdown and pin it in system prompt section "
+            "「已加载参考」 for this session. Use when: standard student/class/major/freeform "
+            "report requires tier-specific rules. Do NOT use to discover schema or compute "
+            "metrics (inspect_schema/query_data/aggregate_data)."
+        ),
+        parameters=_LOAD_REFERENCE_PARAMS,
+        handler=run_load_reference,
         pass_through_kwargs=True,
     ),
     ToolDefinition(

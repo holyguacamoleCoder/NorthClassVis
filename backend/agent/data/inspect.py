@@ -36,10 +36,19 @@ def inspect_resource(
         for i in range(len(sample_df))
     ]
 
-    return {
+    payload: dict[str, Any] = {
         "resource": resource,
         "columns": columns,
         "sample_rows": sample_rows,
         "row_count_estimate": len(df),
         "column_hint": list(RESOURCE_COLUMNS.get(resource, ())),
     }
+    if resource == "submit_record":
+        payload["filter_hint"] = (
+            "无 week/week_index 列；按周次分析请用 week_aggregation + week_range 或 where.week_index。"
+        )
+    elif resource == "week_aggregation":
+        payload["filter_hint"] = (
+            "周次列名为 week_index（where 中可写 week，会自动映射）；推荐传 week_range=[start,end]。"
+        )
+    return payload

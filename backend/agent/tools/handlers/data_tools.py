@@ -295,6 +295,10 @@ def run_query_data(
         example = None
         if exc.param == "where":
             next_tool = "inspect_schema then fix where field names"
+            if "week_aggregation" in str(exc) or "week_index" in str(exc):
+                example = (
+                    'resource="week_aggregation", classes=["Class2"], week_range=[13, 15]'
+                )
         elif exc.param == "limit":
             next_tool = "query_data"
             example = 'omit limit for full scan; or limit>=1 for preview'

@@ -152,7 +152,7 @@ def execute_query(
         allowed = list(df.columns)
 
     rows_scanned = len(df)
-    working = apply_where(df, spec.where, allowed)
+    working, where_notes = apply_where(df, spec.where, allowed, resource=spec.resource)
     rows_scanned = len(working)
 
     if spec.group_by:
@@ -183,5 +183,9 @@ def execute_query(
         result.setdefault("meta", {})["query_limit"] = int(spec.limit)
     if ui_selection_count is not None:
         result.setdefault("meta", {})["ui_selected_students"] = ui_selection_count
+    if where_notes:
+        meta = result.setdefault("meta", {})
+        existing = list(meta.get("normalization_notes") or [])
+        meta["normalization_notes"] = existing + where_notes
     validate_tabular_result(result)
     return result

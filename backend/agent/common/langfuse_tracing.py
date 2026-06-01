@@ -10,6 +10,7 @@ When the SDK is missing or keys are unset, all context managers are no-ops.
 from __future__ import annotations
 
 import os
+import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Iterator
@@ -151,6 +152,52 @@ def flush() -> None:
         pass
 
 
+def _new_trace_context() -> dict[str, str]:
+    """Force a fresh Langfuse/OTel trace (one per user message / HTTP job)."""
+    try:
+        from langfuse import create_trace_id  # type: ignore
+
+        trace_id = create_trace_id()
+    except Exception:
+        trace_id = uuid.uuid4().hex
+    parent_span_id = uuid.uuid4().hex[:16]
+    return {"trace_id": trace_id, "parent_span_id": parent_span_id}
+
+
+def _apply_root_trace_labels(
+    client: Any,
+    root: Any,
+    *,
+    name: str,
+    session_id: str | None,
+    metadata: dict[str, Any],
+    input_value: str,
+) -> None:
+    """Set trace-level name/session so the Langfuse UI lists one trace per job."""
+    for caller in (
+        lambda: client.update_current_trace(
+            name=name,
+            session_id=session_id,
+            metadata=metadata,
+            input=input_value,
+        ),
+        lambda: root.update_trace(
+            name=name,
+            session_id=session_id,
+            metadata=metadata,
+            input=input_value,
+        ),
+        lambda: root.update(
+            metadata={**metadata, "trace_name": name, "session_id": session_id},
+        ),
+    ):
+        try:
+            caller()
+            return
+        except Exception:
+            continue
+
+
 def _usage_details(resp: Any) -> dict[str, int] | None:
     usage = getattr(resp, "usage", None)
     if usage is None:
@@ -214,16 +261,31 @@ def user_turn_trace(
     )
 
     if _use_modern_api:
+        trace_context = _new_trace_context()
+        trace_label = f"job-{job_id}" if job_id else name
         try:
             from langfuse import propagate_attributes  # type: ignore
 
-            with propagate_attributes(session_id=session_id, metadata=meta):
+            with propagate_attributes(
+                session_id=session_id,
+                metadata=meta,
+                trace_name=trace_label,
+            ):
                 with client.start_as_current_observation(
                     as_type="span",
                     name=name,
                     input=inp,
                     metadata=meta,
+                    trace_context=trace_context,
                 ) as root:
+                    _apply_root_trace_labels(
+                        client,
+                        root,
+                        name=trace_label,
+                        session_id=session_id,
+                        metadata=meta,
+                        input_value=inp,
+                    )
                     try:
                         yield
                     finally:
@@ -232,6 +294,18 @@ def user_turn_trace(
                                 "continue_reason": stats.get("continue_reason"),
                                 "turns": stats.get("turns"),
                             }
+                        )
+                        _apply_root_trace_labels(
+                            client,
+                            root,
+                            name=trace_label,
+                            session_id=session_id,
+                            metadata={
+                                **meta,
+                                "continue_reason": stats.get("continue_reason"),
+                                "turns": stats.get("turns"),
+                            },
+                            input_value=inp,
                         )
         finally:
             _trace_stats.reset(token_stats)
@@ -328,7 +402,10 @@ def llm_generation(
                 raise
         return
 
-    trace = _v2_trace.get() or client.trace(name=name)
+    trace = _v2_trace.get()
+    if trace is None:
+        yield None
+        return
     gen = trace.generation(name=name, model=model, input=inp, metadata=meta)
     try:
         yield gen
@@ -391,7 +468,10 @@ def tool_span(*, tool: str, params: dict[str, Any]) -> Iterator[Any]:
                 raise
         return
 
-    trace = _v2_trace.get() or client.trace(name=f"tool:{tool}")
+    trace = _v2_trace.get()
+    if trace is None:
+        yield None
+        return
     span = trace.span(name=tool or "unknown", input=safe)
     try:
         yield span
