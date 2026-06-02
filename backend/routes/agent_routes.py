@@ -68,6 +68,75 @@ class AgentRoutes:
             view_func=self.get_deliverable,
             methods=["GET"],
         )
+        self.agent_bp.add_url_rule("/agent/memories", view_func=self.list_memories, methods=["GET"])
+        self.agent_bp.add_url_rule("/agent/memories", view_func=self.create_memory, methods=["POST"])
+        self.agent_bp.add_url_rule(
+            "/agent/memories/<name>",
+            view_func=self.get_memory,
+            methods=["GET"],
+        )
+        self.agent_bp.add_url_rule(
+            "/agent/memories/<name>",
+            view_func=self.patch_memory,
+            methods=["PATCH"],
+        )
+        self.agent_bp.add_url_rule(
+            "/agent/memories/<name>",
+            view_func=self.delete_memory,
+            methods=["DELETE"],
+        )
+
+    def list_memories(self):
+        return jsonify({"memories": self.service.list_memories()})
+
+    def create_memory(self):
+        body = request.get_json(silent=True) or {}
+        name = body.get("name")
+        if not name or not str(name).strip():
+            return jsonify({"error": "name is required"}), 400
+        enabled_raw = body.get("enabled")
+        enabled = True if enabled_raw is None else bool(enabled_raw)
+        message = self.service.create_memory(
+            str(name).strip(),
+            description=str(body.get("description") or "").strip(),
+            mem_type=str(body.get("type") or "user").strip(),
+            content=str(body.get("content") or "").strip(),
+            enabled=enabled,
+        )
+        if message.startswith("Error:"):
+            return jsonify({"error": message}), 400
+        entry = self.service.get_memory(str(name).strip())
+        return jsonify({"ok": True, "message": message, "memory": entry}), 201
+
+    def get_memory(self, name: str):
+        entry = self.service.get_memory(name)
+        if entry is None:
+            return jsonify({"error": "memory not found"}), 404
+        return jsonify(entry)
+
+    def patch_memory(self, name: str):
+        body = request.get_json(silent=True) or {}
+        enabled = body.get("enabled") if "enabled" in body else None
+        if enabled is not None:
+            enabled = bool(enabled)
+        message = self.service.update_memory(
+            name,
+            content=body.get("content"),
+            description=body.get("description"),
+            mem_type=body.get("type"),
+            enabled=enabled,
+        )
+        if message.startswith("Error:"):
+            code = 404 if "not found" in message.lower() else 400
+            return jsonify({"error": message}), code
+        entry = self.service.get_memory(name)
+        return jsonify({"ok": True, "message": message, "memory": entry})
+
+    def delete_memory(self, name: str):
+        message = self.service.delete_memory(name)
+        if message.startswith("Error:"):
+            return jsonify({"error": message}), 404
+        return jsonify({"ok": True, "message": message})
 
     def get_deliverable(self, rel_path: str):
         try:

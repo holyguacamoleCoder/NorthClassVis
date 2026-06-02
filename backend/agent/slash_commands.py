@@ -15,7 +15,12 @@ if TYPE_CHECKING:
 SKILL_COMMAND_HELP = (
     "**/skill** — 列出可用技能\n"
     "**/skill `name`** — 加载技能（如 `analysis-class`、`data-exploration`）\n"
-    "已加载技能会写入本会话，并在后续每轮 system prompt 的「已加载技能」区注入全文。"
+    "已加载技能会写入本会话；SKILL 全文在 load_skill 的 tool result 中（会话内 pin，不压缩）。"
+)
+
+MEMORY_COMMAND_HELP = (
+    "**/memories** — 列出跨会话持久记忆（`backend/.agent/memory/`）\n"
+    "Agent 在 analyze/produce 下可用 **memory** / **save_memory** 工具写入。"
 )
 
 
@@ -34,12 +39,16 @@ def parse_slash_command(text: str) -> SlashCommand | None:
     head = parts[0].lower()
     if head in ("/skill", "/skills"):
         return SlashCommand(kind="skill", args=parts[1:])
+    if head in ("/memories", "/memory"):
+        return SlashCommand(kind="memories", args=parts[1:])
     return None
 
 
 def list_skills_payload(registry: SkillRegistry) -> list[dict[str, str]]:
+    from skills.registry import catalog_skill_names
+
     rows: list[dict[str, str]] = []
-    for name in sorted(registry.documents):
+    for name in catalog_skill_names(registry):
         doc = registry.documents[name]
         rows.append(
             {
@@ -48,6 +57,27 @@ def list_skills_payload(registry: SkillRegistry) -> list[dict[str, str]]:
             }
         )
     return rows
+
+
+def _format_memories_list() -> str:
+    from common.memory import get_memory_manager
+
+    mgr = get_memory_manager()
+    mgr.load_all()
+    entries = mgr.list_entries()
+    lines = ["**持久记忆**（跨会话）：", ""]
+    if not entries:
+        lines.append("_（暂无 — Agent 可在 analyze/produce 下使用 memory 工具保存）_")
+    else:
+        current_type = None
+        for row in entries:
+            if row["type"] != current_type:
+                current_type = row["type"]
+                lines.append(f"**[{current_type}]**")
+            desc = row.get("description") or row.get("preview") or ""
+            lines.append(f"- `{row['name']}` — {desc}")
+    lines.extend(["", MEMORY_COMMAND_HELP])
+    return "\n".join(lines)
 
 
 def _format_skill_list(registry: SkillRegistry, loaded: list[str]) -> str:
@@ -79,7 +109,9 @@ def execute_slash_command(
     loaded_set = set(session.loaded_skills or [])
     trace_steps: list[dict[str, Any]] = []
 
-    if command.kind == "skill":
+    if command.kind == "memories":
+        answer = _format_memories_list()
+    elif command.kind == "skill":
         if not command.args or command.args[0].lower() in (
             "list",
             "ls",
@@ -104,7 +136,7 @@ def execute_slash_command(
             elif "[Skill active:" in tool_text:
                 answer = (
                     f"技能 `{skill_name}` 已在本会话加载。\n\n"
-                    "正文见 system prompt「已加载技能」区；可直接继续分析或写报告。"
+                    "正文见先前 load_skill 的 tool result；可直接继续分析或写报告。"
                 )
                 trace_steps.append(
                     build_tool_step(
@@ -116,8 +148,7 @@ def execute_slash_command(
             else:
                 answer = (
                     f"已加载技能 **`{skill_name}`**。\n\n"
-                    "流程已固定到 system prompt「已加载技能」区（每轮保留）。"
-                    "按技能章节与工具链继续即可。"
+                    "SKILL 全文已写入 tool result（会话内 pin）。按技能章节与工具链继续即可。"
                 )
                 trace_steps.append(
                     build_tool_step(
@@ -149,4 +180,5 @@ def execute_slash_command(
         "todo_items": list(session.todo_items or []),
         "filter_context": session.filter_context,
         "loaded_skills": sorted(loaded_set),
+        "loaded_references": list(session.loaded_references or []),
     }

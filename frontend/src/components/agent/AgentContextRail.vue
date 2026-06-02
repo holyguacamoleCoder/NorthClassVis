@@ -47,6 +47,20 @@
       <AgentSkillTags :skills="loadedSkills" />
     </section>
 
+    <section class="agent-rail-section agent-rail-section--memories">
+      <div class="agent-rail-heading-row">
+        <h3 class="agent-rail-heading">{{ ui.memoryRail }}</h3>
+        <button type="button" class="agent-rail-text-btn" @click="$emit('manage-memories')">
+          {{ ui.memoryRailManage }}
+        </button>
+      </div>
+      <AgentMemoriesRail
+        ref="memoriesRail"
+        @edit="$emit('edit-memory', $event)"
+        @changed="$emit('memories-changed')"
+      />
+    </section>
+
     <section class="agent-rail-section agent-rail-section--meta">
       <h3 class="agent-rail-heading">{{ ui.railMeta }}</h3>
       <div class="agent-rail-meta-row">
@@ -64,17 +78,18 @@ import { planProgressLabel, todoIcon } from '@/utils/agentPlanUtils.js'
 import AgentScopeFilter from '@/components/agent/AgentScopeFilter.vue'
 import AgentScatterRail from '@/components/agent/AgentScatterRail.vue'
 import AgentSkillTags from '@/components/agent/AgentSkillTags.vue'
+import AgentMemoriesRail from '@/components/agent/AgentMemoriesRail.vue'
 
 export default {
   name: 'AgentContextRail',
-  components: { AgentScopeFilter, AgentScatterRail, AgentSkillTags },
+  components: { AgentScopeFilter, AgentScatterRail, AgentSkillTags, AgentMemoriesRail },
   props: {
     permissionMode: { type: String, default: 'analyze' },
     todoItems: { type: Array, default: () => [] },
     loadedSkills: { type: Array, default: () => [] },
     messageCount: { type: Number, default: 0 },
   },
-  emits: ['update:permissionMode', 'open-dashboard'],
+  emits: ['update:permissionMode', 'open-dashboard', 'memories-changed', 'manage-memories', 'edit-memory'],
   data() {
     return { ui: AGENT_UI, todoIcon }
   },
@@ -100,6 +115,9 @@ export default {
     async onScopeApplied() {
       await this.$store.dispatch('fetchClusterData')
     },
+    reloadMemories() {
+      this.$refs.memoriesRail?.reload()
+    },
   },
 }
 </script>
@@ -122,7 +140,21 @@ export default {
   &--scatter {
     margin-bottom: 16px;
   }
+  &--memories {
+    margin-bottom: 16px;
+  }
   &--meta {
+    margin-bottom: 0;
+  }
+}
+
+.agent-rail-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  .agent-rail-heading {
     margin-bottom: 0;
   }
 }
@@ -134,6 +166,24 @@ export default {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin: 0 0 10px;
+}
+
+.agent-rail-text-btn {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid #dde3ea;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  color: #555;
+  cursor: pointer;
+  line-height: 1.4;
+  &:hover {
+    background: #f5f8fb;
+    border-color: #c5d0dc;
+    color: #333;
+  }
 }
 
 .agent-rail-plan-progress {

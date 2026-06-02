@@ -110,6 +110,11 @@
       @preview="$emit('report-preview', $event)"
       @download="$emit('report-download', $event)"
     />
+    <AgentMemorySaved
+      v-if="showMemorySaved(msg)"
+      class="agent-reveal"
+      :items="msg.memory_saved"
+    />
     <div
       v-if="showVisualLinks(msg)"
       class="agent-visual-links agent-reveal"
@@ -131,6 +136,7 @@ import AgentMarkdown from '@/components/agent/AgentMarkdown.vue'
 import AgentStreamingMarkdown from '@/components/agent/AgentStreamingMarkdown.vue'
 import AgentProcessTimeline from '@/components/agent/AgentProcessTimeline.vue'
 import AgentDeliverableLinks from '@/components/agent/AgentDeliverableLinks.vue'
+import AgentMemorySaved from '@/components/agent/AgentMemorySaved.vue'
 import { AGENT_UI } from '@/constants/agentUiText.js'
 import { processTimelineItems, processTimelineStats } from '@/utils/agentTimeline.js'
 import { stripVisualLinkMarkdown, findVisualLinkFromMarkdownClick } from '@/utils/visualLinks.js'
@@ -143,6 +149,7 @@ export default {
     AgentStreamingMarkdown,
     AgentProcessTimeline,
     AgentDeliverableLinks,
+    AgentMemorySaved,
   },
   props: {
     msg: { type: Object, required: true },
@@ -208,6 +215,12 @@ export default {
       if (msg.streaming) return false
       const links = msg.report_links || []
       if (!links.length) return false
+      return this.revealPhase(msg) >= 1
+    },
+    showMemorySaved(msg) {
+      if (msg.streaming) return false
+      const items = msg.memory_saved || []
+      if (!items.length) return false
       return this.revealPhase(msg) >= 1
     },
     showVisualLinks(msg) {

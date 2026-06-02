@@ -136,8 +136,16 @@ export default {
     finalizeStreamingMessage(idx, res) {
       const msg = this.messages[idx]
       if (!msg) return
+      const preservedMemory = msg.memory_saved
       const final = legacyToAssistantMessage(res)
       Object.assign(msg, final, { streaming: false, revealPhase: 1, statusHint: '', _runningTool: null })
+      if (
+        Array.isArray(preservedMemory) &&
+        preservedMemory.length &&
+        !(final.memory_saved && final.memory_saved.length)
+      ) {
+        msg.memory_saved = preservedMemory
+      }
       if (res?.filter_context) {
         this.syncNavScopeFromFilterContext(res.filter_context)
       }

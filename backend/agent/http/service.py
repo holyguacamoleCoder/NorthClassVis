@@ -108,6 +108,61 @@ class AgentHttpService:
     def list_skills(self) -> list[dict[str, str]]:
         return list_skills_payload(self.skills)
 
+    def list_memories(self) -> list[dict[str, Any]]:
+        mgr = get_memory_manager()
+        mgr.load_all()
+        return mgr.list_entries()
+
+    def get_memory(self, name: str) -> dict[str, Any] | None:
+        mgr = get_memory_manager()
+        mgr.load_all()
+        return mgr.get_entry(name)
+
+    def delete_memory(self, name: str) -> str:
+        mgr = get_memory_manager()
+        result = mgr.delete_entry(name)
+        if not result.startswith("Error:"):
+            mgr.load_all()
+        return result
+
+    def create_memory(
+        self,
+        name: str,
+        *,
+        description: str = "",
+        mem_type: str = "user",
+        content: str = "",
+        enabled: bool = True,
+    ) -> str:
+        mgr = get_memory_manager()
+        result = mgr.save_memory(
+            name, description, mem_type, content, enabled=enabled
+        )
+        if not result.startswith("Error:"):
+            mgr.load_all()
+        return result
+
+    def update_memory(
+        self,
+        name: str,
+        *,
+        content: str | None = None,
+        description: str | None = None,
+        mem_type: str | None = None,
+        enabled: bool | None = None,
+    ) -> str:
+        mgr = get_memory_manager()
+        result = mgr.update_entry(
+            name,
+            content=content,
+            description=description,
+            mem_type=mem_type,
+            enabled=enabled,
+        )
+        if not result.startswith("Error:"):
+            mgr.load_all()
+        return result
+
     def list_sessions(self) -> list[dict[str, Any]]:
         return [meta.to_dict() for meta in self.session_manager.list_sessions()]
 
@@ -312,6 +367,11 @@ class AgentHttpService:
                     job.progress,
                     {"loaded_skills": list(result["loaded_skills"])},
                 )
+            if result.get("loaded_references") is not None:
+                merge_progress_patch(
+                    job.progress,
+                    {"loaded_references": list(result["loaded_references"])},
+                )
             if result.get("todo_items") is not None:
                 merge_progress_patch(
                     job.progress,
@@ -340,7 +400,7 @@ class AgentHttpService:
 
         self.approval_store.bind_job(job_id)
         try:
-            continue_reason, loaded_skills = self._execute_turn(
+            continue_reason, loaded_skills, loaded_references = self._execute_turn(
                 session_id,
                 content,
                 job_id=job_id,
@@ -350,6 +410,7 @@ class AgentHttpService:
                 session,
                 continue_reason=continue_reason,
                 loaded_skills=loaded_skills,
+                loaded_references=loaded_references,
             )
             with self._jobs_lock:
                 job = self._jobs.get(job_id)
@@ -407,16 +468,20 @@ class AgentHttpService:
         content: str,
         *,
         job_id: str | None = None,
-    ) -> tuple[str | None, set[str]]:
+    ) -> tuple[str | None, set[str], set[str]]:
         progress_cb = None
         if job_id:
             session = self.session_manager.active
             initial_skills = (
                 list(session.loaded_skills) if session is not None else []
             )
+            initial_references = (
+                list(session.loaded_references) if session is not None else []
+            )
             progress_cb = make_job_progress_handler(
                 lambda patch: self._patch_job_progress(job_id, patch),
                 initial_loaded_skills=initial_skills,
+                initial_loaded_references=initial_references,
             )
 
         self._ensure_active(session_id)
@@ -454,9 +519,10 @@ class AgentHttpService:
                     raise TurnCancelled()
                 continue_reason = loop_state.continue_reason
                 loaded_skills = set(loop_state.loaded_skills)
+                loaded_references = set(loop_state.loaded_references)
                 self.session_manager.sync_loop_state(loop_state)
                 self.session_manager.persist_active()
-                return continue_reason, loaded_skills
+                return continue_reason, loaded_skills, loaded_references
         except TurnCancelled:
             self.session_manager.restore_turn_snapshot(snapshot)
             self.session_manager.persist_active()
@@ -487,6 +553,7 @@ class AgentHttpService:
             "messages": serialize_messages(session.messages),
             "todo_items": list(session.todo_items or []),
             "loaded_skills": list(session.loaded_skills or []),
+            "loaded_references": list(session.loaded_references or []),
             "filter_context": session.filter_context,
         }
 

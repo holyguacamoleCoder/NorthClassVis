@@ -42,6 +42,14 @@ def _skill_name_from_params(params: dict[str, Any]) -> str:
     return ""
 
 
+def _reference_name_from_params(params: dict[str, Any]) -> str:
+    for key in ("name", "reference_name", "reference"):
+        value = params.get(key)
+        if value:
+            return str(value).strip()
+    return ""
+
+
 def _todo_items_from_params(params: dict[str, Any]) -> list[dict[str, str]]:
     raw_items = params.get("items")
     if not isinstance(raw_items, list):
@@ -94,10 +102,20 @@ def _enrich_tool_step(step: dict[str, Any]) -> dict[str, Any]:
             step["skill_name"] = skill_name
             if status == "ok":
                 summary = str(step.get("summary") or "")
-                if "already loaded" in summary.lower():
+                if (
+                    "already loaded" in summary.lower()
+                    or "已在本会话加载" in summary
+                ):
                     step["summary"] = f"技能 {skill_name} 已在本会话加载"
                 else:
                     step["summary"] = f"已加载技能 {skill_name}"
+    elif tool_name == "load_reference":
+        ref_name = _reference_name_from_params(params)
+        if ref_name:
+            step["kind"] = "reference"
+            step["reference_name"] = ref_name
+            if status == "ok":
+                step["summary"] = f"已加载参考 {ref_name}"
     elif tool_name in ("query_data", "aggregate_data", "inspect_schema"):
         resource = str(params.get("resource") or "").strip()
         if resource:
@@ -105,6 +123,21 @@ def _enrich_tool_step(step: dict[str, Any]) -> dict[str, Any]:
             step["resource"] = resource
         if status in ("fail", "denied", "blocked") and step.get("error"):
             step["summary"] = _summarize_tool_error(str(step["error"]))
+    elif tool_name in ("memory", "save_memory"):
+        from ..memory_delivery import memory_event_from_tool
+
+        event = memory_event_from_tool(
+            tool_name,
+            str(step.get("raw_content") or ""),
+            params,
+        )
+        if event:
+            step["kind"] = "memory"
+            step["memory_event"] = event
+            if status == "ok":
+                label = event.get("label") or event.get("name") or event.get("target") or "memory"
+                action = event.get("action") or "saved"
+                step["summary"] = f"已记住：{label}（{action}）"
     return step
 
 
@@ -132,9 +165,15 @@ def _summarize_tool_content(tool_name: str, content: str, max_len: int = 160) ->
         if text.startswith("[Plan updated: empty]"):
             return "计划已清空"
     if tool_name == "load_skill":
+        fresh = re.search(r'✅ Skill "([^"]+)"', text)
+        if fresh:
+            return f"已加载技能 {fresh.group(1).strip()}"
         loaded = re.search(r"\[Skill loaded:\s*([^\]]+)\]", text)
         if loaded:
             return f"已加载技能 {loaded.group(1).strip()}"
+        active = re.search(r"\[Skill active:\s*([^\]]+)\]", text)
+        if active:
+            return f"技能 {active.group(1).strip()} 已在本会话加载"
         if "already loaded" in text.lower():
             return "技能已在本会话加载"
     if tool_name == "build_visual_links":
@@ -144,6 +183,13 @@ def _summarize_tool_content(tool_name: str, content: str, max_len: int = 160) ->
             return f"生成 {len(links)} 个图表入口"
         except json.JSONDecodeError:
             pass
+    if tool_name in ("memory", "save_memory"):
+        from ..memory_delivery import memory_event_from_tool
+
+        event = memory_event_from_tool(tool_name, text, {})
+        if event and not text.startswith("Error:"):
+            label = event.get("label") or event.get("name") or event.get("target") or "memory"
+            return f"已记住：{label}"
     if tool_name in ("query_data", "aggregate_data", "inspect_schema"):
         if text.startswith("Error:"):
             return _summarize_tool_error(text, max_len=max_len)
@@ -260,6 +306,7 @@ def build_tool_step(
         "params": dict(params or {}),
         "summary": _summarize_tool_content(tool_name, content),
         "status": status,
+        "raw_content": content,
     }
     if call_id:
         step["call_id"] = call_id
@@ -530,6 +577,7 @@ def adapt_turn_response(
     *,
     continue_reason: str | None = None,
     loaded_skills: set[str] | None = None,
+    loaded_references: set[str] | None = None,
 ) -> dict[str, Any]:
     legacy = adapt_legacy_query_response(
         session.messages,
@@ -544,4 +592,5 @@ def adapt_turn_response(
         "todo_items": list(session.todo_items or []),
         "filter_context": session.filter_context,
         "loaded_skills": sorted(loaded_skills or []),
+        "loaded_references": sorted(loaded_references or []),
     }

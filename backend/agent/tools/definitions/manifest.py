@@ -20,6 +20,7 @@ from ..handlers.data_tools import (
 )
 from ..handlers.load_skill import run_load_skill
 from ..handlers.load_reference import run_load_reference
+from ..handlers.memory import run_memory
 from ..handlers.save_memory import run_save_memory
 from ..handlers.todo_write import run_todo_write
 
@@ -141,9 +142,9 @@ def _resource_property(*, include_enum: bool = True) -> dict[str, Any]:
 
 
 def _skill_name_property() -> dict[str, Any]:
-    from skills import get_registry
+    from skills.registry import catalog_skill_names, get_registry
 
-    names = sorted(get_registry().documents.keys())
+    names = catalog_skill_names(get_registry())
     prop: dict[str, Any] = {
         "type": "string",
         "description": (
@@ -382,6 +383,36 @@ _LOAD_REFERENCE_PARAMS = {
     "required": ["name"],
 }
 
+_MEMORY_PARAMS = {
+    "type": "object",
+    "properties": {
+        "action": {
+            "type": "string",
+            "enum": ["add", "replace", "remove"],
+            "description": "add=append fact; replace=swap old_text→content; remove=delete by old_text",
+        },
+        "target": {
+            "type": "string",
+            "enum": ["user", "memory"],
+            "description": (
+                "user=teacher preferences/identity; "
+                "memory=workflow, environment, and project conventions"
+            ),
+        },
+        "content": {
+            "type": "string",
+            "description": "Entry text. Required for add and replace.",
+        },
+        "old_text": {
+            "type": "string",
+            "description": (
+                "Short unique substring identifying an existing line (required for replace/remove)."
+            ),
+        },
+    },
+    "required": ["action", "target"],
+}
+
 _SAVE_MEMORY_PARAMS = {
     "type": "object",
     "properties": {
@@ -430,7 +461,16 @@ _LIST_DATASETS_PARAMS = {
 
 _GET_FILTER_CONTEXT_PARAMS = {
     "type": "object",
-    "properties": {},
+    "properties": {
+        "include_student_ids": {
+            "type": "boolean",
+            "description": (
+                "If true, return the full selected_student_ids list. "
+                "Default false (summary only: count + small preview). "
+                "query_data already applies Nav selection when student_ids are omitted."
+            ),
+        },
+    },
 }
 
 _BUILD_VISUAL_LINKS_PARAMS = {
@@ -696,11 +736,10 @@ MANIFEST: tuple[ToolDefinition, ...] = (
     ToolDefinition(
         name="load_skill",
         description=(
-            "Load full SKILL.md instructions for a fixed workflow (e.g. report template, SOP). "
-            "Use when: the task explicitly needs steps from a named skill in the system prompt. "
+            "Load full SKILL.md into the tool result (pinned in history, not context-compacted). "
+            "Use when: the task needs steps from a named skill in the catalog. "
             "Do NOT use to discover table columns (inspect_schema) or run statistics (query_data); "
-            "do not reload a skill already loaded this session (tool returns a reminder); "
-            "if the system prompt already summarizes the skill, query first, load only if stuck. "
+            "do not reload a skill already loaded this session (tool returns a reminder). "
             "Table structure → inspect_schema; numbers → query_data / aggregate_data."
         ),
         parameters=_LOAD_SKILL_PARAMS,
@@ -710,26 +749,38 @@ MANIFEST: tuple[ToolDefinition, ...] = (
     ToolDefinition(
         name="load_reference",
         description=(
-            "Progressively load a reference markdown and pin it in system prompt section "
-            "「已加载参考」 for this session. Use when: standard student/class/major/freeform "
-            "report requires tier-specific rules. Do NOT use to discover schema or compute "
-            "metrics (inspect_schema/query_data/aggregate_data)."
+            "Load a reference markdown into the tool result (pinned in history, not compacted). "
+            "Use when: standard student/class/major/freeform report needs tier-specific rules. "
+            "Do NOT use to discover schema or compute metrics (inspect_schema/query_data/aggregate_data)."
         ),
         parameters=_LOAD_REFERENCE_PARAMS,
         handler=run_load_reference,
         pass_through_kwargs=True,
     ),
     ToolDefinition(
+        name="memory",
+        description=(
+            "Save durable facts to persistent memory (analyze or produce only). Memory is injected "
+            "into future turns — keep entries compact and still relevant later.\n\n"
+            "WHEN TO SAVE (proactively when appropriate):\n"
+            "- Teacher corrects you or says 'remember this'\n"
+            "- Preferences, habits, default class/report style\n"
+            "- Workflow or project conventions not in data/meta files\n\n"
+            "TARGETS: user (teacher) | memory (agent/project notes).\n"
+            "ACTIONS: add | replace (needs old_text) | remove (needs old_text).\n\n"
+            "Do NOT save: CSV schemas, field lists, stats, session TODO, secrets. "
+            "Put analysis conclusions in reports/, not memory."
+        ),
+        parameters=_MEMORY_PARAMS,
+        handler=run_memory,
+    ),
+    ToolDefinition(
         name="save_memory",
         description=(
-            "Save cross-session memory to .memory/ (analyze or produce only). "
-            "Use when: explicit teacher preferences (report format, default class); corrections to "
-            "methodology; project conventions not in catalog; external doc/system links. "
+            "Save a named cross-session memory file (analyze or produce). Prefer `memory` for "
+            "rolling teacher/project notes. Use save_memory for a distinct topic with its own id. "
             "Types: user | feedback | project | reference. "
-            "Do NOT save: CSV column layouts, field lists, or stats (use inspect_schema/query_data/reports); "
-            "current-session TODO/progress; secrets or credentials. "
-            "Analysis conclusions belong in reports; memories are preferences and conventions. "
-            "Same name overwrites prior file; saved content appears in future system prompts."
+            "Do NOT save: CSV layouts, stats, TODO, secrets. Same name overwrites the file."
         ),
         parameters=_SAVE_MEMORY_PARAMS,
         handler=run_save_memory,
@@ -739,11 +790,11 @@ MANIFEST: tuple[ToolDefinition, ...] = (
     ToolDefinition(
         name="get_current_filter_context",
         description=(
-            "Return the current analysis scope (classes, majors, week_range, selected students). "
-            "Use when: multi-class or week-range questions; confirming Nav scope before query_data; "
-            "consult mode scope introspection. "
-            "Does NOT compute metrics or query tables. "
-            "Nav scope is also auto-applied to query_data/inspect_schema when classes/majors are omitted."
+            "Return the current Nav analysis scope (classes, majors, week_range, selected count). "
+            "By default omits full student ID lists; set include_student_ids=true only when you "
+            "must enumerate IDs (e.g. paste into a report appendix). "
+            "query_data/inspect_schema auto-apply Nav student_ids when classes/majors are omitted. "
+            "Does NOT compute metrics or query tables."
         ),
         parameters=_GET_FILTER_CONTEXT_PARAMS,
         handler=run_get_current_filter_context,

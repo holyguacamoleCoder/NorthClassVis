@@ -46,6 +46,15 @@
             >
               会话
             </button>
+            <button
+              type="button"
+              class="agent-header-btn"
+              :title="ui.memoryRail"
+              @mousedown.stop
+              @click.stop="openMemoryModal()"
+            >
+              记忆
+            </button>
           </div>
         </div>
         <div class="agent-panel-actions">
@@ -149,6 +158,13 @@
         </div>
       </div>
 
+      <AgentMemoriesModal
+        :open="memoryModal.open"
+        :initial-edit-name="memoryModal.editName"
+        :initial-create="memoryModal.create"
+        @close="closeMemoryModal"
+      />
+
       <AgentReportPreviewModal
         :open="reportPreview.open"
         :loading="reportPreview.loading"
@@ -184,6 +200,7 @@ import AgentStreamingMarkdown from '@/components/agent/AgentStreamingMarkdown.vu
 import AgentToolBubbles from '@/components/agent/AgentToolBubbles.vue'
 import AgentAssistantMessage from '@/components/agent/AgentAssistantMessage.vue'
 import AgentSidebar from '@/components/agent/AgentSidebar.vue'
+import AgentMemoriesModal from '@/components/agent/AgentMemoriesModal.vue'
 import AgentReportPreviewModal from '@/components/agent/AgentReportPreviewModal.vue'
 import agentChatCore from '@/mixins/agentChatCore.js'
 import { modeLabel } from '@/utils/agentAdapter.js'
@@ -198,6 +215,7 @@ export default {
     AgentToolBubbles,
     AgentAssistantMessage,
     AgentSidebar,
+    AgentMemoriesModal,
     AgentReportPreviewModal,
   },
   mixins: [agentChatCore],
@@ -219,6 +237,7 @@ export default {
       ui: AGENT_UI,
       sessionDrawerOpen: false,
       floatSessionOpen: false,
+      memoryModal: { open: false, editName: '', create: false },
       // 拖拽
       useDragPosition: false,
       dragLeft: 0,
@@ -285,6 +304,13 @@ export default {
     goPageMode() {
       this.$emit('close')
       this.$router.push('/agent')
+    },
+    openMemoryModal(create = false) {
+      this.floatSessionOpen = false
+      this.memoryModal = { open: true, editName: '', create: !!create }
+    },
+    closeMemoryModal() {
+      this.memoryModal = { open: false, editName: '', create: false }
     },
     startDrag(e) {
       if (!this.$refs.panel) return
@@ -393,6 +419,9 @@ export default {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  box-sizing: border-box;
 }
 
 .agent-pill {

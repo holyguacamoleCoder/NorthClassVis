@@ -134,6 +134,34 @@ export async function cancelAgentJob(jobId) {
   return res.data
 }
 
+export async function listAgentMemories() {
+  const res = await request.get('/agent/memories')
+  return res.data
+}
+
+export async function createAgentMemory(payload) {
+  const res = await request.post('/agent/memories', payload)
+  return res.data
+}
+
+export async function getAgentMemory(name) {
+  const encoded = encodeURIComponent(name)
+  const res = await request.get(`/agent/memories/${encoded}`)
+  return res.data
+}
+
+export async function updateAgentMemory(name, payload) {
+  const encoded = encodeURIComponent(name)
+  const res = await request.patch(`/agent/memories/${encoded}`, payload)
+  return res.data
+}
+
+export async function deleteAgentMemory(name) {
+  const encoded = encodeURIComponent(name)
+  const res = await request.delete(`/agent/memories/${encoded}`)
+  return res.data
+}
+
 export async function fetchDeliverable(relPath) {
   const encoded = String(relPath || '')
     .split('/')
@@ -181,6 +209,7 @@ export async function pollAgentJob(jobId, { onApproval, onProgress, shouldAbort 
         todo: p.todo_items || [],
         skills: p.loaded_skills || [],
         reports: p.report_links || [],
+        memories: p.memory_saved || [],
       })
       if (progressKey !== lastProgressKey) {
         lastProgressKey = progressKey

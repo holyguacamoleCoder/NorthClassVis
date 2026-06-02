@@ -122,14 +122,26 @@
 
     <template #rail>
       <AgentContextRail
+        ref="contextRail"
         :permission-mode="permissionMode"
         :todo-items="todoItems"
         :loaded-skills="loadedSkills"
         :message-count="messageCount"
         @update:permission-mode="onRailModeChange"
         @open-dashboard="goDashboard"
+        @manage-memories="openMemoryModal()"
+        @edit-memory="openMemoryEdit"
+        @memories-changed="reloadMemoriesRail"
       />
     </template>
+
+    <AgentMemoriesModal
+      :open="memoryModal.open"
+      :initial-edit-name="memoryModal.editName"
+      :initial-create="memoryModal.create"
+      @close="closeMemoryModal"
+      @changed="reloadMemoriesRail"
+    />
 
     <AgentReportPreviewModal
       :open="reportPreview.open"
@@ -165,6 +177,7 @@ import AgentPageShell from '@/components/agent/AgentPageShell.vue'
 import AgentSidebar from '@/components/agent/AgentSidebar.vue'
 import AgentContextRail from '@/components/agent/AgentContextRail.vue'
 import AgentAssistantMessage from '@/components/agent/AgentAssistantMessage.vue'
+import AgentMemoriesModal from '@/components/agent/AgentMemoriesModal.vue'
 import AgentReportPreviewModal from '@/components/agent/AgentReportPreviewModal.vue'
 import { AGENT_UI } from '@/constants/agentUiText.js'
 
@@ -175,6 +188,7 @@ export default {
     AgentSidebar,
     AgentContextRail,
     AgentAssistantMessage,
+    AgentMemoriesModal,
     AgentReportPreviewModal,
   },
   mixins: [agentChatCore],
@@ -189,6 +203,7 @@ export default {
       pageRailOpen: typeof window !== 'undefined' ? window.innerWidth >= 1400 : false,
       layoutSynced: false,
       wasRailInline: typeof window !== 'undefined' ? window.innerWidth >= 1400 : false,
+      memoryModal: { open: false, editName: '', create: false },
     }
   },
   mounted() {
@@ -226,6 +241,22 @@ export default {
     goFloatMode() {
       this.$router.push('/')
       this.openAgentPanel()
+    },
+    openMemoryModal(create = false) {
+      this.memoryModal = { open: true, editName: '', create: !!create }
+    },
+    openMemoryEdit(row) {
+      this.memoryModal = {
+        open: true,
+        editName: row?.name || '',
+        create: false,
+      }
+    },
+    closeMemoryModal() {
+      this.memoryModal = { open: false, editName: '', create: false }
+    },
+    reloadMemoriesRail() {
+      this.$refs.contextRail?.reloadMemories()
     },
   },
 }

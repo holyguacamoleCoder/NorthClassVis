@@ -25,6 +25,42 @@ export function modeLabel(mode) {
   return MODE_LABELS[mode] || mode || '分析'
 }
 
+const MEMORY_RESULT_RE =
+  /\[Memory (?:saved|updated|removed):\s*([^\]]+)\]/i
+
+function parseMemoryEventFromContent(content) {
+  const match = MEMORY_RESULT_RE.exec(content || '')
+  if (!match) return null
+  const fields = {}
+  for (const part of match[1].matchAll(/(\w+)=([^,]+)/g)) {
+    fields[part[1]] = part[2].trim()
+  }
+  return {
+    action: fields.action || 'saved',
+    label: fields.name || fields.target || 'memory',
+    name: fields.name,
+    type: fields.type,
+    target: fields.target,
+    path: fields.path,
+  }
+}
+
+function extractMemorySavedFromToolMessages(toolMessages) {
+  const out = []
+  const seen = new Set()
+  for (const msg of toolMessages || []) {
+    if (msg.name !== 'memory' && msg.name !== 'save_memory') continue
+    if (msg.status && msg.status !== 'ok') continue
+    const event = parseMemoryEventFromContent(msg.content)
+    if (!event) continue
+    const key = JSON.stringify(event)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(event)
+  }
+  return out
+}
+
 function stripAnswerMarkdown(answer, visualLinks, reportLinks) {
   const hasLinks = (visualLinks || []).length > 0
   const hasReports = (reportLinks || []).length > 0
@@ -91,6 +127,7 @@ function buildAssistantUiFromTurn(turnMsgs) {
 
   const visual_links = extractVisualLinksFromToolMessages(toolMessages)
   const report_links = extractReportLinksFromToolMessages(toolMessages)
+  const memory_saved = extractMemorySavedFromToolMessages(toolMessages)
   const timeline = buildTurnTimeline(turnMsgs)
 
   return {
@@ -102,6 +139,7 @@ function buildAssistantUiFromTurn(turnMsgs) {
     actions: [],
     visual_links,
     report_links,
+    memory_saved,
     trace: { steps: toolMessages.map(toolMsgToStep) },
     timeline,
     goal_check: null,
@@ -114,6 +152,7 @@ function buildAssistantUiFromTurn(turnMsgs) {
 export function legacyToAssistantMessage(res) {
   const visual_links = mergeVisualLinks(res.visual_links || [], [])
   const report_links = mergeReportLinks(res.report_links || [], [])
+  const memory_saved = Array.isArray(res.memory_saved) ? res.memory_saved : []
   const hasLinks = visual_links.length > 0
   const hasReports = report_links.length > 0
   const actions = (res.actions || []).filter((a) => {
@@ -133,6 +172,7 @@ export function legacyToAssistantMessage(res) {
     actions,
     visual_links,
     report_links,
+    memory_saved,
     trace: res.trace || null,
     timeline: Array.isArray(res.timeline) ? res.timeline : [],
     goal_check: res.goal_check || null,
@@ -236,6 +276,7 @@ export function createStreamingAssistantMessage() {
     actions: [],
     visual_links: [],
     report_links: [],
+    memory_saved: [],
     trace: { steps: [] },
     timeline: [],
     goal_check: null,
@@ -301,6 +342,9 @@ export function applyProgressToMessage(msg, job) {
   }
   if (Array.isArray(progress.report_links) && progress.report_links.length) {
     msg.report_links = mergeReportLinks(msg.report_links, progress.report_links)
+  }
+  if (Array.isArray(progress.memory_saved) && progress.memory_saved.length) {
+    msg.memory_saved = progress.memory_saved
   }
 }
 

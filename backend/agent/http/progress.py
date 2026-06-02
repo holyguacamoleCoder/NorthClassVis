@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any, Callable
 
-from .adapter import _skill_name_from_params, build_tool_step
+from .adapter import _reference_name_from_params, _skill_name_from_params, build_tool_step
 
 
 ProgressCallback = Callable[[dict[str, Any]], None]
@@ -15,10 +15,13 @@ def make_job_progress_handler(
     update_fn: Callable[[dict[str, Any]], None],
     *,
     initial_loaded_skills: list[str] | None = None,
+    initial_loaded_references: list[str] | None = None,
 ) -> ProgressCallback:
     """Return a callback AgentLoop / executor can invoke."""
     loaded_accum: set[str] = set(initial_loaded_skills or [])
+    loaded_refs_accum: set[str] = set(initial_loaded_references or [])
     report_links_accum: list[dict[str, Any]] = []
+    memory_saved_accum: list[dict[str, Any]] = []
     plan_state = {"sent": False}
 
     def handler(event: dict[str, Any]) -> None:
@@ -64,6 +67,11 @@ def make_job_progress_handler(
                 if skill_name and step.get("status") == "ok":
                     loaded_accum.add(skill_name)
                     patch["loaded_skills"] = sorted(loaded_accum)
+            elif tool_name == "load_reference":
+                ref_name = step.get("reference_name") or _reference_name_from_params(params)
+                if ref_name and step.get("status") == "ok":
+                    loaded_refs_accum.add(ref_name)
+                    patch["loaded_references"] = sorted(loaded_refs_accum)
             elif tool_name in ("write_file", "edit_file") and step.get("status") == "ok":
                 from ..report_delivery import report_link_from_tool
 
@@ -73,6 +81,23 @@ def make_job_progress_handler(
                     if link["path"] not in paths:
                         report_links_accum.append(link)
                     patch["report_links"] = list(report_links_accum)
+            elif tool_name in ("memory", "save_memory") and step.get("status") == "ok":
+                from ..memory_delivery import memory_event_from_tool
+
+                event = memory_event_from_tool(tool_name, content, params)
+                if event:
+                    keys = {
+                        (e.get("name"), e.get("target"), e.get("action"))
+                        for e in memory_saved_accum
+                    }
+                    dedupe_key = (
+                        event.get("name"),
+                        event.get("target"),
+                        event.get("action"),
+                    )
+                    if dedupe_key not in keys:
+                        memory_saved_accum.append(event)
+                    patch["memory_saved"] = list(memory_saved_accum)
         elif et == "answer":
             text = str(event.get("content") or "")
             patch.update({
@@ -132,6 +157,7 @@ def empty_job_progress(
     *,
     todo_items: list[dict[str, str]] | None = None,
     loaded_skills: list[str] | None = None,
+    loaded_references: list[str] | None = None,
 ) -> dict[str, Any]:
     return {
         "phase": "starting",
@@ -143,7 +169,9 @@ def empty_job_progress(
         "answer": "",
         "todo_items": list(todo_items or []),
         "loaded_skills": list(loaded_skills or []),
+        "loaded_references": list(loaded_references or []),
         "report_links": [],
+        "memory_saved": [],
     }
 
 
@@ -152,6 +180,7 @@ def seed_job_progress_from_session(session: Any) -> dict[str, Any]:
     return empty_job_progress(
         todo_items=list(getattr(session, "todo_items", None) or []),
         loaded_skills=list(getattr(session, "loaded_skills", None) or []),
+        loaded_references=list(getattr(session, "loaded_references", None) or []),
     )
 
 

@@ -10,12 +10,13 @@ from common.prompts import (
     MEMORY_GUIDANCE,
     build_base_agent_prompt,
     format_filter_context_section,
-    format_loaded_skills_section,
+    format_loaded_skill_names_section,
     format_permission_mode,
     format_session_plan_section,
     format_session_section,
     format_skills_section,
 )
+from skills.registry import _resolve_skill_name
 
 if TYPE_CHECKING:
     from data.filter_context import FilterContext
@@ -31,6 +32,7 @@ class SystemPromptContext:
     filter_context: "FilterContext | None" = None
     skills: SkillRegistry | None = None
     loaded_skills: set[str] | list[str] = field(default_factory=list)
+    loaded_references: set[str] | list[str] = field(default_factory=list)
     todo_items: list[dict[str, str]] = field(default_factory=list)
     include_memory_guidance: bool = True
 
@@ -58,16 +60,23 @@ class SystemPromptBuilder:
             parts.append(format_session_section(ctx.session_context))
 
         if ctx.filter_context is not None:
-            parts.append(format_filter_context_section(ctx.filter_context.to_dict()))
+            parts.append(format_filter_context_section(ctx.filter_context.to_summary_dict()))
 
         if ctx.skills is not None:
             parts.append(format_skills_section(ctx.skills.describe_available()))
-            if ctx.loaded_skills:
-                pinned = format_loaded_skills_section(
-                    ctx.skills, ctx.loaded_skills
-                )
-                if pinned:
-                    parts.append(pinned)
+
+        loaded_skill_names = {
+            _resolve_skill_name(str(n)) for n in (ctx.loaded_skills or []) if str(n).strip()
+        }
+        if (ctx.permission_mode or "").strip().lower() == "produce":
+            loaded_skill_names.add("report-writing")
+        loaded_ref_names = {str(n).strip() for n in (ctx.loaded_references or []) if str(n).strip()}
+        names_block = format_loaded_skill_names_section(
+            loaded_skill_names,
+            loaded_ref_names,
+        )
+        if names_block:
+            parts.append(names_block)
 
         plan_block = format_session_plan_section(ctx.todo_items)
         if plan_block:
