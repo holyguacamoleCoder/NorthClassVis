@@ -31,14 +31,18 @@ def make_job_progress_handler(
         if et == "llm_start":
             patch.update({"phase": "llm", "hint": "正在调用模型…", "running_tool": None})
         elif et == "tool_start":
+            running: dict[str, Any] = {
+                "call_id": event.get("call_id"),
+                "tool": event.get("tool"),
+                "params": event.get("params") or {},
+            }
+            for key in ("run_id", "parent_run_id", "patch", "derive_strategy"):
+                if event.get(key) is not None:
+                    running[key] = event.get(key)
             patch.update({
                 "phase": "tools",
                 "hint": f"正在执行 {event.get('tool', 'tool')}…",
-                "running_tool": {
-                    "call_id": event.get("call_id"),
-                    "tool": event.get("tool"),
-                    "params": event.get("params") or {},
-                },
+                "running_tool": running,
             })
         elif et == "tool_end":
             tool_name = str(event.get("tool") or "unknown")
@@ -49,6 +53,11 @@ def make_job_progress_handler(
                 params,
                 content,
                 call_id=str(event.get("call_id") or "") or None,
+                run_id=str(event.get("run_id") or "") or None,
+                parent_run_id=str(event.get("parent_run_id") or "") or None,
+                patch=event.get("patch") if isinstance(event.get("patch"), dict) else None,
+                derive_strategy=event.get("derive_strategy"),
+                run_status=str(event.get("run_status") or "") or None,
             )
             patch.update({
                 "phase": "tools",

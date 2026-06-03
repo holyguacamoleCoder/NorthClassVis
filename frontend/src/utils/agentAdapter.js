@@ -112,6 +112,7 @@ function buildAssistantUiFromTurn(turnMsgs) {
         content: msg.content,
         status: msg.status,
         params: info.params || {},
+        call_id: msg.toolCallId,
       })
     }
   }
@@ -197,8 +198,15 @@ export function turnResultToAssistantMessage(result) {
   return legacyToAssistantMessage(result)
 }
 
+export function stripRunModifyBlock(text) {
+  let out = String(text || '')
+  out = out.replace(/\[run_modify\][\s\S]*?\[\/run_modify\]\s*/g, '')
+  out = out.replace(/^这是对上一轮数据计算的修改：[\s\S]*?(?:\n\n|$)/, '')
+  return out.trim()
+}
+
 export function userMessage(text) {
-  return { role: 'user', text: String(text || '') }
+  return { role: 'user', text: stripRunModifyBlock(text) }
 }
 
 export function sessionMessagesToUi(messages) {
@@ -246,6 +254,67 @@ export function sessionMessagesToUi(messages) {
   )
 }
 
+function enrichStepWithRun(step, run) {
+  if (!run || !step) return step
+  const terminal = run.status === 'superseded' || run.status === 'cancelled'
+  return {
+    ...step,
+    run_id: run.run_id,
+    parent_run_id: run.parent_run_id || step.parent_run_id,
+    patch: run.patch || step.patch,
+    derive_strategy: run.derive_strategy || step.derive_strategy,
+    run_status: run.status,
+    status: terminal ? run.status : step.status,
+  }
+}
+
+/** Attach persisted run registry metadata when reloading a session. */
+export function enrichUiMessagesWithRuns(messages, runs) {
+  if (!Array.isArray(messages) || !Array.isArray(runs) || !runs.length) {
+    return messages
+  }
+  const byCall = new Map()
+  const dataRuns = []
+  for (const run of runs) {
+    if (run.tool_call_id) byCall.set(String(run.tool_call_id), run)
+    if (run.tool_name === 'query_data' || run.tool_name === 'aggregate_data') {
+      dataRuns.push(run)
+    }
+  }
+  let dataIdx = 0
+
+  const pickRun = (step) => {
+    const callId = step?.call_id
+    if (callId && byCall.has(String(callId))) {
+      return byCall.get(String(callId))
+    }
+    if (step?.tool !== 'query_data' && step?.tool !== 'aggregate_data') return null
+    while (dataIdx < dataRuns.length) {
+      const candidate = dataRuns[dataIdx]
+      dataIdx += 1
+      if (candidate.tool_name === step.tool) return candidate
+    }
+    return null
+  }
+
+  const enrichStep = (step) => enrichStepWithRun(step, pickRun(step))
+
+  return messages.map((msg) => {
+    if (msg.role !== 'assistant') return msg
+    dataIdx = 0
+    const traceSteps = (msg.trace?.steps || []).map(enrichStep)
+    const timeline = (msg.timeline || []).map((item) => {
+      if (item.kind !== 'tool' || !item.step) return item
+      return { ...item, step: enrichStep(item.step) }
+    })
+    return {
+      ...msg,
+      trace: traceSteps.length ? { steps: traceSteps } : msg.trace,
+      timeline: timeline.length ? timeline : msg.timeline,
+    }
+  })
+}
+
 function toolMsgToStep(msg) {
   return enrichToolStep({
     tool: msg.name || 'unknown',
@@ -253,6 +322,7 @@ function toolMsgToStep(msg) {
     summary: summarizeToolContent(msg.name, msg.content),
     status: msg.status || 'ok',
     error: msg.status !== 'ok' ? msg.content : '',
+    call_id: msg.call_id,
   })
 }
 
@@ -299,10 +369,15 @@ export function progressToTraceSteps(progress) {
     steps.push(
       enrichToolStep({
         call_id: rt.call_id,
+        run_id: rt.run_id,
+        parent_run_id: rt.parent_run_id,
+        patch: rt.patch,
+        derive_strategy: rt.derive_strategy,
         tool,
         params: rt.params || {},
         summary: tool === 'todo_write' ? '更新计划中…' : tool === 'load_skill' ? '加载技能中…' : '执行中…',
         status: 'running',
+        run_status: 'executing',
       }),
     )
   }
@@ -345,6 +420,50 @@ export function applyProgressToMessage(msg, job) {
   }
   if (Array.isArray(progress.memory_saved) && progress.memory_saved.length) {
     msg.memory_saved = progress.memory_saved
+  }
+}
+
+export function mergeRunMetaIntoPayload(payload, priorMsg) {
+  if (!payload || !priorMsg) return payload
+  const priorSteps = [
+    ...(priorMsg.trace?.steps || []),
+    ...(priorMsg.timeline || [])
+      .filter((item) => item.kind === 'tool' && item.step)
+      .map((item) => item.step),
+  ]
+  const metaByCall = new Map()
+  for (const step of priorSteps) {
+    if (step?.call_id && step?.run_id) {
+      metaByCall.set(step.call_id, step)
+    }
+  }
+  if (!metaByCall.size) return payload
+
+  const copy = { ...payload }
+  if (copy.trace?.steps) {
+    copy.trace = {
+      steps: copy.trace.steps.map((step) => mergeStepRunMeta(step, metaByCall)),
+    }
+  }
+  if (Array.isArray(copy.timeline)) {
+    copy.timeline = copy.timeline.map((item) => {
+      if (item.kind !== 'tool' || !item.step) return item
+      return { ...item, step: mergeStepRunMeta(item.step, metaByCall) }
+    })
+  }
+  return copy
+}
+
+function mergeStepRunMeta(step, metaByCall) {
+  const prior = metaByCall.get(step?.call_id)
+  if (!prior) return step
+  return {
+    ...step,
+    run_id: step.run_id || prior.run_id,
+    parent_run_id: step.parent_run_id || prior.parent_run_id,
+    patch: step.patch || prior.patch,
+    derive_strategy: step.derive_strategy || prior.derive_strategy,
+    run_status: step.run_status || prior.run_status,
   }
 }
 

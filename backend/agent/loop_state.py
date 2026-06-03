@@ -90,3 +90,5 @@ class LoopState:
     filter_context: "FilterContext | None" = None
     loaded_skills: set[str] = field(default_factory=set)
     loaded_references: set[str] = field(default_factory=set)
+    # Set when user modifies a prior data run (derive parent + patch).
+    modify_context: dict[str, Any] | None = None

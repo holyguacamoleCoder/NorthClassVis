@@ -30,6 +30,9 @@
       :running-tool="msg.streaming ? runningTool : null"
       :streaming="!!msg.streaming"
       :default-expanded="processDefaultExpanded(msg)"
+      :run-actions-enabled="!loading || !!msg.streaming"
+      @cancel-run="$emit('cancel-run', $event)"
+      @derive-run="$emit('derive-run', $event)"
     />
 
     <!-- ③ 结论段 -->
@@ -159,8 +162,9 @@ export default {
     summaryStatusText: { type: Function, required: true },
     visualLinkLabel: { type: Function, required: true },
     runningTool: { type: Object, default: null },
+    loading: { type: Boolean, default: false },
   },
-  emits: ['visual-link-click', 'report-preview', 'report-download'],
+  emits: ['visual-link-click', 'report-preview', 'report-download', 'cancel-run', 'derive-run'],
   data() {
     return { ui: AGENT_UI }
   },

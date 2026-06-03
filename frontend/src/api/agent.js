@@ -134,6 +134,35 @@ export async function cancelAgentJob(jobId) {
   return res.data
 }
 
+export async function listSessionRuns(sessionId, limit = 30) {
+  const res = await request.get(`/agent/sessions/${sessionId}/runs`, { params: { limit } })
+  return res.data
+}
+
+export async function getAgentRun(runId) {
+  const res = await request.get(`/agent/runs/${runId}`)
+  return res.data
+}
+
+export async function cancelAgentRun(runId) {
+  const res = await request.post(`/agent/runs/${runId}/cancel`)
+  return res.data
+}
+
+export async function postAgentDerive(sessionId, runId, { message, patch } = {}, hooks = {}) {
+  const res = await request.post(`/agent/sessions/${sessionId}/runs/${runId}/derive`, {
+    message: message || '请基于上次计算结果应用修改并重新分析。',
+    patch: patch || {},
+  })
+  const { job_id: jobId } = res.data
+  if (hooks.onJobStarted) hooks.onJobStarted(jobId)
+  return pollAgentJob(jobId, {
+    onApproval: hooks.onApproval,
+    onProgress: hooks.onProgress,
+    shouldAbort: hooks.shouldAbort,
+  })
+}
+
 export async function listAgentMemories() {
   const res = await request.get('/agent/memories')
   return res.data

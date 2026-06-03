@@ -191,6 +191,54 @@ def format_permission_mode(mode: str) -> str:
     return PERMISSION_MODE_TEMPLATE.format(mode=mode, mode_hint=hint).strip()
 
 
+def format_run_modify_section(modify_context: dict[str, Any] | None) -> str:
+    """System-prompt section for derive/modify turns (not shown in UI)."""
+    if not modify_context:
+        return ""
+    import json
+
+    preview = {
+        k: modify_context.get(k)
+        for k in (
+            "parent_run_id",
+            "parent_tool",
+            "strategy",
+            "patch",
+            "source",
+            "parent_dataset_id",
+            "parent_result_ref",
+        )
+        if modify_context.get(k) is not None
+    }
+    parent_params = modify_context.get("parent_params") or {}
+    if isinstance(parent_params, dict):
+        preview["parent_params_preview"] = {
+            k: parent_params.get(k)
+            for k in ("resource", "class", "classes", "group_by", "where", "limit")
+            if parent_params.get(k) is not None
+        }
+    body = json.dumps(preview, ensure_ascii=False, default=str)
+    strategy = modify_context.get("strategy")
+    if strategy in ("reaggregate", "reuse_aggregate"):
+        instruction = (
+            "**强制**：本 turn 禁止调用 query_data。"
+            "系统已在首轮自动执行 aggregate_data；若需调整请仅改 metrics / dimensions。"
+            "input 含 parent_dataset_id / parent_result_ref（已自动注入）。"
+        )
+    elif strategy == "requery":
+        instruction = (
+            "**强制**：本 turn 使用 query_data 并继承 parent 未改条件，仅应用 patch。"
+            "完成后如需指标再 aggregate_data。"
+        )
+    else:
+        instruction = "请继承 parent 未改条件，仅应用 patch；避免不必要的全量重查。"
+    return (
+        "## 本轮：数据计算修改（系统内部，勿复述给用户）\n"
+        f"{body}\n"
+        f"{instruction}"
+    )
+
+
 def format_session_section(blocks: list[str]) -> str:
     """Join hook-injected session blocks under the session section header."""
     body = "\n\n".join(b for b in blocks if b and b.strip())

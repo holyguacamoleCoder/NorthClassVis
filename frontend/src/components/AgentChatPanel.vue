@@ -111,6 +111,7 @@
             <template v-else>
               <AgentAssistantMessage
                 :msg="msg"
+                :loading="loading"
                 :display-steps="displaySteps"
                 :reveal-phase="revealPhase"
                 :recovery-hint="recoveryHint"
@@ -120,6 +121,8 @@
                 @visual-link-click="onVisualLinkClick"
                 @report-preview="openReportPreview"
                 @report-download="downloadReport"
+                @cancel-run="onCancelToolRun"
+                @derive-run="onDeriveToolRun"
               />
             </template>
           </div>

@@ -10,6 +10,9 @@ import {
   postAgentMessage,
   resolveAgentApproval,
   cancelAgentJob,
+  cancelAgentRun,
+  postAgentDerive,
+  listSessionRuns,
   JobAbortedError,
   createJobAbortHandle,
   fetchDeliverable,
@@ -23,6 +26,9 @@ import {
   createStreamingAssistantMessage,
   applyProgressToMessage,
   applyJobSessionMeta,
+  mergeRunMetaIntoPayload,
+  stripRunModifyBlock,
+  enrichUiMessagesWithRuns,
 } from '@/utils/agentAdapter.js'
 import { AGENT_UI } from '@/constants/agentUiText.js'
 import { isSkillSlashCommand, skillCommandLoadingText } from '@/utils/agentSlashCommands.js'
@@ -137,8 +143,16 @@ export default {
       const msg = this.messages[idx]
       if (!msg) return
       const preservedMemory = msg.memory_saved
-      const final = legacyToAssistantMessage(res)
+      let final = legacyToAssistantMessage(res)
+      final = mergeRunMetaIntoPayload(final, msg)
       Object.assign(msg, final, { streaming: false, revealPhase: 1, statusHint: '', _runningTool: null })
+      if (idx > 0 && Array.isArray(res?.messages)) {
+        const lastUser = [...res.messages].reverse().find((m) => m.role === 'user')
+        const userBubble = this.messages[idx - 1]
+        if (lastUser && userBubble?.role === 'user') {
+          userBubble.text = stripRunModifyBlock(lastUser.content || userBubble.text)
+        }
+      }
       if (
         Array.isArray(preservedMemory) &&
         preservedMemory.length &&
@@ -266,7 +280,7 @@ export default {
       this.sessionsLoading = true
       try {
         const session = await bootstrapAgentSession()
-        this.applySession(session)
+        await this.loadSessionWithRuns(session)
         await Promise.all([this.refreshSessions(), this.fetchCatalogSkills()])
       } catch (err) {
         console.error('initSession failed', err)
@@ -274,18 +288,33 @@ export default {
         this.sessionsLoading = false
       }
     },
-    applySession(session) {
+    applySession(session, runs) {
       if (!session) return
       this.sessionId = session.id
       this.sessionTitle = session.title || '教师问答 Agent'
       this.permissionMode = session.permission_mode || 'analyze'
       this.todoItems = session.todo_items || []
       this.loadedSkills = session.loaded_skills || []
-      this.messages = sessionMessagesToUi(session.messages || [])
+      let ui = sessionMessagesToUi(session.messages || [])
+      if (Array.isArray(runs) && runs.length) {
+        ui = enrichUiMessagesWithRuns(ui, runs)
+      }
+      this.messages = ui
       this.autoScrollLocked = false
       if (session.filter_context) {
         this.syncNavScopeFromFilterContext(session.filter_context)
       }
+    },
+    async loadSessionWithRuns(session) {
+      if (!session?.id) return
+      let runs = []
+      try {
+        const data = await listSessionRuns(session.id, 80)
+        runs = data.runs || []
+      } catch (err) {
+        console.warn('listSessionRuns failed', err)
+      }
+      this.applySession(session, runs)
     },
     async refreshSessions() {
       try {
@@ -299,7 +328,7 @@ export default {
       try {
         await this.abortInFlightWork({ restoreComposer: false })
         const session = await createAgentSession({ permission_mode: this.permissionMode })
-        this.applySession(session)
+        await this.loadSessionWithRuns(session)
         this.messages = []
         this.todoItems = session.todo_items || []
         this.loadedSkills = session.loaded_skills || []
@@ -313,7 +342,7 @@ export default {
       try {
         await this.abortInFlightWork({ restoreComposer: false })
         const session = await activateAgentSession(sessionId)
-        this.applySession(session)
+        await this.loadSessionWithRuns(session)
       } catch (err) {
         console.error('switchSession failed', err)
       }
@@ -322,7 +351,7 @@ export default {
       if (!this.sessionId || !title) return
       try {
         const session = await updateAgentSession(this.sessionId, { title })
-        this.applySession(session)
+        await this.loadSessionWithRuns(session)
         await this.refreshSessions()
       } catch (err) {
         console.error('renameSession failed', err)
@@ -357,7 +386,7 @@ export default {
         const session = await updateAgentSession(this.sessionId, {
           permission_mode: this.permissionMode,
         })
-        this.applySession(session)
+        await this.loadSessionWithRuns(session)
       } catch (err) {
         console.error('onModeChange failed', err)
       }
@@ -406,6 +435,80 @@ export default {
     async stopTurn() {
       if (!this.loading) return
       await this.abortInFlightWork({ restoreComposer: true })
+    },
+    async onCancelToolRun(runId) {
+      if (!runId) return
+      try {
+        await cancelAgentRun(runId)
+      } catch (err) {
+        console.error('cancelAgentRun failed', err)
+      }
+    },
+    async onDeriveToolRun(step) {
+      if (!this.sessionId || !step?.run_id || this.loading) return
+      const message = window.prompt(
+        '描述要如何修改（例如：改成按周汇总）',
+        '改成按周汇总',
+      )
+      if (!message || !String(message).trim()) return
+      await this.startDerivedTurn(step.run_id, String(message).trim())
+    },
+    async startDerivedTurn(runId, message) {
+      this.clearRevealTimer()
+      const sendId = this.activeSendId + 1
+      this.activeSendId = sendId
+      this.jobAbort.reset()
+      this.pendingSendText = message
+      this.turnBaselineMsgCount = this.messages.length
+      this.autoScrollLocked = false
+      this.messages.push(userMessage(message))
+      const streamIdx = this.messages.length
+      this.messages.push(createStreamingAssistantMessage())
+      this.streamingMsgIndex = streamIdx
+      this.loading = true
+      this.loadingText = '正在基于上次结果修改…'
+      this.scrollToBottom()
+      try {
+        const res = await postAgentDerive(this.sessionId, runId, { message }, {
+          onApproval: (approval) => this.waitForApproval(approval),
+          onProgress: (job) => this.applyStreamingProgress(job),
+          shouldAbort: () => this.jobAbort.isAborted(),
+          onJobStarted: (jobId) => this.jobAbort.setJobId(jobId),
+        })
+        if (sendId !== this.activeSendId) return
+        if (res.session_title) this.sessionTitle = res.session_title
+        if (res.permission_mode) this.permissionMode = res.permission_mode
+        if (Array.isArray(res.todo_items)) this.todoItems = res.todo_items
+        if (Array.isArray(res.loaded_skills)) this.loadedSkills = res.loaded_skills
+        this.finalizeStreamingMessage(streamIdx, res)
+        await this.refreshSessions()
+        this.$nextTick(() => {
+          this.startRevealTimer(streamIdx)
+          this.scrollToBottom()
+        })
+      } catch (err) {
+        if (sendId !== this.activeSendId) return
+        if (err instanceof JobAbortedError || this.jobAbort.isAborted()) {
+          this.discardInFlightTurn()
+        } else if (this.streamingMsgIndex !== null) {
+          Object.assign(this.messages[this.streamingMsgIndex], {
+            answer: err.message || '修改请求失败，请稍后重试。',
+            streaming: false,
+            revealPhase: 5,
+            trace: this.messages[this.streamingMsgIndex].trace || { steps: [] },
+            closing: '',
+          })
+        }
+      } finally {
+        if (sendId !== this.activeSendId) return
+        this.pendingApproval = null
+        this.approvalResolver = null
+        this.streamingMsgIndex = null
+        this.pendingSendText = ''
+        this.jobAbort.reset()
+        this.loading = false
+        this.loadingText = '思考中'
+      }
     },
     async send() {
       const text = (this.inputText || '').trim()

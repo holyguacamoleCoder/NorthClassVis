@@ -11,6 +11,7 @@ function toolMsgToStep(msg) {
     summary: summarizeToolContent(msg.name, msg.content),
     status: msg.status || 'ok',
     error: msg.status !== 'ok' ? msg.content : '',
+    call_id: msg.call_id,
   })
 }
 
@@ -62,6 +63,7 @@ export function buildTurnTimeline(turnMsgs) {
           content: msg.content,
           status: msg.status,
           params: info.params || {},
+          call_id: msg.toolCallId,
         }),
       })
     }
@@ -85,4 +87,24 @@ export function processTimelineStats(items) {
   const tools = list.filter((i) => i.kind === 'tool')
   const failed = tools.filter((i) => ['fail', 'denied', 'blocked'].includes(i.step?.status))
   return { total: tools.length, failed: failed.length }
+}
+
+const DATA_RUN_TOOLS = new Set(['query_data', 'aggregate_data'])
+
+export function isModifiableRunStep(step) {
+  if (!step?.run_id) return false
+  if (step.status === 'running') return false
+  if (['superseded', 'cancelled'].includes(step.status)) return false
+  if (['superseded', 'cancelled'].includes(step.run_status)) return false
+  return DATA_RUN_TOOLS.has(step.tool)
+}
+
+/** One modify entry per turn: prefer latest aggregate, else latest query. */
+export function pickPrimaryModifyRun(steps) {
+  const list = (steps || []).filter(isModifiableRunStep)
+  if (!list.length) return null
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (list[i].tool === 'aggregate_data') return list[i]
+  }
+  return list[list.length - 1]
 }

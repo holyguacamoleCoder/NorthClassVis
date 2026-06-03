@@ -26,6 +26,9 @@ from session.ui_scope import augment_user_message_with_ui_scope
 from skills import get_registry
 
 from cancel import TurnCancelled
+from runs.registry import RunRegistry
+from runs.derive import resolve_reaggregate_source
+from runs.modify_resolver import resolve_modify_intent
 from ..slash_commands import SlashCommand, execute_slash_command, list_skills_payload, parse_slash_command
 from .adapter import adapt_legacy_query_response, adapt_turn_response, serialize_messages
 from .approval import ApprovalStore, HttpApprovalHandler
@@ -58,6 +61,7 @@ class AgentJob:
     result: dict[str, Any] | None = None
     error: str | None = None
     progress: dict[str, Any] = field(default_factory=empty_job_progress)
+    derive_context: dict[str, Any] | None = None
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
 
@@ -85,6 +89,7 @@ class AgentHttpService:
         self.llm_client = LLMClient()
         self._jobs: dict[str, AgentJob] = {}
         self._jobs_lock = threading.Lock()
+        self.run_registry = RunRegistry()
 
     def _on_job_awaiting_approval(self, job_id: str, approval: dict[str, Any]) -> None:
         with self._jobs_lock:
@@ -240,11 +245,19 @@ class AgentHttpService:
             session_id=session.id,
             progress=seed_job_progress_from_session(session),
         )
+        derive_ctx: dict[str, Any] | None = None
+        if context and context.get("derive_from_run_id"):
+            derive_ctx = {
+                "parent_run_id": str(context["derive_from_run_id"]),
+                "patch": dict(context.get("patch") or {}),
+                "source": "explicit",
+            }
+            job.derive_context = derive_ctx
         with self._jobs_lock:
             self._jobs[job.id] = job
         thread = threading.Thread(
             target=self._run_job,
-            args=(job.id, text),
+            args=(job.id, text, derive_ctx),
             daemon=True,
         )
         thread.start()
@@ -271,8 +284,42 @@ class AgentHttpService:
             job.cancel_requested = True
             job.updated_at = time.time()
         self.approval_store.cancel_pending_for_job(job_id)
+        registry = getattr(self, "run_registry", None)
+        if registry is not None:
+            registry.request_cancel_for_job(job_id)
         log_event(_log, logging.INFO, "agent_job_cancel_requested", job_id=job_id)
         return True
+
+    def list_session_runs(self, session_id: str, *, limit: int = 30) -> list[dict[str, Any]]:
+        runs = self.run_registry.list_runs(session_id, limit=limit)
+        return [run.to_dict() for run in runs]
+
+    def get_tool_run(self, run_id: str) -> dict[str, Any] | None:
+        run = self.run_registry.get_run(run_id)
+        return run.to_dict() if run else None
+
+    def cancel_tool_run(self, run_id: str) -> bool:
+        return self.run_registry.cancel_run(run_id)
+
+    def derive_tool_run(
+        self,
+        session_id: str,
+        run_id: str,
+        *,
+        patch: dict[str, Any] | None = None,
+        message: str = "请基于上次计算结果应用修改并重新分析。",
+    ) -> dict[str, Any]:
+        parent = self.run_registry.get_run(run_id)
+        if parent is None or parent.session_id != session_id:
+            raise ValueError("run not found for session")
+        plan = self.run_registry.derive_run(run_id, dict(patch or {}))
+        if plan is None:
+            raise ValueError("cannot derive from run")
+        context = {
+            "derive_from_run_id": run_id,
+            "patch": dict(patch or {}),
+        }
+        return self.submit_message(session_id, content=message, context=context)
 
     def resolve_approval(
         self,
@@ -389,7 +436,7 @@ class AgentHttpService:
             "session_id": session.id,
         }
 
-    def _run_job(self, job_id: str, content: str) -> None:
+    def _run_job(self, job_id: str, content: str, derive_context: dict[str, Any] | None = None) -> None:
         with self._jobs_lock:
             job = self._jobs.get(job_id)
             if job is None:
@@ -404,6 +451,7 @@ class AgentHttpService:
                 session_id,
                 content,
                 job_id=job_id,
+                derive_context=derive_context,
             )
             session = self.session_manager.active
             result = adapt_turn_response(
@@ -411,6 +459,8 @@ class AgentHttpService:
                 continue_reason=continue_reason,
                 loaded_skills=loaded_skills,
                 loaded_references=loaded_references,
+                run_registry=self.run_registry,
+                job_id=job_id,
             )
             with self._jobs_lock:
                 job = self._jobs.get(job_id)
@@ -468,6 +518,7 @@ class AgentHttpService:
         content: str,
         *,
         job_id: str | None = None,
+        derive_context: dict[str, Any] | None = None,
     ) -> tuple[str | None, set[str], set[str]]:
         progress_cb = None
         if job_id:
@@ -494,6 +545,51 @@ class AgentHttpService:
             loop_state = self.session_manager.to_loop_state(perms)
             loop_state.analysis_context.session_id = loop_state.session_id
             loop_state.analysis_context.begin_user_turn(content)
+
+            runs = self.run_registry.list_runs(session_id, limit=40)
+            explicit_parent = (
+                str(derive_context["parent_run_id"])
+                if derive_context and derive_context.get("parent_run_id")
+                else None
+            )
+            explicit_patch = (
+                dict(derive_context.get("patch") or {})
+                if derive_context
+                else None
+            )
+            modify_hint = resolve_modify_intent(
+                content,
+                runs,
+                explicit_parent_run_id=explicit_parent,
+                explicit_patch=explicit_patch,
+            )
+            loop_state.modify_context = None
+            if modify_hint:
+                parent_run = self.run_registry.get_run(modify_hint.parent_run_id)
+                plan = self.run_registry.derive_run(
+                    modify_hint.parent_run_id,
+                    modify_hint.patch,
+                )
+                reuse_ref, reuse_ds = None, None
+                if plan:
+                    reuse_ref = plan.reuse_result_ref
+                    reuse_ds = plan.reuse_dataset_id
+                if parent_run and not reuse_ref:
+                    reuse_ref, reuse_ds = resolve_reaggregate_source(
+                        parent_run,
+                        self.run_registry,
+                    )
+                loop_state.modify_context = {
+                    "parent_run_id": modify_hint.parent_run_id,
+                    "patch": dict(modify_hint.patch or {}),
+                    "strategy": plan.strategy if plan else None,
+                    "parent_tool": modify_hint.parent_tool,
+                    "parent_params": dict(parent_run.params) if parent_run else {},
+                    "parent_result_ref": reuse_ref or (parent_run.result_ref if parent_run else None),
+                    "parent_dataset_id": reuse_ds or (parent_run.dataset_id if parent_run else None),
+                    "source": modify_hint.source,
+                }
+
             user_content = augment_user_message_with_ui_scope(
                 content,
                 loop_state.filter_context,
@@ -513,6 +609,8 @@ class AgentHttpService:
                     hooks=self.hooks,
                     progress_callback=progress_cb,
                     should_cancel=should_cancel,
+                    run_registry=self.run_registry,
+                    job_id=job_id,
                 )
                 agent_loop.run_loop()
                 if should_cancel and should_cancel():

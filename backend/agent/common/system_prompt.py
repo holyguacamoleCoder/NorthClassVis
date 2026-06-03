@@ -15,6 +15,7 @@ from common.prompts import (
     format_session_deliverables_section,
     format_session_plan_section,
     format_session_section,
+    format_run_modify_section,
     format_skills_section,
 )
 from skills.registry import _resolve_skill_name
@@ -36,6 +37,7 @@ class SystemPromptContext:
     loaded_references: set[str] | list[str] = field(default_factory=list)
     todo_items: list[dict[str, str]] = field(default_factory=list)
     session_id: str | None = None
+    modify_context: dict | None = None
     include_memory_guidance: bool = True
 
 
@@ -60,6 +62,9 @@ class SystemPromptBuilder:
 
         if ctx.session_context:
             parts.append(format_session_section(ctx.session_context))
+
+        if ctx.modify_context:
+            parts.append(format_run_modify_section(ctx.modify_context))
 
         if ctx.filter_context is not None:
             parts.append(format_filter_context_section(ctx.filter_context.to_summary_dict()))

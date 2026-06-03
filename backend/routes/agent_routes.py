@@ -53,6 +53,26 @@ class AgentRoutes:
             methods=["POST"],
         )
         self.agent_bp.add_url_rule(
+            "/agent/sessions/<session_id>/runs",
+            view_func=self.list_session_runs,
+            methods=["GET"],
+        )
+        self.agent_bp.add_url_rule(
+            "/agent/runs/<run_id>",
+            view_func=self.get_tool_run,
+            methods=["GET"],
+        )
+        self.agent_bp.add_url_rule(
+            "/agent/runs/<run_id>/cancel",
+            view_func=self.cancel_tool_run,
+            methods=["POST"],
+        )
+        self.agent_bp.add_url_rule(
+            "/agent/sessions/<session_id>/runs/<run_id>/derive",
+            view_func=self.derive_tool_run,
+            methods=["POST"],
+        )
+        self.agent_bp.add_url_rule(
             "/agent/approvals/<approval_id>",
             view_func=self.post_approval,
             methods=["POST"],
@@ -259,6 +279,37 @@ class AgentRoutes:
         if not self.service.cancel_job(job_id):
             return jsonify({"error": "job not found or not cancellable"}), 404
         return jsonify({"ok": True, "job_id": job_id})
+
+    def list_session_runs(self, session_id: str):
+        limit = request.args.get("limit", default=30, type=int)
+        runs = self.service.list_session_runs(session_id, limit=max(1, min(limit, 100)))
+        return jsonify({"runs": runs, "session_id": session_id})
+
+    def get_tool_run(self, run_id: str):
+        run = self.service.get_tool_run(run_id)
+        if run is None:
+            return jsonify({"error": "run not found"}), 404
+        return jsonify(run)
+
+    def cancel_tool_run(self, run_id: str):
+        if not self.service.cancel_tool_run(run_id):
+            return jsonify({"error": "run not found or not cancellable"}), 404
+        return jsonify({"ok": True, "run_id": run_id})
+
+    def derive_tool_run(self, session_id: str, run_id: str):
+        body = request.get_json(silent=True) or {}
+        patch = body.get("patch") if isinstance(body.get("patch"), dict) else {}
+        message = str(body.get("message") or "请基于上次计算结果应用修改并重新分析。")
+        try:
+            payload = self.service.derive_tool_run(
+                session_id,
+                run_id,
+                patch=patch,
+                message=message,
+            )
+            return jsonify(payload), 202
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
     def post_approval(self, approval_id: str):
         body = request.get_json(silent=True) or {}

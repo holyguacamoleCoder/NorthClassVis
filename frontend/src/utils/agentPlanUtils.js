@@ -130,6 +130,11 @@ export function enrichToolStep(step) {
       next.kind = 'data'
       next.resource = resource
     }
+    if (step.run_id) next.run_id = step.run_id
+    if (step.parent_run_id) next.parent_run_id = step.parent_run_id
+    if (step.patch && Object.keys(step.patch).length) next.patch = step.patch
+    if (step.derive_strategy) next.derive_strategy = step.derive_strategy
+    if (step.run_status) next.run_status = step.run_status
     if (['fail', 'denied', 'blocked'].includes(next.status)) {
       next.summary = summarizeToolError(next.error || next.summary || '')
     }

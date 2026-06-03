@@ -25,7 +25,22 @@
         <span class="agent-tool-bubble-icon">{{ toolIcon(step) }}</span>
         <span class="agent-tool-bubble-name">{{ step.tool }}</span>
         <span v-if="step.resource" class="agent-tool-bubble-resource">{{ step.resource }}</span>
+        <span v-if="lineageLabel(step)" class="agent-tool-run-lineage">{{ lineageLabel(step) }}</span>
         <span class="agent-tool-bubble-summary">{{ step.summary }}</span>
+        <span v-if="showCancel(step)" class="agent-tool-run-inline">
+          <button
+            type="button"
+            class="agent-tool-run-link agent-tool-run-link--cancel"
+            @click.stop="$emit('cancel-run', step.run_id)"
+          >{{ ui.runCancel }}</button>
+        </span>
+        <span v-if="showModify(step)" class="agent-tool-run-inline">
+          <button
+            type="button"
+            class="agent-tool-run-link agent-tool-run-link--modify"
+            @click.stop="$emit('derive-run', step)"
+          >{{ modifyLabel(step) }}</button>
+        </span>
         <span class="agent-tool-bubble-status">{{ statusLabel(step.status) }}</span>
         <span class="agent-tool-bubble-chevron">{{ expanded[i] ? chevronDown : chevronRight }}</span>
       </button>
@@ -46,6 +61,7 @@
 
 <script>
 import { AGENT_UI } from '@/constants/agentUiText.js'
+import { isModifiableRunStep } from '@/utils/agentTimeline.js'
 import AgentTodoStepCard from '@/components/agent/AgentTodoStepCard.vue'
 import AgentSkillStepChip from '@/components/agent/AgentSkillStepChip.vue'
 
@@ -55,7 +71,11 @@ export default {
   props: {
     steps: { type: Array, default: () => [] },
     defaultExpanded: { type: Boolean, default: false },
+    runActionsEnabled: { type: Boolean, default: true },
+    primaryModifyRunId: { type: String, default: '' },
+    headerModifyOnly: { type: Boolean, default: false },
   },
+  emits: ['cancel-run', 'derive-run'],
   data() {
     return {
       ui: AGENT_UI,
@@ -125,9 +145,34 @@ export default {
         fail: this.ui.toolStatusFail,
         denied: this.ui.toolStatusDenied,
         blocked: this.ui.toolStatusBlocked,
-        running: this.ui.toolStatusRunning,
+        running: this.ui.runStatusRunning,
+        superseded: this.ui.runStatusSuperseded,
+        cancelled: this.ui.runStatusCancelled,
       }
       return map[status] || status || this.ui.toolStatusOk
+    },
+    showCancel(step) {
+      if (!this.runActionsEnabled || this.stepKind(step) !== 'data') return false
+      return step.status === 'running' && step.run_id
+    },
+    showModify(step) {
+      if (this.headerModifyOnly) return false
+      if (!this.runActionsEnabled || this.stepKind(step) !== 'data') return false
+      if (!isModifiableRunStep(step)) return false
+      const primaryId = this.primaryModifyRunId
+      if (primaryId) return step.run_id === primaryId
+      return true
+    },
+    modifyLabel(step) {
+      if (step?.tool === 'aggregate_data') return this.ui.runModifyAggregate
+      return this.ui.runModifyQuery
+    },
+    lineageLabel(step) {
+      if (!step?.parent_run_id) return ''
+      const patch = step.patch || {}
+      const keys = Object.keys(patch)
+      const patchHint = keys.length ? ` · ${keys.join(',')}` : ''
+      return `${this.ui.runDerivedFrom} #${String(step.parent_run_id).slice(0, 8)}${patchHint}`
     },
   },
 }
@@ -228,10 +273,34 @@ export default {
 
 .agent-tool-bubble-summary {
   flex: 1;
+  min-width: 0;
   color: #555;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.agent-tool-run-inline {
+  flex-shrink: 0;
+}
+
+.agent-tool-run-link {
+  font-size: 11px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  &:hover { opacity: 0.85; }
+}
+
+.agent-tool-run-link--cancel {
+  color: #842029;
+}
+
+.agent-tool-run-link--modify {
+  color: #0d6efd;
 }
 
 .agent-tool-bubble-status {
@@ -296,5 +365,11 @@ export default {
   font-size: 11px;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+.agent-tool-run-lineage {
+  font-size: 10px;
+  color: #6c757d;
+  flex-shrink: 0;
 }
 </style>

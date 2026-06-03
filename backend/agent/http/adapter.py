@@ -299,8 +299,15 @@ def build_tool_step(
     content: str,
     *,
     call_id: str | None = None,
+    run_id: str | None = None,
+    parent_run_id: str | None = None,
+    patch: dict[str, Any] | None = None,
+    derive_strategy: str | None = None,
+    run_status: str | None = None,
 ) -> dict[str, Any]:
     status = _tool_status(content)
+    if run_status in ("cancelled", "superseded", "failed", "completed") and status == "ok":
+        status = run_status if run_status != "completed" else status
     step: dict[str, Any] = {
         "tool": tool_name,
         "params": dict(params or {}),
@@ -310,6 +317,16 @@ def build_tool_step(
     }
     if call_id:
         step["call_id"] = call_id
+    if run_id:
+        step["run_id"] = run_id
+    if parent_run_id:
+        step["parent_run_id"] = parent_run_id
+    if patch:
+        step["patch"] = dict(patch)
+    if derive_strategy:
+        step["derive_strategy"] = derive_strategy
+    if run_status:
+        step["run_status"] = run_status
     if status in ("fail", "denied", "blocked"):
         step["error"] = _summarize_tool_content(tool_name, content, max_len=400)
     return _enrich_tool_step(step)
@@ -527,12 +544,18 @@ def adapt_legacy_query_response(
 
 def serialize_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Lightweight message list for frontend rendering."""
+    from runs.apply import strip_run_modify_from_user_content
+
     call_names: dict[str, str] = {}
     serialized: list[dict[str, Any]] = []
     for msg in messages:
         role = msg.get("role")
         if role == "user":
-            serialized.append({"role": "user", "content": str(msg.get("content") or "")})
+            raw = str(msg.get("content") or "")
+            serialized.append({
+                "role": "user",
+                "content": strip_run_modify_from_user_content(raw),
+            })
             continue
         if role == "assistant":
             item: dict[str, Any] = {
@@ -578,11 +601,22 @@ def adapt_turn_response(
     continue_reason: str | None = None,
     loaded_skills: set[str] | None = None,
     loaded_references: set[str] | None = None,
+    run_registry: Any | None = None,
+    job_id: str | None = None,
 ) -> dict[str, Any]:
     legacy = adapt_legacy_query_response(
         session.messages,
         continue_reason=continue_reason,
     )
+    if run_registry is not None and getattr(session, "id", None):
+        from runs.enrich import enrich_trace_and_timeline
+
+        legacy = enrich_trace_and_timeline(
+            str(session.id),
+            legacy,
+            run_registry,
+            job_id=job_id,
+        )
     return {
         **legacy,
         "session_id": session.id,

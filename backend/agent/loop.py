@@ -29,6 +29,7 @@ from skills.produce_bootstrap import (
     append_report_reference_bootstrap,
 )
 from skills.registry import _resolve_skill_name
+from runs.modify_bootstrap import build_modify_bootstrap_call
 from tools import TOOLS, execute_tool_calls
 from permission.modes import CapabilityMode
 from tools.runtime.pipeline.preprocess import dedupe_tool_calls, parse_args
@@ -70,6 +71,8 @@ class AgentLoop:
         recovery_config=DEFAULT_RECOVERY_CONFIG,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
         should_cancel: Callable[[], bool] | None = None,
+        run_registry: Any | None = None,
+        job_id: str | None = None,
     ):
         self.llm_client = llm_client or LLMClient()
         self.loop_state = loop_state or LoopState(messages=[])
@@ -91,6 +94,8 @@ class AgentLoop:
         self._recent_aggregate_input_errors: deque[bool] = deque(maxlen=ERROR_LOOP_WINDOW)
         self._progress_callback = progress_callback
         self._should_cancel = should_cancel
+        self._run_registry = run_registry
+        self._job_id = job_id
 
     def _check_cancelled(self) -> None:
         if self._should_cancel is not None and self._should_cancel():
@@ -116,6 +121,7 @@ class AgentLoop:
                 loaded_references=set(self.loop_state.loaded_references),
                 todo_items=todo_items,
                 session_id=self.loop_state.session_id,
+                modify_context=self.loop_state.modify_context,
             )
         )
 
@@ -193,8 +199,73 @@ class AgentLoop:
         with agent_turn_span(turn=self.loop_state.turn_count):
             return self._run_turn_body()
 
+    def _try_modify_bootstrap(self) -> bool:
+        ctx = self.loop_state.modify_context
+        if not ctx or ctx.get("_bootstrapped") or self._run_registry is None:
+            return False
+
+        built = build_modify_bootstrap_call(ctx, run_registry=self._run_registry)
+        if built is None:
+            return False
+
+        tool_calls, hint = built
+        self.loop_state.messages.append({
+            "role": "assistant",
+            "content": hint,
+            "tool_calls": coerce_tool_calls_for_api(tool_calls),
+        })
+        if hint.strip():
+            self._emit_progress({"type": "thinking", "content": hint})
+
+        log_event(
+            _log,
+            logging.INFO,
+            "modify_bootstrap_begin",
+            count=len(tool_calls),
+            names=[c.get("name") for c in tool_calls],
+        )
+        self._check_cancelled()
+        tool_results = execute_tool_calls(
+            tool_calls,
+            compact_state=self.loop_state.compact,
+            permission=self.permission,
+            hooks=self.hooks,
+            analysis_context=self.loop_state.analysis_context,
+            loaded_skills=self.loop_state.loaded_skills,
+            loaded_references=self.loop_state.loaded_references,
+            llm_client=self.llm_client,
+            filter_context=self.loop_state.filter_context,
+            on_tool_event=self._emit_progress,
+            run_registry=self._run_registry,
+            job_id=self._job_id,
+            modify_context=self.loop_state.modify_context,
+        )
+        self._check_cancelled()
+        if not tool_results:
+            return False
+
+        append_data_tool_checks(tool_calls, tool_results)
+        synced = _sync_tool_results_to_messages(
+            self.loop_state.messages,
+            tool_calls,
+            tool_results,
+        )
+        self.loop_state.messages_count += (1 + synced)
+        self.loop_state.turn_count += 1
+        self.loop_state.continue_reason = "modify_bootstrap_executed"
+        log_event(
+            _log,
+            logging.INFO,
+            "modify_bootstrap_done",
+            synced=synced,
+            next_turn=self.loop_state.turn_count,
+        )
+        return True
+
     def _run_turn_body(self):
         self._check_cancelled()
+        if self._try_modify_bootstrap():
+            return True
         registry = self.loop_state.skills or get_registry()
         if self.permission.mode == CapabilityMode.PRODUCE:
             append_produce_report_writing_bootstrap(
@@ -391,6 +462,9 @@ class AgentLoop:
             llm_client=self.llm_client,
             filter_context=self.loop_state.filter_context,
             on_tool_event=self._emit_progress,
+            run_registry=self._run_registry,
+            job_id=self._job_id,
+            modify_context=self.loop_state.modify_context,
         )
         self._check_cancelled()
 

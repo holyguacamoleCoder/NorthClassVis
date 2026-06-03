@@ -1,10 +1,18 @@
 <template>
   <div class="agent-process-timeline">
-    <button type="button" class="agent-process-header" @click="expanded = !expanded">
-      <span class="agent-section-label">{{ ui.sectionProcess }}</span>
-      <span class="agent-process-meta">{{ metaLabel }}</span>
-      <span class="agent-process-chevron">{{ expanded ? chevronDown : chevronRight }}</span>
-    </button>
+    <div class="agent-process-header">
+      <button type="button" class="agent-process-toggle" @click="expanded = !expanded">
+        <span class="agent-section-label">{{ ui.sectionProcess }}</span>
+        <span class="agent-process-meta">{{ metaLabel }}</span>
+        <span class="agent-process-chevron">{{ expanded ? chevronDown : chevronRight }}</span>
+      </button>
+      <button
+        v-if="primaryModifyStep && runActionsEnabled"
+        type="button"
+        class="agent-tool-run-link agent-tool-run-link--modify"
+        @click="$emit('derive-run', primaryModifyStep)"
+      >{{ processModifyLabel }}</button>
+    </div>
     <div v-show="expanded" class="agent-process-body">
       <div
         v-for="(item, i) in items"
@@ -19,10 +27,23 @@
           v-else-if="item.kind === 'tool' && item.step"
           :steps="[item.step]"
           :default-expanded="isFailed(item.step)"
+          :run-actions-enabled="runActionsEnabled"
+          :primary-modify-run-id="primaryModifyRunId"
+          :header-modify-only="true"
+          @cancel-run="$emit('cancel-run', $event)"
+          @derive-run="$emit('derive-run', $event)"
         />
       </div>
       <div v-if="runningStep" class="agent-process-item agent-process-item--tool">
-        <AgentToolBubbles :steps="[runningStep]" :default-expanded="true" />
+        <AgentToolBubbles
+          :steps="[runningStep]"
+          :default-expanded="true"
+          :run-actions-enabled="runActionsEnabled"
+          :primary-modify-run-id="primaryModifyRunId"
+          :header-modify-only="true"
+          @cancel-run="$emit('cancel-run', $event)"
+          @derive-run="$emit('derive-run', $event)"
+        />
       </div>
     </div>
   </div>
@@ -31,7 +52,7 @@
 <script>
 import { AGENT_UI } from '@/constants/agentUiText.js'
 import { enrichToolStep } from '@/utils/agentPlanUtils.js'
-import { processTimelineStats } from '@/utils/agentTimeline.js'
+import { pickPrimaryModifyRun, processTimelineStats } from '@/utils/agentTimeline.js'
 import AgentMarkdown from '@/components/agent/AgentMarkdown.vue'
 import AgentToolBubbles from '@/components/agent/AgentToolBubbles.vue'
 
@@ -43,7 +64,9 @@ export default {
     runningTool: { type: Object, default: null },
     streaming: { type: Boolean, default: false },
     defaultExpanded: { type: Boolean, default: false },
+    runActionsEnabled: { type: Boolean, default: true },
   },
+  emits: ['cancel-run', 'derive-run'],
   data() {
     return {
       ui: AGENT_UI,
@@ -67,11 +90,35 @@ export default {
       const tool = rt.tool
       return enrichToolStep({
         call_id: rt.call_id,
+        run_id: rt.run_id,
+        parent_run_id: rt.parent_run_id,
+        patch: rt.patch,
+        derive_strategy: rt.derive_strategy,
         tool,
         params: rt.params || {},
         summary: tool === 'todo_write' ? '更新计划中…' : tool === 'load_skill' ? '加载技能中…' : '执行中…',
         status: 'running',
+        run_status: 'executing',
       })
+    },
+    allToolSteps() {
+      const steps = (this.items || [])
+        .filter((item) => item.kind === 'tool' && item.step)
+        .map((item) => item.step)
+      if (this.runningStep) steps.push(this.runningStep)
+      return steps
+    },
+    primaryModifyStep() {
+      return pickPrimaryModifyRun(this.allToolSteps)
+    },
+    primaryModifyRunId() {
+      return this.primaryModifyStep?.run_id || ''
+    },
+    processModifyLabel() {
+      const step = this.primaryModifyStep
+      if (!step) return this.ui.runModifyProcess
+      if (step.tool === 'aggregate_data') return this.ui.runModifyAggregate
+      return this.ui.runModifyQuery
     },
   },
   watch: {
@@ -114,14 +161,35 @@ export default {
 .agent-process-header {
   display: flex;
   align-items: center;
+  gap: 10px;
+  padding: 0 12px 0 0;
+}
+
+.agent-process-toggle {
+  display: flex;
+  align-items: center;
   gap: 8px;
-  width: 100%;
-  padding: 8px 12px;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0 8px 12px;
   border: none;
   background: transparent;
   cursor: pointer;
   text-align: left;
   &:hover { background: rgba(0, 0, 0, 0.03); }
+}
+
+.agent-tool-run-link {
+  font-size: 11px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  color: #0d6efd;
+  flex-shrink: 0;
+  &:hover { opacity: 0.85; }
 }
 
 .agent-process-meta {
@@ -134,6 +202,7 @@ export default {
 .agent-process-chevron {
   font-size: 10px;
   color: #999;
+  flex-shrink: 0;
 }
 
 .agent-process-body {
