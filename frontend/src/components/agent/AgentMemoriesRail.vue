@@ -38,10 +38,14 @@ export default {
   },
   computed: {
     enabledEntries() {
-      return (this.entries || []).filter((e) => e.enabled !== false)
+      return (this.entries || []).filter(
+        (e) => e.enabled !== false && e.kind !== 'rolling',
+      )
     },
     disabledCount() {
-      return (this.entries || []).filter((e) => e.enabled === false).length
+      return (this.entries || []).filter(
+        (e) => e.enabled === false && e.kind !== 'rolling',
+      ).length
     },
   },
   mounted() {

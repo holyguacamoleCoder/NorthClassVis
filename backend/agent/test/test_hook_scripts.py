@@ -32,6 +32,8 @@ def _run_hook(
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=15,
     )
 
@@ -42,12 +44,11 @@ def test_session_start_emits_catalog_json():
     out = json.loads(proc.stdout)
     assert "additionalContext" in out
     ctx = out["additionalContext"]
-    assert "Data_StudentInfo" in ctx
-    assert "Data_SubmitRecord" in ctx
-    assert "resource_registry" in ctx
-    assert "student_info" in ctx
-    assert "report-delivery" in ctx
-    assert "analysis-class" in ctx
+    assert "inspect_schema" in ctx
+    assert "query_data" in ctx
+    assert "data_catalog.md" in ctx
+    assert "load_reference" in ctx
+    assert "Data_StudentInfo" not in ctx
 
 
 def test_audit_read_logs_and_hints_without_limit(tmp_path):

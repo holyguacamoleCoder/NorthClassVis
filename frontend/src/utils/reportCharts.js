@@ -109,6 +109,64 @@ function studentIdsFromParams(params) {
   return params.student_ids.map(String).filter(Boolean)
 }
 
+/** title_ID 形如 Question_xxx；短码多为 knowledge */
+export function looksLikeTitleId(id) {
+  const s = String(id || '').trim()
+  return s.length > 0 && /^Question_/i.test(s)
+}
+
+/**
+ * 规范化 QuestionView report-chart 参数：title_ids 无匹配时回退为 knowledge 列表。
+ * @returns {{ params: object, note?: string }}
+ */
+export function normalizeQuestionViewParams(params = {}, knowledgeCatalog = []) {
+  const out = { ...(params || {}) }
+  const catalog = new Set((knowledgeCatalog || []).map(String))
+  const rawIds = Array.isArray(out.title_ids)
+    ? out.title_ids.map((id) => String(id).trim()).filter(Boolean)
+    : []
+
+  if (!rawIds.length) {
+    return { params: out }
+  }
+
+  const titleLike = rawIds.filter(looksLikeTitleId)
+  const shortCodes = rawIds.filter((id) => !looksLikeTitleId(id))
+
+  if (titleLike.length) {
+    out.title_ids = titleLike
+    if (shortCodes.length && catalog.size) {
+      const asKnowledge = shortCodes.filter((k) => catalog.has(k))
+      if (asKnowledge.length === 1) {
+        out.knowledge = asKnowledge[0]
+      } else if (asKnowledge.length > 1) {
+        out.knowledge_ids = asKnowledge
+      }
+    }
+    return { params: out }
+  }
+
+  if (shortCodes.length && catalog.size) {
+    const matched = shortCodes.filter((k) => catalog.has(k))
+    if (matched.length) {
+      const next = { ...out }
+      delete next.title_ids
+      if (matched.length === 1) {
+        next.knowledge = matched[0]
+      } else {
+        next.knowledge_ids = matched
+      }
+      return {
+        params: next,
+        note:
+          'report-chart 中的短码已按知识点解析（非 title_ID）；正文请写「知识点」勿写「题目 ID」。',
+      }
+    }
+  }
+
+  return { params: out }
+}
+
 /**
  * 嵌入图表前同步 vuex（周次、选中学生）。
  * @returns {{ ok: boolean, error?: string }}

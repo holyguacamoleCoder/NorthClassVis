@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from common.logger import get_logger, log_event
+from common.memory_policy import session_scoped_memory_error
 from common.paths import LEGACY_MEMORY_DIRS, MEMORY_DIR, PROJECT_ROOT, bootstrap_agent_paths
 from common.prompts import (
     SECTION_MEMORY_TITLE,
@@ -48,6 +49,13 @@ ROLLING_TARGETS: dict[str, dict[str, str]] = {
         "description": "Workflow, environment, and project conventions",
     },
 }
+
+ROLLING_MEMORY_STEMS = frozenset(meta["stem"] for meta in ROLLING_TARGETS.values())
+
+
+def memory_kind(key: str) -> str:
+    """rolling = user_profile/agent_notes journal; named = standalone .md files."""
+    return "rolling" if key in ROLLING_MEMORY_STEMS else "named"
 
 _DATA_DUMP_HINTS = (
     "resource_registry",
@@ -119,6 +127,7 @@ class MemoryManager:
                 {
                     "key": key,
                     "name": mem.get("name", key),
+                    "kind": memory_kind(key),
                     "type": mem["type"],
                     "description": mem.get("description", ""),
                     "enabled": bool(mem.get("enabled", True)),
@@ -143,6 +152,7 @@ class MemoryManager:
         return {
             "key": key,
             "name": mem.get("name", key),
+            "kind": memory_kind(key),
             "type": mem["type"],
             "description": mem.get("description", ""),
             "content": mem.get("content", ""),
@@ -292,6 +302,9 @@ class MemoryManager:
                 "Error: content looks like a data/schema dump | "
                 "Use inspect_schema/query_data and report files instead."
             )
+        scoped = session_scoped_memory_error(text)
+        if scoped:
+            return scoped
         return None
 
     def apply_memory(

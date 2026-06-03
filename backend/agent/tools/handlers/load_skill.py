@@ -1,4 +1,10 @@
 from skills import get_registry
+from skills.registry import _resolve_skill_name
+from skills.tool_result import (
+    default_skill_references_hint,
+    format_skill_active_result,
+    format_skill_load_result,
+)
 
 # Fallback for direct unit tests that do not pass _loaded_skills.
 _FALLBACK_LOADED: set[str] = set()
@@ -15,19 +21,17 @@ def run_load_skill(
             "Error: skill name is required | Next: pick a skill id from the "
             "available skills list in the system prompt."
         )
-    skill_name = str(name).strip()
-    if skill_name in loaded:
-        return (
-            f"[Skill active: {skill_name}] Full instructions are in the system prompt "
-            "section 「已加载技能」 on every model turn. Proceed with query_data / "
-            "aggregate_data, or load_skill another name if needed."
-        )
-    document = get_registry().documents.get(skill_name)
+    raw_name = str(name).strip()
+    skill_name = _resolve_skill_name(raw_name)
+    if skill_name in loaded or raw_name in loaded:
+        return format_skill_active_result(skill_name)
+
+    registry = get_registry()
+    document = registry.documents.get(skill_name)
     if document is None:
-        return get_registry().load_full_text(skill_name)
+        return registry.load_full_text(skill_name)
+
     loaded.add(skill_name)
-    return (
-        f"[Skill loaded: {skill_name}] Workflow is pinned in the system prompt "
-        "section 「已加载技能」 on every following turn (not only this tool message). "
-        "Follow that section for steps, sections, and report paths."
-    )
+    skill_xml = registry.load_full_text(skill_name)
+    hint = default_skill_references_hint() if skill_name == "report-writing" else None
+    return format_skill_load_result(skill_name, skill_xml, references_hint=hint)

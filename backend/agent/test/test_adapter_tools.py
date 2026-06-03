@@ -108,6 +108,16 @@ def test_build_visual_links_question_view_title_ids():
     assert "knowledge" not in params
 
 
+def test_normalize_question_params_maps_short_codes_to_knowledge():
+    from data.visual_links import normalize_question_params
+
+    out, err = normalize_question_params({"title_ids": ["b3C9s", "r8S3g"]})
+    assert err is None
+    assert out is not None
+    assert out.get("knowledge_ids") == ["b3C9s", "r8S3g"]
+    assert "title_ids" not in out
+
+
 def test_build_visual_links_rejects_placeholder_knowledge():
     raw = run_build_visual_links(
         links=[{"view": "QuestionView", "params": {"knowledge": "some_knowledge"}}],

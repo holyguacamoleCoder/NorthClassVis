@@ -32,6 +32,7 @@ def execute_tool_calls(
     hooks: "HookManager | None" = None,
     analysis_context: AnalysisToolContext | None = None,
     loaded_skills: set[str] | None = None,
+    loaded_references: set[str] | None = None,
     llm_client: Any | None = None,
     filter_context: Any | None = None,
     on_tool_event: Callable[[dict[str, Any]], None] | None = None,
@@ -244,6 +245,8 @@ def execute_tool_calls(
         )
         if tool_name == "load_skill" and loaded_skills is not None:
             dispatch_args = {**dispatch_args, "_loaded_skills": loaded_skills}
+        if tool_name == "load_reference" and loaded_references is not None:
+            dispatch_args = {**dispatch_args, "_loaded_references": loaded_references}
 
         log_event(
             _log,

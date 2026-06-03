@@ -58,11 +58,38 @@ def normalize_question_params(params: dict[str, Any]) -> tuple[dict[str, Any] | 
         if not clean_ids:
             return None, "QuestionView: title_ids must not be empty when provided"
 
-    if clean_ids:
-        out: dict[str, Any] = {"title_ids": clean_ids[:8]}
+    knowledge_ids = params.get("knowledge_ids")
+    clean_knowledge: list[str] = []
+    if knowledge_ids is not None:
+        if not isinstance(knowledge_ids, list):
+            return None, "QuestionView: knowledge_ids must be an array"
+        clean_knowledge = [
+            str(x).strip() for x in knowledge_ids if x is not None and str(x).strip()
+        ]
+
+    title_like = [x for x in clean_ids if x.lower().startswith("question_")]
+    short_codes = [x for x in clean_ids if x not in title_like]
+
+    if title_like:
+        out: dict[str, Any] = {"title_ids": title_like[:8]}
         if knowledge:
             out["knowledge"] = knowledge
+        if len(short_codes) == 1:
+            out["knowledge"] = short_codes[0]
+        elif len(short_codes) > 1:
+            out["knowledge_ids"] = short_codes[:8]
         return out, None
+
+    if short_codes and not title_like:
+        if len(short_codes) == 1:
+            return {"knowledge": short_codes[0]}, None
+        return {"knowledge_ids": short_codes[:8]}, None
+
+    if clean_knowledge:
+        if len(clean_knowledge) == 1:
+            return {"knowledge": clean_knowledge[0]}, None
+        return {"knowledge_ids": clean_knowledge[:8]}, None
+
     if knowledge:
         return {"knowledge": knowledge}, None
     return None, "QuestionView: title_ids or knowledge required"

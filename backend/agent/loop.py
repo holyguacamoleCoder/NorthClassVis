@@ -23,6 +23,12 @@ from cancel import TurnCancelled
 from loop_state import LoopState
 from recovery import DEFAULT_RECOVERY_CONFIG, RecoveryHandler
 from skills import SkillRegistry, get_registry
+from skills.message_meta import attach_pin_meta, pin_meta_for_tool
+from skills.produce_bootstrap import (
+    append_produce_report_writing_bootstrap,
+    append_report_reference_bootstrap,
+)
+from skills.registry import _resolve_skill_name
 from tools import TOOLS, execute_tool_calls
 from permission.modes import CapabilityMode
 from tools.runtime.pipeline.preprocess import dedupe_tool_calls, parse_args
@@ -107,7 +113,9 @@ class AgentLoop:
                 filter_context=self.loop_state.filter_context,
                 skills=registry,
                 loaded_skills=set(self.loop_state.loaded_skills),
+                loaded_references=set(self.loop_state.loaded_references),
                 todo_items=todo_items,
+                session_id=self.loop_state.session_id,
             )
         )
 
@@ -187,6 +195,21 @@ class AgentLoop:
 
     def _run_turn_body(self):
         self._check_cancelled()
+        registry = self.loop_state.skills or get_registry()
+        if self.permission.mode == CapabilityMode.PRODUCE:
+            append_produce_report_writing_bootstrap(
+                self.loop_state.messages,
+                self.loop_state.loaded_skills,
+                registry,
+            )
+        if "report-writing" in self.loop_state.loaded_skills:
+            append_report_reference_bootstrap(
+                self.loop_state.messages,
+                self.loop_state.loaded_references,
+                user_message=self.loop_state.analysis_context.current_user_message,
+                filter_context=self.loop_state.filter_context,
+                loaded_skills=self.loop_state.loaded_skills,
+            )
         self._apply_pre_turn_compaction()
 
         log_event(
@@ -364,6 +387,7 @@ class AgentLoop:
             hooks=self.hooks,
             analysis_context=self.loop_state.analysis_context,
             loaded_skills=self.loop_state.loaded_skills,
+            loaded_references=self.loop_state.loaded_references,
             llm_client=self.llm_client,
             filter_context=self.loop_state.filter_context,
             on_tool_event=self._emit_progress,
@@ -654,6 +678,22 @@ class AgentLoop:
         )
 
 
+def _resource_id_for_tool_call(tool_name: str, call: dict[str, Any]) -> str:
+    args = call.get("arguments") or {}
+    if isinstance(args, str):
+        try:
+            args = json.loads(args) if args.strip() else {}
+        except (TypeError, ValueError):
+            args = {}
+    if not isinstance(args, dict):
+        args = {}
+    if tool_name == "load_skill":
+        return _resolve_skill_name(str(args.get("name") or ""))
+    if tool_name == "load_reference":
+        return str(args.get("name") or "").strip()
+    return ""
+
+
 def _sync_tool_results_to_messages(
     messages: list[dict[str, Any]],
     tool_calls: list[dict[str, Any]],
@@ -675,8 +715,21 @@ def _sync_tool_results_to_messages(
         if not call_id:
             continue
         call_id = str(call_id)
+        fn = call.get("function") or {}
+        tool_name = str(call.get("name") or fn.get("name") or "")
         if call_id in results_by_id:
-            messages.append(results_by_id[call_id])
+            msg = dict(results_by_id[call_id])
+            content = str(msg.get("content") or "")
+            base_meta = pin_meta_for_tool(tool_name, content)
+            if base_meta:
+                kind = base_meta["content_kind"]
+                resource_id = _resource_id_for_tool_call(tool_name, call) or content[:80]
+                msg = attach_pin_meta(
+                    msg,
+                    content_kind=kind,
+                    resource_id=resource_id,
+                )
+            messages.append(msg)
         else:
             messages.append({
                 "role": "tool",

@@ -18,7 +18,7 @@ pytestmark = pytest.mark.skipif(
 pytest.importorskip("pandas")
 
 from data.exceptions import InvalidParameterError  # noqa: E402
-from data.where import apply_where, normalize_where  # noqa: E402
+from data.where import apply_where, normalize_where, repair_where  # noqa: E402
 from tools.handlers.data_tools import run_query_data  # noqa: E402
 
 
@@ -104,6 +104,53 @@ def test_query_week_and_on_week_aggregation(data_dir, monkeypatch):
     assert weeks.issubset({13, 14, 15})
     notes = payload.get("meta", {}).get("normalization_notes") or []
     assert any("week_index" in n for n in notes)
+
+
+def test_repair_missing_op_defaults_to_eq():
+    fixed, notes = repair_where({"field": "student_ID", "value": "abc123"})
+    assert fixed == {"op": "eq", "field": "student_ID", "value": "abc123"}
+    assert any("eq" in n for n in notes)
+
+
+def test_repair_operator_alias():
+    fixed, _ = repair_where({"field": "major", "operator": "eq", "value": "J23517"})
+    assert fixed["op"] == "eq"
+
+
+def test_repair_between_expands_to_and():
+    fixed, notes = repair_where(
+        {"field": "week_index", "op": "between", "value": [13, 15]}
+    )
+    assert fixed["op"] == "and"
+    assert len(fixed["conditions"]) == 2
+    assert any("between" in n for n in notes)
+
+
+def test_repair_where_array():
+    fixed, notes = repair_where(
+        [
+            {"field": "week_index", "op": "gte", "value": 13},
+            {"field": "week_index", "op": "lte", "value": 15},
+        ]
+    )
+    assert fixed["op"] == "and"
+    assert len(fixed["conditions"]) == 2
+    assert any("数组" in n for n in notes)
+
+
+def test_query_missing_op_repaired(data_dir, monkeypatch):
+    monkeypatch.chdir(BACKEND_ROOT.parent)
+    raw = run_query_data(
+        resource="week_aggregation",
+        classes=["Class2"],
+        where={"field": "week_index", "value": 14},
+        limit=5,
+        data_dir=data_dir,
+    )
+    assert not raw.startswith("Error:"), raw
+    payload = json.loads(raw)
+    notes = payload.get("meta", {}).get("normalization_notes") or []
+    assert any("eq" in n for n in notes)
 
 
 def test_query_week_on_submit_record_error(data_dir, monkeypatch):

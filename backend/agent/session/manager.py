@@ -178,6 +178,7 @@ class SessionManager:
         session.todo_items = list(snapshot.get("todo_items") or [])
         session.todo_round_since_update = int(snapshot.get("todo_round_since_update") or 0)
         session.loaded_skills = list(snapshot.get("loaded_skills") or [])
+        session.loaded_references = list(snapshot.get("loaded_references") or [])
         session.user_turn_count = int(snapshot.get("user_turn_count") or 0)
         reset_todo_state()
         if session.todo_items:
@@ -193,6 +194,7 @@ class SessionManager:
             "todo_items": list(session.todo_items or []),
             "todo_round_since_update": session.todo_round_since_update,
             "loaded_skills": list(session.loaded_skills or []),
+            "loaded_references": list(session.loaded_references or []),
             "user_turn_count": session.user_turn_count,
         }
 
@@ -211,6 +213,7 @@ class SessionManager:
         if loop_state.filter_context is not None:
             self._active.filter_context = loop_state.filter_context.to_dict()
         self._active.loaded_skills = sorted(loop_state.loaded_skills)
+        self._active.loaded_references = sorted(loop_state.loaded_references)
 
     def to_loop_state(self, permission: PermissionManager) -> LoopState:
         if self._active is None:
@@ -234,6 +237,7 @@ class SessionManager:
             messages_count=session.messages_count,
             filter_context=fc,
             loaded_skills=set(session.loaded_skills or []),
+            loaded_references=set(session.loaded_references or []),
         )
 
     def _activate(self, session: ChatSession, *, persist_active: bool) -> None:

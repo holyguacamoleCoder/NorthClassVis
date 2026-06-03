@@ -21,16 +21,23 @@ class WeekRoutes:
     def week_analysis(self):
         student_ids = request.args.getlist('student_ids[]')
 
-        df = self.data_with_title_knowledge.copy()
+        base_df = self.data_with_title_knowledge.copy()
+        if base_df.empty:
+            return jsonify({"students": []})
+
+        # 周次锚点必须用全班/全量数据起点，与 week_aggregation.week_index 一致；
+        # 若先按单学生过滤再取 min(time)，周次会从 0 重编，导致 week_range=[13,15] 为空。
+        start_date = base_df['time'].min()
+        base_df = base_df.copy()
+        base_df['week'] = base_df['time'].apply(
+            lambda value: week_service.calculate_week_of_year(value, start_date=start_date)
+        )
+
+        df = base_df
         if student_ids:
             df = df[df['student_ID'].isin(student_ids)]
         if df.empty:
             return jsonify({"students": []})
-
-        start_date = df['time'].min()
-        df['week'] = df['time'].apply(
-            lambda value: week_service.calculate_week_of_year(value, start_date=start_date)
-        )
         wr = self.config.get_week_range()
         qs_start = request.args.get("week_start", type=int)
         qs_end = request.args.get("week_end", type=int)

@@ -13,7 +13,7 @@
 | 题目主数据 | `Data_TitleInfo.csv` | 题目分值、知识点层级 |
 | 提交记录 | `Data_SubmitRecord/SubmitRecord-{Class}.csv` | 按班级的答题/提交明细（学业分析核心事实表） |
 | 本目录 | `meta/data_catalog.md` | 数据结构说明（只读参考） |
-| 报告交付规范 | `skills/reference/report-delivery.md` | produce：`load_skill report-delivery`；勿 read `reports/` 参考 |
+| 报告写作规范 | `skills/report-writing/`（SKILL + reference.md） | produce 自动注入 `report-writing`；标准总览/诊断再 `analysis-*`；报告一律写 `reports/` |
 
 **关联键**：`student_ID`（提交记录 <-> 学生）、`title_ID`（提交记录 <-> 题目）。
 
@@ -96,6 +96,6 @@
 
 ## 7. 学业分析契约（Agent）
 
-> CSV 只读不变。契约：`meta/analysis_ontology.yaml`、`meta/visual_link_contract.yaml`、`meta/metrics/_index.yaml`、`backend/agent/contracts/tabular_result.schema.json`；逻辑资源 **`meta/resource_registry.yaml`**。正式报告：`load_skill` `analysis-*` + `report-delivery`（`skills/reference/report-delivery.md`）；`reports/` 仅产出勿 read 参考。
+> CSV 只读不变。契约：`meta/analysis_ontology.yaml`、`meta/visual_link_contract.yaml` 等；逻辑资源 **`meta/resource_registry.yaml`**。produce 注入 `report-writing`；标准个体/班/专业再加 `analysis-*`；所有 Markdown 报告在 `reports/`（含 `reports/notes/`）；勿 read 旧稿。
 
 **Phase 3 薄适配工具**：`get_current_filter_context`（当前 Nav/会话分析范围，不算指标）与 `build_visual_links`（按 `visual_link_contract.yaml` 校验五视图跳转参数，不渲染图表）。

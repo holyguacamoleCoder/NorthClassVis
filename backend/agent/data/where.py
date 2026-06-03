@@ -10,6 +10,157 @@ from .exceptions import InvalidParameterError
 _ALLOWED_OPS = frozenset({"eq", "in", "gte", "lte", "and"})
 _WEEK_FIELD_TOKENS = frozenset({"week", "week_index"})
 
+# Common LLM aliases → canonical op (before validation).
+_OP_ALIASES: dict[str, str] = {
+    "==": "eq",
+    "=": "eq",
+    "equals": "eq",
+    "equal": "eq",
+    "eq": "eq",
+    "in": "in",
+    "in_list": "in",
+    "includes": "in",
+    "gte": "gte",
+    "ge": "gte",
+    ">=": "gte",
+    "gt": "gte",
+    "greater_than": "gte",
+    "greater_than_or_equal": "gte",
+    "lte": "lte",
+    "le": "lte",
+    "<=": "lte",
+    "lt": "lte",
+    "less_than": "lte",
+    "less_than_or_equal": "lte",
+    "and": "and",
+    "AND": "and",
+    "between": "between",  # expanded to and below
+}
+
+
+def repair_where(where: Any) -> tuple[dict[str, Any] | None, list[str]]:
+    """
+    Coerce common malformed where clauses from the model before normalize_where.
+    Returns (repaired dict or None, notes for meta.normalization_notes).
+    """
+    notes: list[str] = []
+    if where is None:
+        return None, notes
+    if isinstance(where, list):
+        items = [repair_where_clause(item, notes) for item in where if item is not None]
+        items = [x for x in items if x is not None]
+        if not items:
+            return None, notes
+        if len(items) == 1:
+            return items[0], notes
+        notes.append("已将 where 数组规范为 {op: and, conditions: [...]}。")
+        return {"op": "and", "conditions": items}, notes
+    if not isinstance(where, dict):
+        raise InvalidParameterError("where 须为 object 或条件数组", param="where")
+    repaired = repair_where_clause(where, notes)
+    return repaired, notes
+
+
+def repair_where_clause(clause: Any, notes: list[str]) -> dict[str, Any] | None:
+    if clause is None:
+        return None
+    if not isinstance(clause, dict):
+        raise InvalidParameterError("where 条件须为 object", param="where")
+
+    raw = dict(clause)
+    if "filters" in raw and "conditions" not in raw:
+        raw["conditions"] = raw.pop("filters")
+        notes.append("已将 where.filters 规范为 conditions。")
+    if "conditions" in raw and "op" not in raw:
+        raw["op"] = "and"
+        notes.append("已为含 conditions 的 where 补充 op: and。")
+
+    op_raw = raw.get("op")
+    if op_raw is None and raw.get("operator") is not None:
+        op_raw = raw.pop("operator")
+        notes.append("已将 where.operator 规范为 op。")
+    if op_raw is None and raw.get("field") and "value" in raw:
+        op_raw = "eq"
+        notes.append("已补充缺失的 where.op，默认为 eq。")
+
+    op_key = str(op_raw).strip() if op_raw is not None else ""
+    if op_key.lower() == "or":
+        raise InvalidParameterError(
+            "where 不支持 op: or；请改用 op: and 组合条件，或拆分多次 query_data。",
+            param="where",
+        )
+    op_norm = _OP_ALIASES.get(op_key) or _OP_ALIASES.get(op_key.lower()) if op_key else None
+
+    if op_norm == "between":
+        field = raw.get("field") or raw.get("field_name")
+        value = raw.get("value")
+        if isinstance(field, str) and isinstance(value, (list, tuple)) and len(value) >= 2:
+            lo, hi = value[0], value[1]
+            notes.append("已将 where op:between 展开为 gte/lte 组合。")
+            return {
+                "op": "and",
+                "conditions": [
+                    {"field": field, "op": "gte", "value": lo},
+                    {"field": field, "op": "lte", "value": hi},
+                ],
+            }
+
+    if op_norm == "and" or (raw.get("conditions") and op_norm in (None, "and")):
+        op_norm = "and"
+        conditions_in = raw.get("conditions") or raw.get("filters") or []
+        if not isinstance(conditions_in, list):
+            raise InvalidParameterError("and 需要 conditions 数组", param="where")
+        children: list[dict[str, Any]] = []
+        for sub in conditions_in:
+            child = repair_where_clause(sub, notes)
+            if child is not None:
+                children.append(child)
+        if not children:
+            return None
+        if len(children) == 1:
+            return children[0]
+        return {"op": "and", "conditions": children}
+
+    if op_norm is None and op_key:
+        raise InvalidParameterError(
+            f"不支持的 where 操作: {op_raw!r}（允许: eq, in, gte, lte, and；"
+            '单条件示例: {"field":"major","op":"eq","value":"J23517"}）',
+            param="where",
+        )
+    if op_norm is None:
+        raise InvalidParameterError(
+            'where 缺少 op（允许: eq, in, gte, lte, and）。'
+            '示例: {"field":"student_ID","op":"eq","value":"..."}',
+            param="where",
+        )
+
+    field = raw.get("field") or raw.get("field_name")
+    if field is not None and raw.get("field_name") and not raw.get("field"):
+        notes.append("已将 where.field_name 规范为 field。")
+    if isinstance(field, str):
+        out: dict[str, Any] = {"op": op_norm, "field": field}
+        if op_norm == "in" and "values" in raw and "value" not in raw:
+            out["value"] = raw["values"]
+            notes.append("已将 where.values 规范为 value（in 列表）。")
+        elif "value" in raw:
+            out["value"] = raw["value"]
+        elif op_norm != "in":
+            raise InvalidParameterError(
+                f"where 条件缺少 value（field={field!r}, op={op_norm}）",
+                param="where",
+            )
+        else:
+            raise InvalidParameterError(
+                f"where in 操作需要 value 列表（field={field!r}）",
+                param="where",
+            )
+        return out
+
+    raise InvalidParameterError(
+        "where 叶子条件需要 string 类型 field 与 op",
+        param="where",
+    )
+
 
 def _week_field_token(field: str) -> str:
     from .column_aliases import normalize_identifier
@@ -63,6 +214,10 @@ def normalize_where(
     if not where:
         return None, []
 
+    where, repair_notes = repair_where(where)
+    if not where:
+        return None, repair_notes
+
     if not isinstance(where, dict):
         raise InvalidParameterError("where 须为 object", param="where")
 
@@ -84,10 +239,13 @@ def normalize_where(
             if norm_sub is not None:
                 normalized.append(norm_sub)
             notes.extend(sub_notes)
-        return {"op": "and", "conditions": normalized}, notes
+        return {"op": "and", "conditions": normalized}, repair_notes + notes
 
     if op not in _ALLOWED_OPS - frozenset({"and"}):
-        raise InvalidParameterError(f"不支持的 where 操作: {op!r}", param="where")
+        raise InvalidParameterError(
+            f"不支持的 where 操作: {op!r}（允许: eq, in, gte, lte, and）",
+            param="where",
+        )
 
     field = where.get("field")
     if not field or not isinstance(field, str):
@@ -100,7 +258,7 @@ def normalize_where(
     )
     out = dict(where)
     out["field"] = canonical
-    notes = [note] if note else []
+    notes = repair_notes + ([note] if note else [])
     return out, notes
 
 
@@ -115,7 +273,10 @@ def _validate_field(field: str, allowed_columns: frozenset[str]) -> None:
 def _apply_condition(df: pd.DataFrame, condition: dict, allowed_columns: frozenset[str]) -> pd.Series:
     op = condition.get("op")
     if op not in _ALLOWED_OPS:
-        raise InvalidParameterError(f"不支持的 where 操作: {op!r}", param="where")
+        raise InvalidParameterError(
+            f"不支持的 where 操作: {op!r}（允许: eq, in, gte, lte, and）",
+            param="where",
+        )
 
     if op == "and":
         conditions = condition.get("conditions")

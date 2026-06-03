@@ -1,7 +1,6 @@
 from typing import Dict, List, Union
 
 import numpy as np
-import pandas as pd
 
 
 class ClusterAnalysis:
@@ -75,7 +74,10 @@ class ClusterAnalysis:
             }
         return result
 
-    def get_cluster_center_students_ID(self) -> List[Dict[str, Union[str, int]]]:
+    def get_cluster_center_students_ID(
+        self,
+        valid_student_ids: set[str] | None = None,
+    ) -> List[Dict[str, Union[str, int]]]:
         if self.method not in ["kmeans", "gmm"]:
             raise ValueError(f"{self.method} 不支持计算聚类中心！")
 
@@ -84,16 +86,26 @@ class ClusterAnalysis:
             if self.method == "kmeans"
             else self.cluster_model.means_
         )
-        raw_data_df = pd.DataFrame(self.raw_data).T
+        student_ids = list(self.raw_data.keys())
+        valid = {str(s) for s in valid_student_ids} if valid_student_ids else None
         cluster_center_students = []
 
         for center_index, center in enumerate(cluster_centers):
-            closest_student = raw_data_df.apply(
-                lambda row: np.linalg.norm(row - center), axis=1
-            ).idxmin()
-            cluster_center_students.append(
-                {"student_ID": closest_student, "cluster": center_index}
-            )
+            best_id: str | None = None
+            best_dist = np.inf
+            for row_index, student_id in enumerate(student_ids):
+                sid = str(student_id)
+                if valid is not None and sid not in valid:
+                    continue
+                row = self.features_array[row_index]
+                dist = float(np.linalg.norm(row - center))
+                if dist < best_dist:
+                    best_dist = dist
+                    best_id = sid
+            if best_id is not None:
+                cluster_center_students.append(
+                    {"student_ID": best_id, "cluster": center_index}
+                )
 
         return cluster_center_students
 

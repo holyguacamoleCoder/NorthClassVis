@@ -59,7 +59,7 @@ _RESOURCE_RESOLVE_HINTS = (
 _WHERE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "description": (
-        "Safe filter DSL. Leaf: {op, field, value} with op in eq|in|gte|lte. "
+        "Safe filter DSL. Leaf must include op+field+value (op: eq|in|gte|lte; missing op defaults to eq). "
         "Combine: {op: and, conditions: [<leaf>, ...]}. Fields must exist on the resource. "
         "Week ranges: use week_aggregation + week_range=[start,end], or where on week_index "
         "(week aliases to week_index on week_aggregation only; submit_record has no week column)."
@@ -760,16 +760,17 @@ MANIFEST: tuple[ToolDefinition, ...] = (
     ToolDefinition(
         name="memory",
         description=(
-            "Save durable facts to persistent memory (analyze or produce only). Memory is injected "
-            "into future turns — keep entries compact and still relevant later.\n\n"
-            "WHEN TO SAVE (proactively when appropriate):\n"
-            "- Teacher corrects you or says 'remember this'\n"
-            "- Preferences, habits, default class/report style\n"
-            "- Workflow or project conventions not in data/meta files\n\n"
-            "TARGETS: user (teacher) | memory (agent/project notes).\n"
-            "ACTIONS: add | replace (needs old_text) | remove (needs old_text).\n\n"
-            "Do NOT save: CSV schemas, field lists, stats, session TODO, secrets. "
-            "Put analysis conclusions in reports/, not memory."
+            "Save durable cross-session facts (analyze or produce only). Injected into future "
+            "sessions — not for this turn's task state.\n\n"
+            "WHEN TO SAVE:\n"
+            "- Teacher explicitly says remember / corrects a lasting preference\n"
+            "- Stable habits: default class, report style, recurring workflow rules\n\n"
+            "NEVER SAVE (use todo_write or reports/ instead):\n"
+            "- Student IDs, week ranges, report completion status, deliverable paths\n"
+            "- Analysis conclusions, stats, viz gaps for one report run\n"
+            "- CSV schemas, secrets, session TODO\n\n"
+            "TARGETS: user (teacher prefs) | memory (project notes). "
+            "ACTIONS: add | replace (old_text) | remove (old_text)."
         ),
         parameters=_MEMORY_PARAMS,
         handler=run_memory,
@@ -777,10 +778,11 @@ MANIFEST: tuple[ToolDefinition, ...] = (
     ToolDefinition(
         name="save_memory",
         description=(
-            "Save a named cross-session memory file (analyze or produce). Prefer `memory` for "
-            "rolling teacher/project notes. Use save_memory for a distinct topic with its own id. "
-            "Types: user | feedback | project | reference. "
-            "Do NOT save: CSV layouts, stats, TODO, secrets. Same name overwrites the file."
+            "Save a named cross-session memory file (analyze or produce). For rolling notes use "
+            "`memory` tool. Types: user | feedback | project | reference.\n\n"
+            "NEVER save session/task state: student IDs, week ranges, single-report status, "
+            "reports/ paths, stats, TODO, secrets. Use todo_write + write_file to reports/ "
+            "for deliverables (tracked in session automatically). Same name overwrites the file."
         ),
         parameters=_SAVE_MEMORY_PARAMS,
         handler=run_save_memory,

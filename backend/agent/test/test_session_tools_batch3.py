@@ -33,6 +33,7 @@ def test_consult_excludes_session_tools():
     names = {t["function"]["name"] for t in filter_tools(TOOLS, CapabilityMode.CONSULT)}
     assert "todo_write" not in names
     assert "compact" not in names
+    assert "memory" not in names
     assert "save_memory" not in names
 
 
@@ -49,9 +50,11 @@ def test_manifest_compact_save_memory_batch3():
     compact = _tool("compact")
     assert "micro" in compact.description.lower() or "macro" in compact.description.lower()
     assert "Do NOT" in compact.description
-    mem = _tool("save_memory")
+    mem = _tool("memory")
     assert "Do NOT" in mem.description
-    assert "inspect_schema" in mem.description or "query_data" in mem.description
+    assert "add" in mem.description.lower()
+    save = _tool("save_memory")
+    assert "Do NOT" in save.description or "Prefer" in save.description
 
 
 def test_todo_write_errors_and_header():

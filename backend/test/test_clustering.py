@@ -62,6 +62,16 @@ def test_get_cluster_center_students_ID(students_data):
         assert 'cluster' in student
         assert isinstance(student['cluster'], int)
 
+
+def test_get_cluster_center_students_ID_respects_valid_ids(students_data):
+    cluster_analysis = ClusterAnalysis(students_data, n_clusters=2)
+    centers = cluster_analysis.get_cluster_center_students_ID(
+        valid_student_ids={"student1", "student3"},
+    )
+    assert len(centers) == 2
+    for item in centers:
+        assert item["student_ID"] in ("student1", "student3")
+
 # 测试 get_cluster_centers 方法
 def test_get_cluster_centers(students_data):
     cluster_analysis = ClusterAnalysis(students_data, n_clusters=2)

@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 from common.logger import get_logger, log_event
+from skills.message_meta import is_pinned_message
 
 from .config import ContextCompactConfig, DEFAULT_CONFIG
 from .persist import COMPACTED_TOOL_PLACEHOLDER
@@ -9,8 +10,8 @@ from .tool_result_summary import extract_tabular_summary
 
 _log = get_logger("context.micro")
 
-# Tool results kept verbatim in message history (canonical state is also in system prompt).
-_PINNED_TOOL_NAMES = frozenset({"load_skill", "todo_write"})
+# Tool results kept verbatim in message history (fallback when _agent_meta absent).
+_PINNED_TOOL_NAMES = frozenset({"load_skill", "load_reference", "todo_write"})
 
 
 def _tool_names_by_call_id(messages: list[dict[str, Any]]) -> dict[str, str]:
@@ -41,6 +42,13 @@ def compact_tool_content(content: str) -> str:
     return COMPACTED_TOOL_PLACEHOLDER
 
 
+def _should_skip_micro_compact(msg: dict[str, Any], tool_names: dict[str, str]) -> bool:
+    if is_pinned_message(msg):
+        return True
+    call_id = str(msg.get("tool_call_id") or "")
+    return tool_names.get(call_id) in _PINNED_TOOL_NAMES
+
+
 def micro_compact_messages(
     messages: list[dict[str, Any]],
     *,
@@ -59,8 +67,7 @@ def micro_compact_messages(
     compacted = 0
     for index in to_compact:
         msg = messages[index]
-        call_id = str(msg.get("tool_call_id") or "")
-        if tool_names.get(call_id) in _PINNED_TOOL_NAMES:
+        if _should_skip_micro_compact(msg, tool_names):
             continue
         content = msg.get("content", "")
         if not isinstance(content, str):

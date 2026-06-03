@@ -26,12 +26,12 @@
       </select>
       <div class="limit">kind:</div>
     </div>
-    <Simplebar :style="simplebarStyle">
+    <component :is="embedded ? 'div' : 'Simplebar'" :style="simplebarStyle" :class="{ 'week-embed-shell': embedded }">
       <LoadingSpinner v-if=loading />
       <div class="wait-prompt" v-if="isWaiting">请先在散点图中点选学生，或从 Agent 图表入口跳转</div>
-      <div class="empty-prompt" v-else-if="!loading && !hasRenderableData">暂无周视图数据（请确认已选中学生）</div>
+      <div class="empty-prompt" v-else-if="!loading && !hasRenderableData">{{ emptyMessage }}</div>
       <div :id="containerId"></div>
-    </Simplebar>
+    </component>
   </div>
 </template>
 
@@ -64,6 +64,7 @@ export default {
       selectedDay: 5,
       lastAppliedAgentLink: null,
       highlightTick: 0,
+      emptyDetail: '',
     }
   },
   mounted() {
@@ -90,8 +91,14 @@ export default {
       return `第 ${wr[0]}–${wr[1]} 周`
     },
     simplebarStyle() {
-      const h = this.embedded ? '320px' : '550px'
-      return { height: h, width: '98%' }
+      if (this.embedded) {
+        return { width: '100%', minHeight: '80px', overflow: 'visible' }
+      }
+      return { height: '550px', width: '98%' }
+    },
+    emptyMessage() {
+      if (this.emptyDetail) return this.emptyDetail
+      return '暂无周视图数据（请确认 student_ids 与 week_range 与学业数据周次一致）'
     },
     highlighted() {
       if (this.embedded) return false
@@ -185,8 +192,35 @@ export default {
       }
     },
     weekRangeParams() {
+      if (this.embedded && this.chartParams?.week_range) {
+        const raw = this.chartParams.week_range
+        if (Array.isArray(raw) && raw.length >= 2) {
+          const start = Number(raw[0])
+          const end = Number(raw[1])
+          if (!Number.isNaN(start) && !Number.isNaN(end)) return [start, end]
+        }
+      }
       const wr = this.getNavWeekRange
       return wr && wr.length >= 2 ? wr : null
+    },
+    /** 实际周次（如 13–15），与 week_aggregation.week_index 一致 */
+    collectWeekNumbers(studentsData) {
+      const set = new Set()
+      for (const s of studentsData || []) {
+        for (const w of s.weeks || []) {
+          if (w.week != null && !Number.isNaN(Number(w.week))) {
+            set.add(Number(w.week))
+          }
+        }
+      }
+      return [...set].sort((a, b) => a - b)
+    },
+    buildWeekXLayout(weekNumbers, width) {
+      const numWeeks = Math.max(weekNumbers.length, 1)
+      const weekX = this.$d3.scaleLinear().domain([0, numWeeks]).range([0, width])
+      const weekWidth = weekX(1) - weekX(0)
+      const weekToIndex = new Map(weekNumbers.map((w, i) => [w, i + 1]))
+      return { weekX, weekWidth, weekToIndex, numWeeks }
     },
     /** 旭日图半径：按单列宽度与行高约束，避免跨列重叠 */
     sunburstRadius(weekWidth, rowHeight) {
@@ -221,9 +255,19 @@ export default {
       }
     },
     async getWeekData(stu_ids) {
-      const { data } = await getWeeks(stu_ids, this.weekRangeParams())
+      const wr = this.weekRangeParams()
+      const { data } = await getWeeks(stu_ids, wr)
       this.WeekData = data
-      // console.log('WeekData', this.WeekData)
+      const students = data?.students || []
+      if (!students.length || !students.some((s) => s.weeks?.length)) {
+        const idHint = (stu_ids || []).join(', ') || '（未指定）'
+        const wrHint = wr ? `第 ${wr[0]}–${wr[1]} 周` : '（未指定周次）'
+        this.emptyDetail =
+          `该学生在 ${wrHint} 无周视图数据（student_ids: ${idHint}）。` +
+          '请用 week_aggregation 核对 week_index，或与面板 Nav 周次一致。'
+      } else {
+        this.emptyDetail = ''
+      }
       this.renderWeekData()
     },
     async getPeakData(stu_ids, day) {
@@ -238,7 +282,8 @@ export default {
         d3.select(this.vizSel()).selectAll('*').remove()
         return
       }
-      const numWeeks = d3.max(filteredWeekData, d => d.weeks.length)
+      const weekNumbers = this.collectWeekNumbers(filteredWeekData)
+      const numWeeks = weekNumbers.length
       const numStudents = filteredWeekData.length
       const layout = this.measureChartLayout(numWeeks, numStudents)
       const {
@@ -262,33 +307,28 @@ export default {
       const rg = g.append('g')
         .attr('transform', `translate(${margin.left + stu_icon}, ${weekLabelHeight})`)
 
-      // 定义缩放尺
-      const weekX = d3.scaleLinear()
-        .domain([0, numWeeks])
-        .range([0, width])
+      const { weekX, weekWidth, weekToIndex } = this.buildWeekXLayout(weekNumbers, width)
 
       const studentsY = d3.scaleBand()
         .domain(d3.range(numStudents))
         .range([0, (height / 5) * numStudents])
 
-      const weekWidth = weekX(1) - weekX(0)
-
-      // 区分x轴,奇数填充为深色列
-      for (let i = 1; i <= numWeeks + 1; i++) {
+      // 区分x轴,奇数填充为深色列；标签用真实 week_index（第 13 周等）
+      for (let i = 1; i <= numWeeks; i++) {
+        const weekNum = weekNumbers[i - 1]
         if (i % 2 !== 0) {
           rg.append('rect')
             .attr('x', weekX(i) - weekWidth / 2)
             .attr('y', -weekLabelHeight)
-            .attr('fill', '#F5F5F5') // 奇数列为浅灰色
+            .attr('fill', '#F5F5F5')
             .attr('width', weekWidth)
             .attr('height', (height / 5) * numStudents + weekLabelHeight)
         }
 
-        // 绘制每个周的标签
         rg.append('text')
           .attr('x', weekX(i))
           .attr('y', 0)
-          .text(`Week${i}`)
+          .text(`第${weekNum}周`)
           .attr('text-anchor', 'middle')
           .attr('font-size', weekWidth >= 72 ? 13 : 11)
           .attr('font-weight', 'bold')
@@ -371,9 +411,10 @@ export default {
           .attr('height', stu_icon)
           .attr('href', userAvatar)
 
-        // 对每一周
+        // 对每一周（x 用列序号，勿用绝对 week 值当 domain）
         student_weeks.forEach(w => {
-          const position = `translate(${weekX(w.week) + weekWidth}, ${studentsY(i) + studentsY.bandwidth() / 2})`
+          const col = weekToIndex.get(Number(w.week)) ?? 1
+          const position = `translate(${weekX(col) + weekWidth}, ${studentsY(i) + studentsY.bandwidth() / 2})`
           const radarChartG = rg.append('g')
             .attr('class', 'radar')
             .attr("transform", position)
@@ -456,11 +497,10 @@ export default {
         d3.select(this.vizSel()).selectAll('*').remove();
         return;
       }
-      const numWeeks = d3.max(filteredPeakData, d =>
-        d3.max(d.weeks, w => w.week)
-      );
-      const numStudents = filteredPeakData.length;
-      const layout = this.measureChartLayout(numWeeks, numStudents);
+      const weekNumbers = this.collectWeekNumbers(filteredPeakData)
+      const numWeeks = weekNumbers.length
+      const numStudents = filteredPeakData.length
+      const layout = this.measureChartLayout(numWeeks, numStudents)
       const {
         height,
         margin,
@@ -481,15 +521,11 @@ export default {
       const rg = g.append('g')
         .attr('transform', `translate(${margin.left + stu_icon}, ${weekLabelHeight})`);
     
-      const weekX = d3.scaleLinear()
-        .domain([0, numWeeks])
-        .range([0, width]);
-    
+      const { weekX, weekWidth, weekToIndex } = this.buildWeekXLayout(weekNumbers, width)
+
       const studentsY = d3.scaleBand()
         .domain(d3.range(numStudents))
-        .range([0, (height / 5) * numStudents]);
-    
-      const weekWidth = weekX(1) - weekX(0);
+        .range([0, (height / 5) * numStudents])
     
       // 添加 tooltip
       const tooltip = d3.select("body").append("div")
@@ -505,7 +541,8 @@ export default {
         .style("opacity", 0);
     
       // 区分x轴奇数列
-      for (let i = 1; i <= numWeeks + 1; i++) {
+      for (let i = 1; i <= numWeeks; i++) {
+        const weekNum = weekNumbers[i - 1]
         if (i % 2 !== 0) {
           rg.append('rect')
             .attr('x', weekX(i) - weekWidth / 2)
@@ -518,7 +555,7 @@ export default {
         rg.append('text')
           .attr('x', weekX(i))
           .attr('y', 0)
-          .text(`Week${i}`)
+          .text(`第${weekNum}周`)
           .attr('text-anchor', 'middle')
           .attr('font-size', 14)
           .attr('font-weight', 'bold');
@@ -582,7 +619,8 @@ export default {
           .range([positionYBase, positionYBase - peaKHeight]);
       
         student_weeks.forEach(w => {
-          const positionX = weekX(w.week) + weekWidth - weekWidth / 4;
+          const col = weekToIndex.get(Number(w.week)) ?? 1
+          const positionX = weekX(col) + weekWidth - weekWidth / 4;
           const positionY = positionYBase;
         
           const firstHalfHeight = yScale(w.Mon_to_Day);
@@ -723,6 +761,16 @@ export default {
       if (!newLink || newLink.view !== 'WeekView') return
       this.bootstrapFromStore()
     },
+    chartParams: {
+      deep: true,
+      handler() {
+        if (!this.embedded || !this.chartParams) return
+        this.applyChartParams(this.chartParams)
+        if ((this.getSelectedIds || []).length) {
+          this.loadData()
+        }
+      },
+    },
   }
 }
 </script>
@@ -862,6 +910,16 @@ export default {
   }
 
   .wait-prompt,
+  &.embedded .week-embed-shell {
+    overflow: visible !important;
+  }
+
+  &.embedded :deep(#visualizationW),
+  &.embedded [id^="report-"] {
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+
   .empty-prompt {
     position: absolute;
     top: 50%;

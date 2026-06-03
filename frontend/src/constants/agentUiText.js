@@ -67,8 +67,13 @@ export const AGENT_UI = {
   skillStepTitle: '加载技能',
   memorySection: '已记住',
   memoryRail: '持久记忆',
-  memoryRailShortHint: '以下约定会注入每次分析；启用/停用在「管理」中设置。',
+  memoryRailShortHint: '以下为会注入每次分析的长期约定（具名记忆）。',
   memoryRailManage: '管理',
+  memoryRailRollingSection: '滚动笔记',
+  memoryRailRollingHint:
+    'Agent 通过 memory 工具追加的流水账（user_profile / agent_notes）。任务状态不应出现在这里，请定期清理。',
+  memoryRailNamedSection: '我的约定',
+  memoryRailNamedHint: '具名跨会话记忆，可新建、启用/停用。',
   memoryRailActiveEmpty: '暂无已启用记忆。点「管理」新建或启用。',
   memoryRailDisabledCount: (n) => `另有 ${n} 条已停用（在管理窗口中可重新启用）`,
   memoryModalTitle: '记忆管理',
@@ -110,7 +115,7 @@ export const AGENT_UI = {
   memorySave: '保存修改',
   memoryLoading: '加载中…',
   memorySavedChip: (label) => `已记住：${label}`,
-  memoryListHint: '全部记忆（停用项显示为灰色；点「编辑」修改）',
+  memoryListHint: '具名记忆（停用项为灰色）；滚动笔记见下方。',
 
   reportSection: '报告与导出',
   reportPreview: '预览',

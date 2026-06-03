@@ -12,6 +12,7 @@ from common.prompts import (
     format_filter_context_section,
     format_loaded_skill_names_section,
     format_permission_mode,
+    format_session_deliverables_section,
     format_session_plan_section,
     format_session_section,
     format_skills_section,
@@ -34,6 +35,7 @@ class SystemPromptContext:
     loaded_skills: set[str] | list[str] = field(default_factory=list)
     loaded_references: set[str] | list[str] = field(default_factory=list)
     todo_items: list[dict[str, str]] = field(default_factory=list)
+    session_id: str | None = None
     include_memory_guidance: bool = True
 
 
@@ -82,6 +84,12 @@ class SystemPromptBuilder:
         if plan_block:
             parts.append(plan_block)
 
+        deliverables_block = format_session_deliverables_section(
+            _format_deliverables_prompt(ctx.session_id)
+        )
+        if deliverables_block:
+            parts.append(deliverables_block)
+
         if ctx.include_memory_guidance:
             parts.append(MEMORY_GUIDANCE.strip())
 
@@ -100,3 +108,11 @@ def get_system_prompt_builder() -> SystemPromptBuilder:
     if _default_builder is None:
         _default_builder = SystemPromptBuilder()
     return _default_builder
+
+
+def _format_deliverables_prompt(session_id: str | None) -> str:
+    if not session_id:
+        return ""
+    from session.deliverables_registry import format_deliverables_prompt
+
+    return format_deliverables_prompt(session_id)

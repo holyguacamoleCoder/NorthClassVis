@@ -57,7 +57,31 @@ def test_run_memory_add_user(mem_dir):
     mem_dir.load_all()
     entry = mem_dir.get_entry("user_profile")
     assert entry is not None
+    assert entry["kind"] == "rolling"
     assert "Class1" in entry["content"]
+
+
+def test_run_memory_rejects_session_scoped_task(mem_dir):
+    out = run_memory(
+        "add",
+        "user",
+        content=(
+            "学生8b6d1125760bd3939b6e的13~15周学情分析报告已生成，"
+            "需补全PortraitView和ScatterView。"
+        ),
+    )
+    assert out.startswith("Error:")
+    mem_dir.load_all()
+    entry = mem_dir.get_entry("user_profile")
+    assert entry is None or "8b6d1125760bd3939b6e" not in (entry or {}).get("content", "")
+
+
+def test_list_entries_kind_named(mem_dir):
+    run_save_memory("my_pref", "Pref", "user", "Use tables.")
+    mem_dir.load_all()
+    rows = mem_dir.list_entries()
+    named = [r for r in rows if r["name"] == "my_pref"]
+    assert named and named[0]["kind"] == "named"
 
 
 def test_run_memory_replace_and_remove(mem_dir):

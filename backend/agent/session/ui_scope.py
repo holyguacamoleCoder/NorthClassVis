@@ -27,15 +27,17 @@ def augment_user_message_with_ui_scope(
         return content
 
     ids = list(fc.selected_student_ids)
-    preview = ", ".join(ids[:30])
-    if len(ids) > 30:
-        preview = f"{preview} …（共 {len(ids)} 人）"
+    n = len(ids)
+    if n <= 5:
+        id_line = f"student_ID: {', '.join(ids)}（共 {n} 人）"
     else:
-        preview = f"{preview}（共 {len(ids)} 人）"
+        id_line = (
+            f"Nav 已选 **{n} 人**（`query_data` 将自动应用 student_ids，勿索要学号；"
+            "需完整列表 → `get_current_filter_context(include_student_ids=true)`）"
+        )
 
     return (
         f"{text}\n\n"
-        "[系统·UI 同步] 教师已在可视化面板选中以下学生，请直接用于 query_data / 分析，"
-        "勿再索要学号或姓名：\n"
-        f"student_ID: {preview}"
+        "[系统·UI 同步] 教师已在可视化面板选中学生，请直接用于 query_data / 分析：\n"
+        f"{id_line}"
     )

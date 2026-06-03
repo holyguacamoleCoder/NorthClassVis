@@ -63,11 +63,12 @@
 
     </div>
     
-    <Simplebar :style="embedded ? 'height: 360px' : 'height: 555px'">
+    <component :is="embedded ? 'div' : 'Simplebar'" :style="scrollStyle" :class="{ 'question-embed-shell': embedded }">
       <div :id="containerId">
         <LoadingSpinner v-if="loading"/>
       </div>
-    </Simplebar>
+      <p v-if="embedded && paramResolveNote" class="param-resolve-note">{{ paramResolveNote }}</p>
+    </component>
   </div>
 </template>
 
@@ -111,6 +112,7 @@ export default {
       scoreMax: null,
       /** 非空时仅渲染这些 title_id（报告锚定题目） */
       titleIdFilter: null,
+      paramResolveNote: '',
     };
   },
   async mounted() {
@@ -137,7 +139,24 @@ export default {
       const selectedCount = Object.values(this.selectedKnowledge).filter(Boolean).length
       if (selectedCount > 0) return 'Part'
       else return 'None'
-    }
+    },
+    scrollStyle() {
+      if (!this.embedded) return { height: '555px' }
+      const n = this.embeddedQuestionCount
+      const panel = 28 + 50 + 20 + 100
+      const h = Math.max(120, Math.min(2400, n * panel + 40))
+      return { width: '100%', minHeight: `${h}px`, overflow: 'visible' }
+    },
+    embeddedQuestionCount() {
+      if (!this.QuestionData?.length) return 1
+      let filtered = this.QuestionData.filter((q) => this.selectedKnowledge[q.knowledge])
+      if (this.titleIdFilter?.size) {
+        filtered = filtered.filter((q) =>
+          this.titleIdFilter.has(String(q.title_id)),
+        )
+      }
+      return Math.max(1, filtered.length)
+    },
   },
   methods: {
     vizSel() {
@@ -145,13 +164,41 @@ export default {
     },
     applyChartParams(params) {
       if (!params || typeof params !== 'object') return false
+      this.paramResolveNote = params._resolve_note || ''
+      if (Array.isArray(params.knowledge_ids) && params.knowledge_ids.length) {
+        return this.focusKnowledges(params.knowledge_ids)
+      }
       if (Array.isArray(params.title_ids) && params.title_ids.length) {
-        return this.focusTitleIds(params.title_ids)
+        if (this.focusTitleIds(params.title_ids)) return true
+        if (this.focusKnowledges(params.title_ids)) {
+          this.paramResolveNote =
+            this.paramResolveNote ||
+            'title_ids 未匹配到题目，已按知识点筛选（短码为 knowledge，非 title_ID）。'
+          return true
+        }
+        return false
       }
       if (params.knowledge) {
         return this.focusKnowledge(params.knowledge)
       }
       return false
+    },
+    focusKnowledges(knowledgeList) {
+      const list = (Array.isArray(knowledgeList) ? knowledgeList : [knowledgeList])
+        .map((k) => String(k).trim())
+        .filter(Boolean)
+      if (!list.length || !this.uniqueKnowledge?.length) return false
+      const valid = list.filter((k) => this.uniqueKnowledge.includes(k))
+      if (!valid.length) return false
+      this.titleIdFilter = null
+      Object.keys(this.selectedKnowledge).forEach((k) => {
+        this.selectedKnowledge[k] = valid.includes(k)
+      })
+      this.selectAllKnowledge = false
+      const d3 = this.$d3
+      d3.select(this.vizSel()).selectAll('*').remove()
+      this.renderQuestion()
+      return true
     },
     focusTitleIds(titleIds) {
       const want = new Set(
@@ -655,20 +702,26 @@ export default {
         await this.$nextTick()
       }
       this.lastAppliedAgentLink = { ...newLink }
-      const params = newLink.params || {}
-      if (Array.isArray(params.title_ids) && params.title_ids.length) {
-        this.applyChartParams(params)
-        return
-      }
-      const knowledge = params.knowledge
-      if (!knowledge || !this.uniqueKnowledge?.includes(knowledge)) return
-      this.focusKnowledge(knowledge)
+      this.applyChartParams(newLink.params || {})
+    },
+    chartParams: {
+      deep: true,
+      handler() {
+        if (!this.embedded || !this.chartParams || !this.QuestionData?.length) return
+        this.applyChartParams(this.chartParams)
+      },
     },
   }
 };
 </script>
 
 <style scoped lang="less">
+.param-resolve-note {
+  margin: 8px 4px 0;
+  font-size: 12px;
+  color: #92400e;
+}
+
 #question-view {
   margin-left: 5px;
   transition: box-shadow 0.2s ease;

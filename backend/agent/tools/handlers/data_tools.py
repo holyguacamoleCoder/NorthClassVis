@@ -8,8 +8,13 @@ from data.dataset_registry import build_datasets_catalog
 from data.exceptions import DataResourceError, InvalidParameterError, UnknownResourceError
 from data.filter_context import FilterContext
 from data.inspect import inspect_resource
-from data.param_validation import normalize_query_resource, validate_resolve_params
+from data.param_validation import (
+    normalize_query_resource,
+    repair_submit_record_week_usage,
+    validate_resolve_params,
+)
 from data.query import QuerySpec, execute_query
+from data.where import repair_where
 from data.result_hints import enrich_aggregate_payload, enrich_query_payload, normalize_limit
 
 _RESOLVE_KEYS = frozenset({"class", "classes", "majors", "week_range", "student_ids"})
@@ -256,6 +261,9 @@ def run_query_data(
         )
     if where is None and filter is not None:
         where = filter
+    where_repair_notes: list[str] = []
+    if where is not None:
+        where, where_repair_notes = repair_where(where)
     filter_context = _pop_filter_context(kwargs)
     limit_notes: list[str] = []
     try:
@@ -263,7 +271,14 @@ def run_query_data(
         if limit_note:
             limit_notes.append(limit_note)
         resource, kwargs, notes = normalize_query_resource(resource, kwargs, where=where)
-        notes = list(notes) + limit_notes
+        resource, kwargs, where, group_by, order_by, week_notes = repair_submit_record_week_usage(
+            resource,
+            kwargs,
+            where=where,
+            group_by=group_by,
+            order_by=order_by,
+        )
+        notes = list(notes) + week_notes + limit_notes + where_repair_notes
         resolve = _resolve_params_with_context(kwargs, filter_context, resource=resource)
         validate_resolve_params(resource, resolve)
         spec = QuerySpec(
@@ -293,9 +308,9 @@ def run_query_data(
     except InvalidParameterError as exc:
         next_tool = "inspect_schema"
         example = None
-        if exc.param == "where":
-            next_tool = "inspect_schema then fix where field names"
-            if "week_aggregation" in str(exc) or "week_index" in str(exc):
+        if exc.param in ("where", "group_by", "order_by", "select"):
+            next_tool = "inspect_schema then fix field names / resource"
+            if "week_aggregation" in str(exc) or "week_index" in str(exc) or "week" in str(exc).lower():
                 example = (
                     'resource="week_aggregation", classes=["Class2"], week_range=[13, 15]'
                 )

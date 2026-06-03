@@ -4,25 +4,26 @@
       <span class="report-chart-embed-title">{{ title }}</span>
       <span v-if="paramsHint" class="report-chart-embed-hint">{{ paramsHint }}</span>
     </div>
+    <p v-if="paramNote" class="report-chart-embed-note">{{ paramNote }}</p>
     <div v-if="error" class="report-chart-embed-error">{{ error }}</div>
     <div v-else-if="!supported" class="report-chart-embed-error">
       暂不支持在报告中嵌入 {{ view }}，请使用 WeekView / QuestionView / ScatterView / PortraitView。
     </div>
     <div v-else-if="contextError" class="report-chart-embed-error">{{ contextError }}</div>
     <div v-else-if="!contextReady" class="report-chart-embed-loading">正在加载图表数据…</div>
-    <div v-else class="report-chart-embed-body">
+    <div v-else class="report-chart-embed-body report-chart-embed-body--flat">
       <WeekView
         v-if="view === 'WeekView'"
         :key="mountKey"
         embedded
-        :chart-params="params"
+        :chart-params="resolvedParams"
         :container-id="containerId"
       />
       <QuestionView
         v-else-if="view === 'QuestionView'"
         :key="mountKey"
         embedded
-        :chart-params="params"
+        :chart-params="resolvedParams"
         :container-id="containerId"
       />
       <ScatterView
@@ -43,6 +44,7 @@
 </template>
 
 <script>
+import { getQuestions } from '@/api/QuestionView'
 import WeekView from '@/components/WeekView.vue'
 import QuestionView from '@/components/QuestionView.vue'
 import ScatterView from '@/components/ScatterView.vue'
@@ -51,6 +53,8 @@ import {
   REPORT_CHART_LABELS,
   coerceWeekRange,
   ensureReportChartContext,
+  looksLikeTitleId,
+  normalizeQuestionViewParams,
 } from '@/utils/reportCharts.js'
 
 let _chartUid = 0
@@ -75,6 +79,8 @@ export default {
       mountKey: `${slug}-${uid}`,
       contextReady: false,
       contextError: '',
+      resolvedParams: { ...(this.params || {}) },
+      paramNote: '',
     }
   },
   computed: {
@@ -85,12 +91,14 @@ export default {
       return REPORT_CHART_LABELS[this.view] || this.view
     },
     paramsHint() {
-      const p = this.params || {}
+      const p = this.resolvedParams || {}
       const parts = []
       const wr = coerceWeekRange(p.week_range)
       if (wr) parts.push(`第 ${wr[0]}–${wr[1]} 周`)
       if (Array.isArray(p.title_ids) && p.title_ids.length) {
         parts.push(`锚定 ${p.title_ids.length} 题`)
+      } else if (Array.isArray(p.knowledge_ids) && p.knowledge_ids.length) {
+        parts.push(`知识点 ${p.knowledge_ids.join(', ')}`)
       } else if (p.knowledge) {
         parts.push(String(p.knowledge))
       }
@@ -104,7 +112,12 @@ export default {
   async mounted() {
     if (!this.supported || this.error) return
     try {
-      const result = await ensureReportChartContext(this.$store, this.view, this.params)
+      await this.resolveParams()
+      const result = await ensureReportChartContext(
+        this.$store,
+        this.view,
+        this.resolvedParams,
+      )
       if (!result?.ok) {
         this.contextError = result?.error || '图表上下文未就绪'
         return
@@ -115,6 +128,35 @@ export default {
       this.contextError = err?.message || '图表加载失败'
     }
   },
+  methods: {
+    async resolveParams() {
+      const base = { ...(this.params || {}) }
+      if (this.view !== 'QuestionView') {
+        this.resolvedParams = base
+        return
+      }
+      let catalog = []
+      try {
+        const { data } = await getQuestions()
+        catalog = [...new Set((data || []).map((q) => q.knowledge).filter(Boolean))]
+      } catch {
+        catalog = []
+      }
+      const norm = normalizeQuestionViewParams(base, catalog)
+      const next = { ...norm.params }
+      if (norm.note) {
+        next._resolve_note = norm.note
+        this.paramNote = norm.note
+      }
+      const rawIds = Array.isArray(base.title_ids) ? base.title_ids : []
+      const hasOnlyShort = rawIds.length && rawIds.every((id) => !looksLikeTitleId(id))
+      if (hasOnlyShort && !next.title_ids && !next.knowledge && !next.knowledge_ids) {
+        this.paramNote =
+          '无法将 title_ids 解析为题目或知识点，请使用 query 得到的 Question_* 形式 title_ID。'
+      }
+      this.resolvedParams = next
+    },
+  },
 }
 </script>
 
@@ -124,7 +166,7 @@ export default {
   border: 1px solid #e0e0e0;
   border-radius: 8px;
   background: #fafafa;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .report-chart-embed-head {
@@ -148,10 +190,22 @@ export default {
   color: #666;
 }
 
+.report-chart-embed-note {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #92400e;
+  background: #fffbeb;
+  border-bottom: 1px solid #fde68a;
+}
+
 .report-chart-embed-body {
-  padding: 4px;
-  max-height: 420px;
-  overflow: auto;
+  padding: 8px;
+}
+
+.report-chart-embed-body--flat {
+  max-height: none;
+  overflow: visible;
 }
 
 .report-chart-embed-error,
@@ -181,5 +235,14 @@ export default {
 
 .report-chart-embed-body :deep(.scatter-chart--compact) {
   min-height: 280px;
+}
+
+.report-chart-embed-body :deep(.week-embed-shell),
+.report-chart-embed-body :deep(.question-embed-shell) {
+  overflow: visible !important;
+}
+
+.report-chart-embed-body :deep(.simplebar-scrollbar) {
+  display: none;
 }
 </style>

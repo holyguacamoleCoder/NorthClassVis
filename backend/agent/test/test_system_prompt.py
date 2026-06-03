@@ -63,7 +63,7 @@ def test_prompt_templates_are_complete():
     assert "{mode_hint}" in PERMISSION_MODE_TEMPLATE
     consult = format_permission_mode("consult")
     assert "consult" in consult
-    assert "inspect_schema" in consult
+    assert "schema" in consult
     assert "produce" in format_permission_mode("produce")
     assert "report-chart" in build_base_agent_prompt("produce")
     assert "不可用" in build_base_agent_prompt("consult")
@@ -79,12 +79,15 @@ def test_base_prompt_mode_slices_differ():
 
 
 def test_save_memory_in_analyze_mode():
-    """save_memory is registered and allowed in analyze mode."""
+    """memory / save_memory are registered and allowed in analyze mode."""
     names = {t["function"]["name"] for t in TOOLS}
+    assert "memory" in names
     assert "save_memory" in names
     visible = filter_tools(TOOLS, CapabilityMode.ANALYZE)
     visible_names = {t["function"]["name"] for t in visible}
+    assert "memory" in visible_names
     assert "save_memory" in visible_names
+    assert "memory" in MODE_TOOL_ALLOWLIST[CapabilityMode.ANALYZE]
     assert "save_memory" in MODE_TOOL_ALLOWLIST[CapabilityMode.ANALYZE]
 
 

@@ -53,8 +53,6 @@ def build_week_aggregation(
 ) -> pd.DataFrame:
     """与 WeekRoutes.week_analysis 同一特征管道，输出 series 形长表。"""
     df = build_submit_record_joined(classes, majors=majors, data_dir=data_dir)
-    if student_ids:
-        df = df[df["student_ID"].isin(student_ids)]
     if df.empty:
         return _empty_week_series_df()
 
@@ -63,6 +61,11 @@ def build_week_aggregation(
     df["week"] = df["time"].apply(
         lambda value: week_service.calculate_week_of_year(value, start_date=start_date)
     )
+
+    if student_ids:
+        df = df[df["student_ID"].isin(student_ids)]
+    if df.empty:
+        return _empty_week_series_df()
 
     if week_range is not None and len(week_range) >= 2:
         df = week_service.filter_to_week_range(df, int(week_range[0]), int(week_range[1]))

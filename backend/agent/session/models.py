@@ -55,6 +55,7 @@ class ChatSession:
     todo_items: list[dict[str, str]] = field(default_factory=list)
     todo_round_since_update: int = 0
     loaded_skills: list[str] = field(default_factory=list)
+    loaded_references: list[str] = field(default_factory=list)
     filter_context: dict[str, Any] | None = None
     # High-water user round index for logs / compaction; see count_user_turns().
     user_turn_count: int = 0

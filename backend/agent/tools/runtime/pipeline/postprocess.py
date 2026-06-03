@@ -81,7 +81,46 @@ def postprocess_tool_result(
             max_files=DEFAULT_CONFIG.max_recent_files,
         )
 
-    if call_id and isinstance(tool_result, str):
+    if call_id and isinstance(tool_result, str) and tool_name not in (
+        "load_skill",
+        "load_reference",
+    ):
         tool_result = maybe_persist_output(call_id, tool_result)
 
+    if tool_name in ("write_file", "edit_file") and isinstance(tool_result, str):
+        _maybe_record_session_deliverable(
+            tool_result,
+            parsed_args=parsed_args,
+            analysis_context=analysis_context,
+        )
+
     return tool_result
+
+
+def _maybe_record_session_deliverable(
+    tool_result: str,
+    *,
+    parsed_args: dict,
+    analysis_context: AnalysisToolContext | None,
+) -> None:
+    if not (tool_result or "").strip().startswith("["):
+        return
+    if "OK" not in tool_result:
+        return
+    from report_delivery import parse_deliverable_path_from_tool, deliverable_label
+    from session.deliverables_registry import record_deliverable_from_tool
+
+    rel = parse_deliverable_path_from_tool(tool_result) or str(parsed_args.get("path") or "").strip()
+    if not rel:
+        return
+    session_id = analysis_context.session_id if analysis_context else None
+    user_turn = analysis_context.user_turn if analysis_context else 0
+    try:
+        record_deliverable_from_tool(
+            session_id,
+            rel_path=rel,
+            label=deliverable_label(rel),
+            user_turn=user_turn,
+        )
+    except Exception:
+        _log.exception("record_deliverable_failed")

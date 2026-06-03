@@ -143,6 +143,45 @@ class FilterContext:
             "source": self.source,
         }
 
+    def to_summary_dict(
+        self,
+        *,
+        include_student_ids: bool = False,
+        preview_limit: int = 5,
+    ) -> dict[str, Any]:
+        """
+        Compact scope for LLM prompts / default get_current_filter_context.
+        Full ID lists are omitted unless include_student_ids=True.
+        """
+        ids = list(self.selected_student_ids) if self.selected_student_ids else []
+        out: dict[str, Any] = {
+            "classes": list(self.classes) if self.classes else None,
+            "majors": list(self.majors) if self.majors else None,
+            "week_range": list(self.week_range) if self.week_range is not None else None,
+            "selected_student_count": len(ids),
+            "defaults_applied": list(self.defaults_applied),
+            "source": self.source,
+            "scope_binding": "session",
+        }
+        if include_student_ids:
+            out["selected_student_ids"] = ids or None
+            return out
+
+        out["selected_student_ids"] = None
+        if not ids:
+            return out
+
+        if len(ids) <= preview_limit:
+            out["selected_student_ids_preview"] = ids
+        else:
+            out["selected_student_ids_preview"] = ids[:preview_limit]
+            out["selected_student_ids_truncated"] = True
+        out["resolve_hint"] = (
+            "完整学号列表请调用 get_current_filter_context(include_student_ids=true)；"
+            "query_data / inspect_schema 已自动应用 Nav 选区 student_ids，通常无需展开列表。"
+        )
+        return out
+
     @classmethod
     def from_http_body(cls, body: dict[str, Any] | None) -> FilterContext | None:
         if not body:

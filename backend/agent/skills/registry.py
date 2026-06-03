@@ -7,6 +7,11 @@ from .manifest import SkillDocument, SkillManifest
 BASE_DIR = Path(__file__).resolve().parents[3]  # NorthClassVision
 DEFAULT_SKILLS_DIR = BASE_DIR / "skills"
 
+# Backward-compatible aliases for load_skill / session.loaded_skills
+SKILL_ALIASES: dict[str, str] = {
+    "report-delivery": "report-writing",
+}
+
 
 def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
     match = re.match(r"^---\n(.*?)\n---\n(.*)", text, re.DOTALL)
@@ -19,6 +24,17 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
         key, value = line.split(":", 1)
         meta[key.strip()] = value.strip()
     return meta, match.group(2)
+
+
+def _compose_skill_body(skill_md_path: Path) -> str:
+    """SKILL.md body only; references are loaded progressively via load_reference."""
+    meta, body = _parse_frontmatter(skill_md_path.read_text(encoding="utf-8"))
+    return body.strip() if body.strip() else ""
+
+
+def _resolve_skill_name(name: str) -> str:
+    key = (name or "").strip()
+    return SKILL_ALIASES.get(key, key)
 
 
 class SkillRegistry:
@@ -39,47 +55,42 @@ class SkillRegistry:
         if not self.skills_dir.exists():
             return
         for path in sorted(self.skills_dir.rglob("SKILL.md")):
-            if "reference" in path.parts:
-                continue
-            meta, body = _parse_frontmatter(path.read_text(encoding="utf-8"))
+            meta, _ = _parse_frontmatter(path.read_text(encoding="utf-8"))
             name = meta.get("name", path.parent.name)
             description = meta.get("description", "No description")
+            body = _compose_skill_body(path)
             manifest = SkillManifest(name=name, description=description, path=path)
-            self.documents[name] = SkillDocument(manifest=manifest, body=body.strip())
-        self._load_reference_docs()
-
-    def _load_reference_docs(self) -> None:
-        ref_dir = self.skills_dir / "reference"
-        if not ref_dir.is_dir():
-            return
-        for path in sorted(ref_dir.glob("*.md")):
-            meta, body = _parse_frontmatter(path.read_text(encoding="utf-8"))
-            name = meta.get("name", path.stem)
-            if name in self.documents:
-                continue
-            description = meta.get("description", "No description")
-            manifest = SkillManifest(name=name, description=description, path=path)
-            self.documents[name] = SkillDocument(manifest=manifest, body=body.strip())
+            self.documents[name] = SkillDocument(manifest=manifest, body=body)
+            alias = next((k for k, v in SKILL_ALIASES.items() if v == name), None)
+            if alias and alias not in self.documents:
+                self.documents[alias] = SkillDocument(manifest=manifest, body=body)
 
     def describe_available(self) -> str:
         if not self.documents:
             return "(no skills available)"
         lines = []
-        for name in sorted(self.documents):
+        for name in catalog_skill_names(self):
             manifest = self.documents[name].manifest
             lines.append(f"- {manifest.name}: {manifest.description}")
         return "\n".join(lines)
 
     def load_full_text(self, name: str) -> str:
-        document = self.documents.get(name)
+        resolved = _resolve_skill_name(name)
+        document = self.documents.get(resolved)
         if not document:
-            known = ", ".join(sorted(self.documents)) or "(none)"
+            known = ", ".join(catalog_skill_names(self)) or "(none)"
             return f"Error: Unknown skill '{name}'. Available skills: {known}"
         return (
             f'<skill name="{document.manifest.name}">\n'
             f"{document.body}\n"
             "</skill>"
         )
+
+
+def catalog_skill_names(registry: SkillRegistry | None = None) -> list[str]:
+    """Public skill ids for UI / tool enum (excludes backward-compat aliases)."""
+    reg = registry if registry is not None else get_registry()
+    return sorted(n for n in reg.documents if n not in SKILL_ALIASES)
 
 
 _default_registry: SkillRegistry | None = None

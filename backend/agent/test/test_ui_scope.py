@@ -32,7 +32,16 @@ def test_augment_user_message_injects_selected_ids():
     fc = FilterContext(selected_student_ids=("a", "b", "c"), source="http_body")
     out = augment_user_message_with_ui_scope("让我看看我选的这几个学生表现如何", fc)
     assert "a, b, c" in out
-    assert "勿再索要" in out
+    assert "query_data" in out
+
+
+def test_augment_large_selection_omits_id_list():
+    ids = tuple(f"s{i}" for i in range(50))
+    fc = FilterContext(selected_student_ids=ids, source="http_body")
+    out = augment_user_message_with_ui_scope("分析我选的学生", fc)
+    assert "50 人" in out
+    assert "s0, s1" not in out
+    assert "include_student_ids" in out
 
 
 def test_augment_skips_without_selection_intent():

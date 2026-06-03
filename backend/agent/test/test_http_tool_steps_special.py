@@ -42,7 +42,7 @@ def test_build_tool_step_load_skill():
     step = build_tool_step(
         "load_skill",
         {"name": "report-markdown"},
-        "[Skill loaded: report-markdown]\n<body>",
+        '✅ Skill "report-markdown" 已加载\n\n<body>',
         call_id="c2",
     )
     assert step["kind"] == "skill"

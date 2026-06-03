@@ -15,7 +15,10 @@ def _json_result(payload: dict) -> str:
     return json.dumps(payload, ensure_ascii=False, default=str)
 
 
-def run_get_current_filter_context(**kwargs: Any) -> str:
+def run_get_current_filter_context(
+    include_student_ids: bool = False,
+    **kwargs: Any,
+) -> str:
     raw = kwargs.pop("_filter_context", None)
     if isinstance(raw, FilterContext):
         ctx = raw
@@ -24,7 +27,9 @@ def run_get_current_filter_context(**kwargs: Any) -> str:
     else:
         ctx = None
     ctx = merge_defaults(ctx)
-    return _json_result(ctx.to_dict())
+    if include_student_ids:
+        return _json_result(ctx.to_dict())
+    return _json_result(ctx.to_summary_dict())
 
 
 def run_build_visual_links(

@@ -89,3 +89,4 @@ class LoopState:
     analysis_context: AnalysisToolContext = field(default_factory=AnalysisToolContext)
     filter_context: "FilterContext | None" = None
     loaded_skills: set[str] = field(default_factory=set)
+    loaded_references: set[str] = field(default_factory=set)

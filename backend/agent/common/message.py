@@ -215,6 +215,7 @@ def normalize_message(messages):
     for msg in messages:
         role = msg.get("role")
         content = msg.get("content", "")
+        # Only OpenAI protocol fields are copied; internal keys (_agent_meta, etc.) are dropped.
         clean = {"role": role}
 
         if content is None:

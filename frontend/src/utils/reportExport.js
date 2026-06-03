@@ -17,15 +17,43 @@ function chartLabel(view) {
   return REPORT_CHART_LABELS[view] || view || '图表'
 }
 
-function serializeSvg(svgEl) {
+function normalizeSvgForExport(svgEl) {
   if (!svgEl) return ''
   try {
     const clone = svgEl.cloneNode(true)
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+    let w = parseFloat(clone.getAttribute('width'))
+    let h = parseFloat(clone.getAttribute('height'))
+    if (!w || !h) {
+      try {
+        const box = svgEl.getBBox()
+        w = box.width + box.x
+        h = box.height + box.y
+        clone.setAttribute('width', String(Math.ceil(w)))
+        clone.setAttribute('height', String(Math.ceil(h)))
+        if (!clone.getAttribute('viewBox')) {
+          clone.setAttribute('viewBox', `0 0 ${Math.ceil(w)} ${Math.ceil(h)}`)
+        }
+      } catch {
+        /* getBBox may fail if not rendered */
+      }
+    }
     return new XMLSerializer().serializeToString(clone)
   } catch {
     return ''
   }
+}
+
+/**
+ * 收集 embed 内全部 SVG（周视图 1 个大图；题目视图每题一块）
+ */
+function collectSvgsFromEmbed(embed) {
+  const svgs = Array.from(embed.querySelectorAll('svg'))
+  if (!svgs.length) return []
+  if (svgs.length === 1) {
+    return [normalizeSvgForExport(svgs[0])].filter(Boolean)
+  }
+  return svgs.map((el) => normalizeSvgForExport(el)).filter(Boolean)
 }
 
 /**
@@ -36,13 +64,16 @@ export function collectChartSnapshots(reportRoot) {
   const embeds = reportRoot.querySelectorAll('.report-chart-embed')
   return Array.from(embeds).map((embed) => {
     const view = embed.querySelector('.report-chart-embed-title')?.textContent?.trim() || ''
-    const svg = embed.querySelector('svg')
     const hint = embed.querySelector('.report-chart-embed-hint')?.textContent?.trim() || ''
+    const svgParts = collectSvgsFromEmbed(embed)
+    const svgHtml = svgParts.length
+      ? `<div class="chart-svg-stack">${svgParts.map((s) => `<div class="chart-svg-item">${s}</div>`).join('')}</div>`
+      : ''
     return {
       title: view,
       hint,
-      svgHtml: serializeSvg(svg),
-      hasChart: !!svg,
+      svgHtml,
+      hasChart: svgParts.length > 0,
     }
   })
 }
@@ -97,8 +128,9 @@ export function buildReportHtmlDocument({ title, path, segments, snapshots }) {
     .report-chart { margin: 20px 0; padding: 12px; border: 1px solid #e0e0e0; border-radius: 8px; background: #fafafa; }
     .report-chart figcaption { margin-bottom: 10px; font-size: 14px; }
     .report-chart .hint { color: #666; font-weight: normal; }
-    .chart-svg { overflow-x: auto; }
-    .chart-svg svg { max-width: 100%; height: auto; }
+    .chart-svg { overflow: visible; }
+    .chart-svg-stack { display: flex; flex-direction: column; gap: 16px; }
+    .chart-svg-item svg { display: block; max-width: 100%; height: auto; }
     .report-chart--missing pre { margin: 0; }
   </style>
 </head>
@@ -121,17 +153,48 @@ export function downloadHtmlReport(html, filename) {
   URL.revokeObjectURL(url)
 }
 
+async function waitForCharts(reportRoot, { timeoutMs = 8000, intervalMs = 200 } = {}) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const embeds = reportRoot?.querySelectorAll('.report-chart-embed') || []
+    let ready = embeds.length > 0
+    for (const embed of embeds) {
+      if (embed.querySelector('.report-chart-embed-loading')) {
+        ready = false
+        break
+      }
+      const hasSvg = embed.querySelector('svg')
+      const hasErr = embed.querySelector('.report-chart-embed-error')
+      const empty = embed.querySelector('.empty-prompt')
+      if (!hasSvg && !hasErr && !empty) {
+        ready = false
+        break
+      }
+    }
+    if (ready) return
+    await sleep(intervalMs)
+  }
+}
+
 /**
- * 等待预览内图表渲染后导出 HTML（内嵌 SVG，非 JSON 代码块）
+ * 等待预览内图表渲染后导出 HTML（内嵌完整 SVG，非视口裁切）
  */
 export async function exportReportHtmlFromPreview({
   title,
   path,
   content,
   reportRoot,
-  waitMs = 2200,
+  waitMs = 3500,
 }) {
-  await sleep(waitMs)
+  if (reportRoot) {
+    reportRoot.querySelectorAll('.report-chart-embed-body').forEach((el) => {
+      el.scrollTop = 0
+      el.scrollLeft = 0
+    })
+    await waitForCharts(reportRoot, { timeoutMs: Math.max(waitMs, 6000) })
+  } else {
+    await sleep(waitMs)
+  }
   const segments = splitReportMarkdown(content)
   const snapshots = collectChartSnapshots(reportRoot)
   const html = buildReportHtmlDocument({ title, path, segments, snapshots })

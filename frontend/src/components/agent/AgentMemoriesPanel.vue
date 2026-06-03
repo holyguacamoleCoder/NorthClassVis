@@ -46,69 +46,140 @@
     </div>
 
     <p v-if="loading" class="agent-memories-hint">{{ ui.memoryLoading }}</p>
-    <p v-else-if="!entries.length && !creating" class="agent-memories-hint">{{ ui.memoryRailEmpty }}</p>
+    <p v-else-if="!namedEntries.length && !rollingEntries.length && !creating" class="agent-memories-hint">
+      {{ ui.memoryRailEmpty }}
+    </p>
 
-    <template v-else-if="entries.length && !creating">
-      <p class="agent-memories-list-hint">{{ ui.memoryListHint }}</p>
-      <ul class="agent-memories-list">
-        <li
-          v-for="row in entries"
-          :key="row.key"
-          class="agent-memories-item"
-          :class="{
-            'agent-memories-item--open': expandedKey === row.key,
-            'agent-memories-item--disabled': row.enabled === false,
-          }"
-        >
-          <div class="agent-memories-item-row">
-            <div class="agent-memories-item-summary">
-              <span class="agent-memories-type">{{ typeLabel(row.type) }}</span>
-              <span class="agent-memories-name" :title="row.name">{{ row.name }}</span>
-              <p v-if="row.description || row.preview" class="agent-memories-preview">
-                {{ row.description || row.preview }}
-              </p>
+    <template v-else-if="(namedEntries.length || rollingEntries.length) && !creating">
+      <template v-if="namedEntries.length">
+        <p class="agent-memories-section-title">{{ ui.memoryRailNamedSection }}</p>
+        <p class="agent-memories-list-hint">{{ ui.memoryRailNamedHint }}</p>
+        <ul class="agent-memories-list">
+          <li
+            v-for="row in namedEntries"
+            :key="row.key"
+            class="agent-memories-item"
+            :class="{
+              'agent-memories-item--open': expandedKey === row.key,
+              'agent-memories-item--disabled': row.enabled === false,
+            }"
+          >
+            <div class="agent-memories-item-row">
+              <div class="agent-memories-item-summary">
+                <span class="agent-memories-type">{{ typeLabel(row.type) }}</span>
+                <span class="agent-memories-name" :title="row.name">{{ row.name }}</span>
+                <p v-if="row.description || row.preview" class="agent-memories-preview">
+                  {{ row.description || row.preview }}
+                </p>
+              </div>
+              <div class="agent-memories-item-actions">
+                <button
+                  type="button"
+                  class="agent-memories-btn agent-memories-btn--primary"
+                  :disabled="saving"
+                  @click="openEdit(row)"
+                >{{ ui.memoryEdit }}</button>
+                <button
+                  type="button"
+                  class="agent-memories-btn agent-memories-btn--danger"
+                  :disabled="saving"
+                  @click="remove(row)"
+                >{{ ui.delete }}</button>
+              </div>
             </div>
-            <div class="agent-memories-item-actions">
-              <button
-                type="button"
-                class="agent-memories-btn agent-memories-btn--primary"
-                :disabled="saving"
-                @click="openEdit(row)"
-              >{{ ui.memoryEdit }}</button>
-              <button
-                type="button"
-                class="agent-memories-btn agent-memories-btn--danger"
-                :disabled="saving"
-                @click="remove(row)"
-              >{{ ui.delete }}</button>
-            </div>
-          </div>
 
-          <div v-if="expandedKey === row.key" class="agent-memories-form-card agent-memories-form-card--edit">
-            <p class="agent-memories-form-title">{{ ui.memoryEditTitle(row.name) }}</p>
-            <MemoryFormFields
-              :ui="ui"
-              :form="editForm"
-              :name-editable="false"
-              :readonly-name="row.name"
-              :type-hint="typeHintFor(editForm.type)"
-              @update:form="editForm = $event"
-            />
-            <div class="agent-memories-editor-actions">
-              <button
-                type="button"
-                class="agent-memories-btn agent-memories-btn--primary"
-                :disabled="saving"
-                @click="save(row)"
-              >{{ ui.memorySave }}</button>
-              <button type="button" class="agent-memories-btn" :disabled="saving" @click="collapse">
-                {{ ui.cancel }}
-              </button>
+            <div v-if="expandedKey === row.key" class="agent-memories-form-card agent-memories-form-card--edit">
+              <p class="agent-memories-form-title">{{ ui.memoryEditTitle(row.name) }}</p>
+              <MemoryFormFields
+                :ui="ui"
+                :form="editForm"
+                :name-editable="false"
+                :readonly-name="row.name"
+                :type-hint="typeHintFor(editForm.type)"
+                @update:form="editForm = $event"
+              />
+              <div class="agent-memories-editor-actions">
+                <button
+                  type="button"
+                  class="agent-memories-btn agent-memories-btn--primary"
+                  :disabled="saving"
+                  @click="save(row)"
+                >{{ ui.memorySave }}</button>
+                <button type="button" class="agent-memories-btn" :disabled="saving" @click="collapse">
+                  {{ ui.cancel }}
+                </button>
+              </div>
+              <p v-if="error" class="agent-memories-error">{{ error }}</p>
             </div>
-            <p v-if="error" class="agent-memories-error">{{ error }}</p>
-          </div>
-        </li>
-      </ul>
+          </li>
+        </ul>
+      </template>
+
+      <template v-if="rollingEntries.length">
+        <p class="agent-memories-section-title agent-memories-section-title--rolling">
+          {{ ui.memoryRailRollingSection }}
+        </p>
+        <p class="agent-memories-list-hint">{{ ui.memoryRailRollingHint }}</p>
+        <ul class="agent-memories-list">
+          <li
+            v-for="row in rollingEntries"
+            :key="row.key"
+            class="agent-memories-item agent-memories-item--rolling"
+            :class="{
+              'agent-memories-item--open': expandedKey === row.key,
+              'agent-memories-item--disabled': row.enabled === false,
+            }"
+          >
+            <div class="agent-memories-item-row">
+              <div class="agent-memories-item-summary">
+                <span class="agent-memories-type">{{ typeLabel(row.type) }}</span>
+                <span class="agent-memories-name" :title="row.name">{{ row.name }}</span>
+                <p v-if="row.description || row.preview" class="agent-memories-preview">
+                  {{ row.description || row.preview }}
+                </p>
+              </div>
+              <div class="agent-memories-item-actions">
+                <button
+                  type="button"
+                  class="agent-memories-btn agent-memories-btn--primary"
+                  :disabled="saving"
+                  @click="openEdit(row)"
+                >{{ ui.memoryEdit }}</button>
+                <button
+                  type="button"
+                  class="agent-memories-btn agent-memories-btn--danger"
+                  :disabled="saving"
+                  @click="remove(row)"
+                >{{ ui.delete }}</button>
+              </div>
+            </div>
+
+            <div v-if="expandedKey === row.key" class="agent-memories-form-card agent-memories-form-card--edit">
+              <p class="agent-memories-form-title">{{ ui.memoryEditTitle(row.name) }}</p>
+              <MemoryFormFields
+                :ui="ui"
+                :form="editForm"
+                :name-editable="false"
+                :readonly-name="row.name"
+                :type-hint="typeHintFor(editForm.type)"
+                @update:form="editForm = $event"
+              />
+              <div class="agent-memories-editor-actions">
+                <button
+                  type="button"
+                  class="agent-memories-btn agent-memories-btn--primary"
+                  :disabled="saving"
+                  @click="save(row)"
+                >{{ ui.memorySave }}</button>
+                <button type="button" class="agent-memories-btn" :disabled="saving" @click="collapse">
+                  {{ ui.cancel }}
+                </button>
+              </div>
+              <p v-if="error" class="agent-memories-error">{{ error }}</p>
+            </div>
+          </li>
+        </ul>
+      </template>
     </template>
 
     <p v-if="error && !creating && !expandedKey" class="agent-memories-error">{{ error }}</p>
@@ -154,6 +225,14 @@ export default {
       editForm: { type: 'user', description: '', content: '', enabled: true },
       error: '',
     }
+  },
+  computed: {
+    namedEntries() {
+      return (this.entries || []).filter((e) => e.kind !== 'rolling')
+    },
+    rollingEntries() {
+      return (this.entries || []).filter((e) => e.kind === 'rolling')
+    },
   },
   mounted() {
     this.reload().then(() => this.applyInitialIntent())
@@ -355,6 +434,22 @@ export default {
   margin: 0 0 8px;
   font-size: 11px;
   color: #888;
+}
+
+.agent-memories-section-title {
+  margin: 16px 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #555;
+  &:first-of-type {
+    margin-top: 0;
+  }
+  &--rolling {
+    color: #666;
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid #eef1f5;
+  }
 }
 
 .agent-memories-actions {
