@@ -236,6 +236,7 @@ def user_turn_trace(
     job_id: str | None,
     user_message: str,
     permission_mode: str | None = None,
+    extra_metadata: dict[str, Any] | None = None,
 ) -> Iterator[None]:
     """One user message / HTTP job = one Langfuse trace."""
     client = _get_client()
@@ -254,6 +255,8 @@ def user_turn_trace(
         "permission_mode": permission_mode,
         "app": "northclass.agent",
     }
+    if extra_metadata:
+        meta.update(extra_metadata)
     inp = (
         redact_text(user_message, max_len=500)
         if _REDACT

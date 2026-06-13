@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .context import BindingContext, candidate_for_dataset_id, catalog_item
+from .rules import teacher_wants_class_wide
 from .types import DatasetBindingDecision
 
 
@@ -24,6 +25,16 @@ def validate_decision(
                 f"{cand.result_rows} 行（非切片）。请 list_datasets 后重选，或先 limit query。"
             )
     elif scope == "class_wide":
+        if (
+            cand.user_turn < ctx.current_user_turn
+            and not teacher_wants_class_wide(ctx.teacher_message)
+        ):
+            return (
+                f"Error: 绑定 scope=class_wide 但 {decision.dataset_id} 来自"
+                f" user_turn={cand.user_turn}（当前 turn={ctx.current_user_turn}），"
+                "且教师话未要求全班/整体口径。"
+                "跨轮请传 input.dataset_id，或先对本题 query_data（省略 limit）。"
+            )
         if cand.is_slice and not cand.is_broad_scan:
             return (
                 f"Error: 绑定 scope=class_wide 但 {decision.dataset_id} 仅为 "

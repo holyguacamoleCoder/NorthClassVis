@@ -1,0 +1,115 @@
+[
+  {
+    "id": "chain_slice_two_turns",
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 提交记录按 score 升序取最低 10 条",
+      "汇总这些记录的条数和 score 均值"
+    ],
+    "expect_aggregates": [{"turn_index": 1, "expect": "slice"}]
+  },
+  {
+    "id": "class_wide_after_slice_new_turn",
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 最低 10 条提交",
+      "这个班整体有多少不同学生？平均分多少？需要全班口径"
+    ],
+    "expect_aggregates": [
+      {
+        "turn_index": 1,
+        "expect": "broad",
+        "note": "第二问应新 query 全量再 aggregate，或 aggregate 绑 broad；若仅 aggregate 无新 query 则必须绑 broad ref"
+      }
+    ]
+  },
+  {
+    "id": "single_turn_explicit_two_queries",
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "请对 Class1 依次：1) query limit=10 按 score 升序；2) query 全量不要 limit；3) 对第1份结果 aggregate count+mean(score)；4) 对第2份 aggregate count_distinct(student_ID)+mean(score)"
+    ],
+    "expect_aggregates": [
+      {"turn_index": 0, "expect": "slice", "ordinal": 1},
+      {"turn_index": 0, "expect": "broad", "ordinal": 2}
+    ]
+  },
+  {
+    "id": "wrong_ref_correction",
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "先查 Class1 最低10条，再查 Class1 全量；然后汇总这些记录的均值"
+    ],
+    "expect_aggregates": [
+      {"turn_index": 0, "expect": "slice", "note": "「这些记录」应纠正到 slice"}
+    ]
+  },
+  {
+    "id": "cross_turn_reject",
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 最低10条",
+      "对这10条算均值"
+    ],
+    "expect_aggregates": [
+      {
+        "turn_index": 1,
+        "expect": "slice",
+        "accept_guard_error": true,
+        "note": "同 session 第二 user_turn：显式 dataset_id 或同 turn 内 aggregate 应 slice；静默跨 turn 续用旧 ref 应 Error"
+      }
+    ]
+  },
+  {
+    "id": "cross_turn_explicit_dataset",
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 提交按 score 升序取最低 10 条",
+      "请 list_datasets 找到上一轮切片数据集的 dataset_id，对该 dataset_id 算 score 均值（跨轮显式引用）"
+    ],
+    "expect_aggregates": [{"turn_index": 1, "expect": "allow_cross_turn_explicit"}]
+  },
+  {
+    "id": "semantic_class_wide_single_turn",
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "用 Class1 全班全量数据：统计不同学生人数和 score 均值，需要全班口径"
+    ],
+    "expect_aggregates": [{"turn_index": 0, "expect": "broad"}]
+  },
+  {
+    "id": "fresh_after_slice_same_turn",
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "先 query Class1 最低 10 条提交，再 query 全量；然后必须调用 aggregate_data（bind=fresh）统计这个班有多少不同学生（全班口径，不是这10条）"
+    ],
+    "expect_aggregates": [{"turn_index": 0, "expect": "broad", "ordinal": 1}]
+  },
+  {
+    "id": "reject_cross_turn_silent",
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 最低10条提交",
+      "直接 aggregate 均值，不要新 query，也不要传 dataset_id"
+    ],
+    "expect_aggregates": [{"turn_index": 1, "expect": "reject_cross_turn", "ordinal": 1}]
+  },
+  {
+    "id": "explicit_dataset_id_same_turn",
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 按 score 升序 limit=10 查询；list_datasets 后必须调用 aggregate_data，input 只传 dataset_id（不要传 result_ref）做 count"
+    ],
+    "expect_aggregates": [{"turn_index": 0, "expect": "explicit_dataset_id"}]
+  }
+]

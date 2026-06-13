@@ -17,6 +17,15 @@ from ..data.types import AggregateBinding
 from .context import build_binding_context, candidate_for_dataset_id
 from .gate import check_ambiguity
 from .intent import resolve_binding_intent
+from .rules import (
+    cross_turn_reject_message,
+    missing_turn_query_message,
+    should_reject_silent_cross_turn,
+    teacher_wants_chain_slice,
+    teacher_wants_class_wide_over_slice,
+    try_rule_chain_slice,
+    try_rule_fresh_broad,
+)
 from .scoring import pick_best_candidate
 from .types import BindMode, DatasetBindingDecision
 from .validate import validate_decision
@@ -101,7 +110,23 @@ def resolve_aggregate_binding(
         err = validate_decision(dec, ctx)
         if err:
             return AggregateBinding(error=err, trace=trace)
+        if (
+            teacher_wants_chain_slice(ctx.teacher_message)
+            and not teacher_wants_class_wide_over_slice(ctx.teacher_message)
+            and not cand.is_slice
+        ):
+            hint = format_catalog_hint(session_id)
+            return AggregateBinding(
+                error=(
+                    f"Error: dataset_id={explicit_id!r} 为全量（{cand.result_rows} 行），"
+                    "但教师话要求切片/「这些记录」口径。请 list_datasets 后改选 limit 切片 dataset_id。"
+                    + (f"\n{hint}" if hint else "")
+                ),
+                trace={**trace, "resolver": "explicit_dataset_id"},
+            )
         trace["resolver"] = "explicit_dataset_id"
+        trace["bound_result_ref"] = dec.result_ref
+        trace["bound_dataset_id"] = dec.dataset_id
         return AggregateBinding(
             result_ref=dec.result_ref,
             dataset_id=dec.dataset_id,
@@ -144,6 +169,21 @@ def resolve_aggregate_binding(
                     trace=trace,
                 )
 
+    bind_value = bind.value if isinstance(bind, BindMode) else str(bind)
+    rule_broad = try_rule_fresh_broad(ctx, inp, trace, bind=bind_value)
+    if rule_broad is not None:
+        return rule_broad
+
+    rule_slice = try_rule_chain_slice(ctx, inp, trace)
+    if rule_slice is not None:
+        return rule_slice
+
+    if should_reject_silent_cross_turn(ctx, inp):
+        return AggregateBinding(
+            error=missing_turn_query_message(session_id),
+            trace={**trace, "resolver": "silent_cross_turn_reject"},
+        )
+
     if not gate.triggered and len(ctx.candidates) == 1:
         c = ctx.candidates[0]
         given_ref = inp.get("result_ref")
@@ -182,6 +222,12 @@ def resolve_aggregate_binding(
                 auto_input=True,
                 trace=trace,
             )
+
+    if "CROSS_TURN_REF" in gate.reasons and not explicit_id:
+        return AggregateBinding(
+            error=cross_turn_reject_message(session_id),
+            trace={**trace, "resolver": "cross_turn_ref_reject"},
+        )
 
     if gate.triggered or len(ctx.candidates) >= 2 or (
         inp.get("result_ref") and len(ctx.candidates) >= 1

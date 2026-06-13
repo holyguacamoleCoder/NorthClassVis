@@ -12,9 +12,19 @@ data/.agent_audit/
 
 # 取消对巨量数据的提交
 data/exports/manifest.jsonl
+data/exports/*.txt
 data/*.csv
 data/Data_SubmitRecord/*.csv
 data/*.docx
+
+# Eval run outputs and local report artifacts (fixtures live under backend/agent/eval/fixtures/)
+data/eval/*.json
+data/eval/*.csv
+data/reports/
+
+# Cursor / local session scratch
+.cursorindexingignore
+.tmp_session.json
 
 /plan
 .specstory/
