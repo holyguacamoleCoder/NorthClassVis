@@ -459,6 +459,10 @@ export default {
   flex-direction: column;
   overflow: hidden;
   isolation: isolate;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
 .agent-resize-handle {
@@ -489,12 +493,6 @@ export default {
   cursor: default;
 }
 
-.btn-icon--text {
-  width: auto;
-  padding: 0 10px;
-  font-size: 13px;
-}
-
 .agent-answer-md {
   margin-top: 4px;
 }
@@ -521,7 +519,9 @@ export default {
 
 .agent-panel-title {
   font-weight: 600;
-  font-size: 17px;
+  font-size: 15px;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
 }
 
 .agent-panel-actions {
@@ -537,12 +537,25 @@ export default {
   color: #fff;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1;
   padding: 0;
+  font-family: inherit;
   &:hover {
     background: rgba(255, 255, 255, 0.3);
   }
+}
+
+.btn-icon.btn-icon--text {
+  width: auto;
+  min-width: 32px;
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 28px;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
 }
 
 .agent-panel-body {
@@ -869,8 +882,14 @@ export default {
   padding: 10px 14px;
   border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 15px;
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.4;
   outline: none;
+  &::placeholder {
+    color: #aaa;
+    font-size: 13px;
+  }
   &:focus {
     border-color: #2a2a2a;
   }
@@ -882,7 +901,9 @@ export default {
   color: #fff;
   border: none;
   border-radius: 6px;
-  font-size: 15px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
   cursor: pointer;
   &:hover:not(:disabled) {
     background: #333;
@@ -910,12 +931,15 @@ export default {
 .agent-mode-select,
 .agent-header-btn {
   font-size: 12px;
-  padding: 2px 8px;
+  font-weight: 500;
+  padding: 3px 8px;
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.35);
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
   cursor: pointer;
+  font-family: inherit;
+  line-height: 1.3;
 }
 
 .agent-session-drawer {

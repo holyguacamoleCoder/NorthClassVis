@@ -1,201 +1,292 @@
-# NorthClassVis
+# NorthClassAgent
 
-ChinaVis 2024数据可视化竞赛作品复现
+面向教育场景的数据分析 Agent 平台 · ChinaVis 2024 学情可视化底座
+
+> **分支说明**：`main` 为当前 Agent 集成主线（本 README 所描述版本）；纯可视化历史版本见 `chainvis-original`。
+
+---
 
 ## 项目简介
 
-本项目是2024年数据可视化竞赛的参赛作品非1:1复现(仅有大致原作成品参考，无原型图、设计稿等)，旨在基于可视化作品学习**D3.js**、**flask**的相关知识。  
-目前正在项目基础上扩展面向教师对话Agent能力，旧版代码分支`chainvis-original`。
+NorthClassVis 在 ChinaVis 2024 数据可视化竞赛作品基础上，扩展为**面向教师用户的智能学情分析平台**。教师可通过自然语言与 Agent 交互，自动完成学情查询、多维度聚合、智能报告生成，并联动五视图可视化面板动态展示结果，实现教育数据分析全流程智能化落地。
 
-项目包含：
+平台自研完整 **AgentLoop** 调度架构，与 Flask 可视化后端同进程部署，支持多轮工具调用、精细化权限管控、上下文智能压缩，以及 CLI / HTTP 双入口。
 
-- 使用`Vue2`框架构建交互式用户界面，结合`Vuex`实现复杂状态管理和界面交互（未来可能重写为`Vue3`）。
+---
 
-- 基于`D3.js`开发多类型图表（平行线图、环形柱状图、雷达图、树形图等），支持动态数据绑定和实时更新。
+## 核心能力
 
-- 使用`axios`接受和发起请求，构建可复用的api文件
+### 项目整体架构
 
-- 使用`Flask`框架搭建高性能 API 服务，提供数据查询和分析接口。
+- 自研面向教育场景的数据分析 Agent 平台，搭建完整 AgentLoop 调度架构
+- 支持多轮工具调用、精细化权限管控（consult / analyze / produce 等能力模式）与上下文智能压缩
+- 面向教师提供自然语言交互入口（Dashboard 浮窗 + 独立 Agent 工作台）
+- 可自动触发学情数据分析、多维度数据聚合、智能报告生成，并联动可视化面板展示结果
 
-- 使用`pandas`/`numpy`对`.csv`文件处理，计算数据特征。
+### 全套工具调用体系
 
-- 利用自主实现`PCA`降维和`kmeans`聚类
+- 基于 **Function Calling**，通过 Manifest 标准化注册 **17 类**智能工具
+- 按**文件读写、会话管理、可视化适配、数据分析**四大维度重构处理器与模型调用规约
+- 配套权限裁剪、数据路径管控、参数签名修复及 Hook 节点拦截机制
+- 工具调用成功率 **94%**（在线评测）
 
-- 利用`sklearn`库学习对比降维和聚类算法
+### Agent 循环调度优化
 
-- 应用面向对象设计模式，通过`单例模式`、`工厂模式`以及`观察者模式`优化全局配置和计算件管理，提高代码复用性和可维护性。
+针对传统 Agent 多轮调用冗余 IO、上下文膨胀、重复调用等痛点，在 Loop 核心层新增：
 
-- 整体采用`批处理软件结构风格`，优化前端性能和用户体验。
+- 工具调用去重（`dedupe_tool_calls`）
+- 低价值循环熔断（inspect_schema / load_skill / consult-list / todo-only 等 guard）
+- 会话技能常驻锁定（skill pin）
 
-- 通过`依赖注入`实现类，实现代码解耦和可维护性。
+优化后典型任务交互轮次**中位数由 5 轮降至 3 轮**，整体端到端耗时缩减至优化前的 **79%**。
 
-- ~~实现视口动态渲染和并行渲染技术，显著提升页面加载速度和用户体验。~~
+### 跨会话记忆隔离治理
 
-- ~~利用静态 JSON 数据测试前端样式，确保界面一致性和兼容性。~~
+- 区分临时会话交付物与长期记忆存储逻辑
+- 通过 Prompt 约束、内容合规校验、黑名单清单及权限拦截，避免学号、报告结论等临时业务数据污染长期记忆
+- 保障 Agent 记忆精准度与多轮对话体验
 
-- ~~使用`pytest`编写单元测试，覆盖关键业务逻辑，确保后端功能的稳定性和可靠性。~~
+### 数据链式绑定与缓存优化
 
-- ~~手写节流和防抖函数，优化用户体验。~~
+搭建「**规则打分 + LLM 意图解析 + 硬规则校验**」三重数据意图绑定模块：
 
-笔者目前也在学习, 学习记录、学习资源见**notes**文件夹
+- 精准匹配用户查询口径，缩减上下文开销
+- 针对统计口径变更场景，支持缓存重聚合与条件增量查询
+- 在线 Binding 准确率 **93.75%**（详见 `docs/eval/binding-accuracy-online.md`）
+
+### 智能报告工作流
+
+- 分章节续写、文件迭代编辑（`edit_file`）、内容合规校验
+- 自定义可视化图表嵌入协议（`visual_link_contract.yaml`），报告支持「长文 + 交互式图表」
+- 平均报告篇幅由约 50 行优化至约 **150 行**
+
+### 可信交付与故障自愈
+
+- 数据溯源引用标签，报告结论、数据来源、运行快照可追溯
+- 分类适配输出截断、上下文溢出、限流报错等故障场景
+- 分级重试、内容压缩、退避终止的智能决策树，提升长对话与大批量报告生成稳定性
+- 可选接入 **Langfuse** 做 LLM / 工具链路追踪
+
+---
+
+## 技术栈
+
+| 层级   | 技术                                                           |
+| ------ | -------------------------------------------------------------- |
+| 后端   | Python 3.11、Flask、gunicorn、pandas、numpy、scikit-learn      |
+| Agent  | AgentLoop、Function Calling、OpenAI API、SSE、Langfuse（可选） |
+| 前端   | Vue 3、Vuex、Vue Router、Vite、axios                           |
+| 可视化 | D3.js、ECharts                                                 |
+| 部署   | Docker + Nginx 单镜像（`deploy/Dockerfile`）                   |
+
+---
+
+## 架构概览
+
+```
+浏览器 (Vue3 + D3)
+    │  /api/*
+    ▼
+Flask (app.py)
+    ├── routes/*          # 五视图 viz API
+    ├── routes/agent_*    # Agent HTTP（会话 / Job / SSE）
+    └── agent/
+        ├── loop.py       # AgentLoop 调度
+        ├── tools/        # Manifest + handlers + runtime
+        ├── permission/   # 能力模式与审批
+        ├── session/      # 多会话持久化
+        ├── skills/       # 技能注册与加载
+        └── eval/         # Binding 在线评测
+
+共享数据层：core/ · domain/ · services/ · data/
+```
+
+教师提问 → AgentLoop → 工具链（query / aggregate / write）→ 报告产出 + visual link → 前端五视图联动。
+
+---
 
 ## 项目结构
 
-项目包含以下核心文件和目录：
-
 ```
 NorthClassVision/
-├── data/                          # 数据集
-│   ├── Data_SubmitRecord/         # 按班级的提交记录 CSV
-│   ├── Data_StudentInfo.csv
-│   ├── Data_TitleInfo.csv
-│   └── first_dataDes.docx
-├── backend/                        # 后端（Flask）
-│   ├── config/                     # 应用配置
-│   │   └── app_config.py           # 单例 Config、观察者、数据源
-│   ├── core/                       # 核心数据与 IO
-│   │   └── data_loader.py          # 加载/合并 CSV、process_non_numeric_values
-│   ├── domain/                     # 领域逻辑
-│   │   ├── features/               # 特征计算
-│   │   │   ├── calculators.py      # 初步/最终特征计算器
-│   │   │   └── factory.py          # FeatureFactory（PCA/聚类入口）
-│   │   ├── reduction.py            # 降维（DimReduction）
-│   │   ├── clustering.py           # 聚类（ClusterAnalysis）
-│   │   └── algorithms/             # 自实现算法
-│   │       ├── pca.py
-│   │       └── kmeans.py
-│   ├── services/                   # 视图数据服务
-│   │   ├── week_service.py         # 周视图数据
-│   │   ├── question_service.py    # 题目时间轴/分布/按知识点
-│   │   └── student_service.py     # 学生树数据
-│   ├── routes/                     # API 路由与 Blueprint 注册
-│   │   ├── __init__.py             # 装配 Config、FeatureFactory、各路由
-│   │   ├── nav_routes.py
-│   │   ├── scatter_routes.py
-│   │   ├── portrait_routes.py
-│   │   ├── student_routes.py
-│   │   ├── question_routes.py
-│   │   └── week_routes.py
-│   ├── tools/                      # 兼容层（从 config/core/domain/services 再导出）
-│   ├── test/                       # 测试
-│   │   ├── test_fileSystem.py
-│   │   └── test_clustering.py
-│   └── app.py                      # Flask 入口
-├── frontend/                       # 前端（Vue2）
-│   ├── public/
-│   ├── src/
-│   │   ├── assets/
-│   │   ├── components/
-│   │   │   ├── CheckboxDropdown.vue  # 下拉菜单
-│   │   │   ├── ConfigPanel.vue       # 配置面板
-│   │   │   ├── IconBlock.vue         # 右上角图标块
-│   │   │   ├── LoadingSpinner.vue    # 加载图标
-│   │   │   ├── NavHeader.vue         # 导航栏
-│   │   │   ├── ParallelView.vue
-│   │   │   ├── PortraitView.vue
-│   │   │   ├── QuestionView.vue
-│   │   │   ├── ScatterView.vue
-│   │   │   ├── StudentView.vue
-│   │   │   └── WeekView.vue
-│   │   ├── router/
-│   │   ├── store/
-│   │   ├── views/
-│   │   ├── api/                     # 接口封装
-│   │   └── App.vue
-│   ├── babel.config.js
-│   ├── package.json
-│   ├── README.md
-│   └── vue.config.js
-├── plan/                           # 规划与清单（如后端重构清单）
-├── notes/                          # 学习笔记
-│   ├── D3_study.md
-│   ├── DesignPatterns.md
-│   ├── hands_on_KMeans.ipynb
-│   ├── hands_on_PCA.ipynb
-│   ├── MachineLearning.md
-│   ├── optimization_journey.md
-│   └── study_recourse.md
-├── problem.md                      # 竞赛说明与数据集链接
-└── README.md
+├── backend/
+│   ├── app.py                  # Flask 入口（viz + Agent 同进程）
+│   ├── config/ core/ domain/ services/   # 共享数据与特征层
+│   ├── routes/                 # viz API + agent_routes
+│   └── agent/                  # Agent 核心
+│       ├── loop.py             # AgentLoop
+│       ├── http/               # HTTP 服务与 Job
+│       ├── tools/              # definitions / handlers / runtime
+│       ├── permission/ session/ skills/ memory/
+│       └── eval/               # binding 准确率评测
+├── frontend/
+│   ├── src/views/              # Dashboard、AgentView
+│   ├── src/components/agent/   # 对话 UI、报告嵌入、图表联动
+│   └── src/components/         # Scatter / Week / Student 等五视图
+├── data/
+│   ├── Data_SubmitRecord/      # 班级提交 CSV
+│   └── meta/                   # 契约：ontology、visual_link、registry
+├── skills/                     # data-exploration、report-writing 等
+├── docs/plans/                 # Agent 路线图与设计文档
+├── docs/eval/                  # Binding 评测说明
+├── deploy/                     # Docker 部署
+└── notes/                      # D3 / ML / Agent 学习笔记
 ```
 
-## 如何运行
+---
 
-> 注意：版本兼容 python: 3.11.1, node: v16.20.2, npm: v8.19.4
+## 快速开始
 
-0. 参见**problem.md**前往官网下载数据集，放置在data文件夹下
+### 环境要求
 
-1. 克隆项目到本地：
+- Python **3.11+**
+- Node.js **18+**（推荐 20）
+- 数据集：参见 `problem.md` 下载后放入 `data/`
 
-```bash
-git clone https://github.com/holyguacamoleCoder/NorthClassVision.git
-```
-
-2. 进入项目目录：
+### 1. 克隆与依赖
 
 ```bash
-cd NorthClassVision
-```
+git clone -b chinavis-agentloop git@github.com:holyguacamoleCoder/NorthClassVis.git
+cd NorthClassVis
 
-3. 安装后端依赖：
-
-```bash
 pip install -r requirements.txt
+cd frontend && npm install && cd ..
 ```
 
-4. 启动后端服务：
+### 2. 配置 Agent（可选，未配置时使用规则兜底）
 
 ```bash
+cp backend/.env.example backend/.env
+# 编辑 backend/.env，填入 OPENAI_API_KEY、OPENAI_MODEL 等
+```
+
+### 3. 启动服务
+
+```bash
+# 终端 1：后端
 cd backend
 flask run
-```
+# 或：python -m flask run --host 0.0.0.0 --port 5000
 
-5. 安装前端依赖
-
-```bash
-cd ../frontend
-npm install
-```
-
-6. 启动前端服务（Vite 开发服务器）：
-
-```bash
+# 终端 2：前端
+cd frontend
 npm run dev
 ```
 
-7. 打开浏览器，访问 `http://localhost:8080` 查看可视化效果。
+浏览器访问：
 
-## 样式预览
+- **Dashboard（可视化 + Agent 浮窗）**：<http://localhost:8080/>
+- **Agent 工作台**：<http://localhost:8080/agent>
 
-1. 选择配置班级和专业
+### 4. CLI 模式（可选）
+
+```bash
+cd backend/agent
+python agent_service.py
+```
+
+### 5. Docker 部署
+
+```bash
+docker build -f deploy/Dockerfile -t northclassvis:latest .
+docker run -p 8080:80 -v $(pwd)/backend/.env:/app/backend/.env northclassvis:latest
+```
+
+### 6. 运行评测（可选）
+
+```bash
+cd backend
+pytest agent/test/ test/ -q
+python -m agent.eval.run_binding_online_eval   # 需配置 LLM
+```
+
+---
+
+## 文档索引
+
+| 文档                                     | 说明                    |
+| ---------------------------------------- | ----------------------- |
+| `docs/plans/agentic-analysis-roadmap.md` | Agent 分阶段路线图      |
+| `docs/eval/binding-accuracy-online.md`   | 在线 Binding 准确率评测 |
+| `docs/eval/binding-accuracy.md`          | Binding 离线评测        |
+| `data/meta/visual_link_contract.yaml`    | 五视图联动契约          |
+| `data/meta/analysis_ontology.yaml`       | 分析粒度与 Lens 矩阵    |
+| `skills/README.md`                       | 技能目录说明            |
+
+---
+
+## 可视化底座（起源）
+
+本项目源于 **ChinaVis 2024** 数据可视化竞赛作品的学习复现（非 1:1 还原），核心可视化能力包括：
+
+- 基于 **D3.js** 的平行线图、环形柱状图、雷达图、树形图等多类型图表
+- 自实现 **PCA** 降维与 **KMeans** 聚类，对比 sklearn 实现
+- **Vue 3 + Vuex** 复杂状态管理，批处理式视图更新
+- 单例 / 工厂 / 观察者等设计模式组织配置与特征计算
+
+纯可视化版本请切换分支：`git checkout chainvis-original`
+
+---
+
+## Agent 面板预览
+
+教师可通过**全屏工作台**或**Dashboard 浮窗**使用 Agent。
+
+| 入口 | 适用场景                             | 进入方法                                  |
+| ---- | ------------------------------------ | ----------------------------------------- |
+| 浮窗 | 看图时顺手提问，不离开五视图         | 在agent工作提台中点击右上角浮窗可换入     |
+| 全屏 | 多会话、写报告、框选范围、看完整过程 | 通过agent路由或dashboard面板agent按钮进入 |
+
+### 1. 双入口
+
+ a. 工作台网址：<http://localhost:8080/agent>
+
+![agent-entry-float](src/README/agent-entry-page.png)
+
+ b. 进入浮窗：点击右上角“浮窗”按钮进入dashboard，agent变为浮窗
+
+![agent-entry-page](src/README/agent-entry-float.png)
+
+
+
+### 2. 三段式分析与工具透明
+
+计划--过程--结论
+
+ReAct典型回复范式
+
+<img src="src/README/agent-three-segment.png" alt="agent-three-segment" style="zoom: 67%;" />
+
+
+
+### 3. 数据Context与会话级信息管理
+
+![agent-session-manage](src/README/agent-session-manage.png)
+
+
+
+---
+
+## 可视化面板预览（旧版）
+
+1. 选择班级与专业，提交配置
 
 ![image-preview1](src/README/image-preview1.png)
 
-2.点击submit按钮，等待后端配置成功
-
-![image-preview2](src/README/image-preview2.png)
-
-3.此时后端配置完成，前端部分组件也已经更新渲染
+1. 后端配置完成，五视图渲染
 
 ![image-preview3](src/README/image-preview3.png)
 
-4.点击刷选工具，框选数据，点击DISPLAY按钮。随后可以在PortraitView看到被选中学生的指标平均值（黑色），Week/Student View后端正在计算
+1. 框选学生，Portrait / Week / Student 联动
 
 ![image-preview4-1](src/README/image-preview4-1.png)
 
-5.再试着框选一些并点击DISPLAY，点击StudentView具体框可以展开
-
-![image-preview4-2](src/README/image-preview4-2.png)
-
-6.WeekView展示的是被选中学生的每周不同知识点进展
-
-![image-preview4-3](src/README/image-preview4-3.png)
-
-7. 其他一些样例，请欣赏
+更多截图见下文原版预览区。
 
 ![image-preview5-1](src/README/image-preview5-1.png)
 
-![image-preview5-2](src/README/image-preview5-2.png)
+---
 
-<img src="src/README/image-preview7.png" alt="image-preview7" style="zoom: 27%;" /> <img src="src/README/image-preview6.png" alt="image-preview6" style="zoom: 27%;" />
+## 许可证与说明
 
+竞赛数据使用请遵循 `problem.md` 与官网要求。学习记录见 `notes/` 目录。
