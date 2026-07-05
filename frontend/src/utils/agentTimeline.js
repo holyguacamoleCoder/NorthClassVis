@@ -12,6 +12,7 @@ function toolMsgToStep(msg) {
     status: msg.status || 'ok',
     error: msg.status !== 'ok' ? msg.content : '',
     call_id: msg.call_id,
+    raw_content: msg.content,
   })
 }
 

@@ -31,6 +31,14 @@ def _tool_status(content: str) -> str:
         return "denied"
     if any(text.startswith(prefix) for prefix in _ERROR_PREFIXES):
         return "fail"
+    if "Error:" in text:
+        return "fail"
+    if "Text not found in" in text:
+        return "fail"
+    if "[Report validate]" in text and (
+        "status: ERRORS" in text or "\n  error:" in text
+    ):
+        return "fail"
     return "ok"
 
 
@@ -116,6 +124,16 @@ def _enrich_tool_step(step: dict[str, Any]) -> dict[str, Any]:
             step["reference_name"] = ref_name
             if status == "ok":
                 step["summary"] = f"已加载参考 {ref_name}"
+    elif tool_name in ("write_file", "edit_file"):
+        raw = str(step.get("raw_content") or "")
+        if "[Report validate]" in raw:
+            step["kind"] = "report"
+            if status == "fail":
+                step["summary"] = "报告校验未通过"
+            elif "[Report validate: OK]" in raw:
+                step["summary"] = "报告已写入并通过校验"
+            elif "status: OK with warnings" in raw:
+                step["summary"] = "报告已写入（有警告）"
     elif tool_name in ("query_data", "aggregate_data", "inspect_schema"):
         resource = str(params.get("resource") or "").strip()
         if resource:
@@ -532,6 +550,17 @@ def build_turn_timeline(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return timeline
 
 
+def _turn_has_report_validate_errors(turn_messages: list[dict[str, Any]]) -> bool:
+    from hints.report_checks import report_validation_failed
+
+    for msg in turn_messages:
+        if msg.get("role") != "tool":
+            continue
+        if report_validation_failed(str(msg.get("content") or "")):
+            return True
+    return False
+
+
 def _turn_start_index(messages: list[dict[str, Any]]) -> int:
     for idx in range(len(messages) - 1, -1, -1):
         if messages[idx].get("role") == "user":
@@ -576,8 +605,12 @@ def adapt_legacy_query_response(
     overall_status = "complete"
     if continue_reason and continue_reason not in ("tool_calls_executed",):
         overall_status = "failed"
+    elif _turn_has_report_validate_errors(turn_messages):
+        overall_status = "partial"
     elif any(step.get("status") in ("fail", "denied", "blocked") for step in steps):
         overall_status = "partial" if answer else "failed"
+
+    report_validate_pending = _turn_has_report_validate_errors(turn_messages)
 
     return {
         "answer": answer,
@@ -593,9 +626,9 @@ def adapt_legacy_query_response(
         "timeline": timeline,
         "continue_reason": continue_reason,
         "goal_check": {
-            "is_satisfied": overall_status == "complete" and bool(answer),
-            "can_stop_early": overall_status == "complete",
-            "reason": continue_reason or "",
+            "is_satisfied": overall_status == "complete" and bool(answer) and not report_validate_pending,
+            "can_stop_early": overall_status == "complete" and not report_validate_pending,
+            "reason": continue_reason or ("report_validate_errors" if report_validate_pending else ""),
             "is_pending_clarification": False,
         },
         "summary": {

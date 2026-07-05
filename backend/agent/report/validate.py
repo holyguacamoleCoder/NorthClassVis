@@ -167,22 +167,31 @@ def validate_report(
 
 def format_validation_for_tool_result(result: dict[str, Any]) -> str:
     """Short block to append to write_file / edit_file tool results."""
-    if result.get("ok") and not result.get("warnings"):
+    errors = result.get("errors") or []
+    warnings = result.get("warnings") or []
+    if result.get("ok") and not warnings:
         return "[Report validate: OK]"
     lines = ["[Report validate]"]
     if not result.get("ok"):
         lines.append("status: ERRORS")
-    elif result.get("warnings"):
+    elif warnings:
         lines.append("status: OK with warnings")
-    for err in result.get("errors") or []:
+    for err in errors:
         lines.append(f"  error: {err}")
-    for warn in result.get("warnings") or []:
+    for warn in warnings:
         lines.append(f"  warn: {warn}")
     lines.append(
         f"  lines={result.get('line_count')} tier={result.get('tier')} "
         f"sections={len(result.get('sections') or [])}"
     )
-    return "\n".join(lines)
+    block = "\n".join(lines)
+    if errors:
+        block = (
+            "Error: Report validation failed. "
+            f"{len(errors)} error(s). Use edit_file to fix before telling the teacher the report is done.\n\n"
+            + block
+        )
+    return block
 
 
 def validate_report_file(

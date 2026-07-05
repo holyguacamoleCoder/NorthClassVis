@@ -40,7 +40,8 @@
 
 ## 写后自检
 
-- [ ] `write_file`/`edit_file` 后查看 tool result 中 `[Report validate]`，有 error 须 `edit_file` 修复
+- [ ] `write_file`/`edit_file` 后查看 tool result 中 `[Report validate]`，有 error 须 `edit_file` 修复（error 时工具会标为失败并附 reminder）
+- [ ] 写完报告会自动打开 **预览**；`build_visual_links` 的图块会尽量自动写入报告（`report-chart`）
 - [ ] 必填 `##` 章节齐全（tier reference + validate 输出）
 - [ ] Evidence 含 cite 标签
 - [ ] 每个 report-chart 有正文解释

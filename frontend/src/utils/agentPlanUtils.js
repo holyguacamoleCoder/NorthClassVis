@@ -48,6 +48,21 @@ export function summarizeToolContent(name, content) {
   if (text.startsWith('Error:')) {
     return summarizeToolError(text)
   }
+  if (tool === 'write_file' || tool === 'edit_file') {
+    if (text.includes('[Report validate]')) {
+      if (text.includes('status: ERRORS') || text.includes('\n  error:')) {
+        return '报告校验未通过，需修改后重试'
+      }
+      if (text.includes('status: OK with warnings')) {
+        return '报告已写入（有校验警告）'
+      }
+      if (text.includes('[Report validate: OK]')) {
+        return '报告已写入并通过校验'
+      }
+    }
+    const m = text.match(/\[(?:Write|Edit)\s+OK:\s*path=([^,\]]+)/i)
+    if (m) return `${tool === 'write_file' ? '已写入' : '已修改'} ${m[1].trim()}`
+  }
   if (tool === 'todo_write') {
     const m = text.match(/\[Plan updated:\s*(\d+)\/(\d+)\s+completed\]/)
     if (m) return `计划 ${m[1]}/${m[2]} 已完成`
@@ -137,6 +152,19 @@ export function enrichToolStep(step) {
     if (step.run_status) next.run_status = step.run_status
     if (['fail', 'denied', 'blocked'].includes(next.status)) {
       next.summary = summarizeToolError(next.error || next.summary || '')
+    }
+  } else if (tool === 'write_file' || tool === 'edit_file') {
+    const content = String(next.raw_content || next.summary || '')
+    if (content.includes('[Report validate]')) {
+      next.kind = 'report'
+      if (content.includes('status: ERRORS') || content.includes('\n  error:')) {
+        next.status = 'fail'
+        next.summary = '报告校验未通过'
+      } else if (content.includes('[Report validate: OK]')) {
+        next.summary = '报告已写入并通过校验'
+      } else if (content.includes('status: OK with warnings')) {
+        next.summary = '报告已写入（有警告）'
+      }
     }
   }
   return next

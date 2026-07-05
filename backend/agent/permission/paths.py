@@ -16,6 +16,23 @@ def normalize_path(path: str | None) -> str:
     return strip_data_prefix(path or "")
 
 
+def align_writable_path_case(rel_path: str) -> str:
+    """Match existing reports/student/<ID>/ directory casing (Windows-friendly)."""
+    parts = PurePosixPath(rel_path).parts
+    if len(parts) < 3 or parts[0] != "reports" or parts[1] != "student":
+        return rel_path
+    root = DATA_DIR / "reports" / "student"
+    if not root.is_dir():
+        return rel_path
+    needle = parts[2]
+    for child in root.iterdir():
+        if child.is_dir() and child.name.lower() == needle.lower():
+            fixed = list(parts)
+            fixed[2] = child.name
+            return "/".join(fixed)
+    return rel_path
+
+
 def resolve_data_relative_path(path: str | None) -> str:
     """
   Resolve a tool path to a stable location relative to data/.
@@ -38,7 +55,7 @@ def resolve_data_relative_path(path: str | None) -> str:
     except ValueError as exc:
         raise ValueError("path outside data workspace") from exc
 
-    return rel.as_posix()
+    return align_writable_path_case(rel.as_posix())
 
 
 def to_data_relative_path(path: str | None) -> str:

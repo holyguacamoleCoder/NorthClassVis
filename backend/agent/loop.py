@@ -41,6 +41,7 @@ from tools.handlers.todo_write import (
     mark_round_without_todo_update,
 )
 from hints.plan_checks import append_data_tool_checks
+from hints.report_checks import append_report_write_checks
 
 _log = get_logger("loop")
 
@@ -245,6 +246,7 @@ class AgentLoop:
             return False
 
         append_data_tool_checks(tool_calls, tool_results)
+        append_report_write_checks(tool_calls, tool_results)
         synced = _sync_tool_results_to_messages(
             self.loop_state.messages,
             tool_calls,
@@ -522,6 +524,7 @@ class AgentLoop:
                         break
         
         append_data_tool_checks(tool_calls, tool_results)
+        append_report_write_checks(tool_calls, tool_results)
 
         if not tool_results:
             # 工具调用失败

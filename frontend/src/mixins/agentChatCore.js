@@ -163,6 +163,13 @@ export default {
       if (res?.filter_context) {
         this.syncNavScopeFromFilterContext(res.filter_context)
       }
+      const links = final.report_links || []
+      if (links.length) {
+        const latest = links[links.length - 1]
+        if (latest?.path && String(latest.path).toLowerCase().endsWith('.md')) {
+          this.$nextTick(() => this.openReportPreview(latest))
+        }
+      }
     },
     revealPhase(msg) {
       if (msg.role !== 'assistant') return 5

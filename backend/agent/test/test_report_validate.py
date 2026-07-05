@@ -76,7 +76,8 @@ def test_format_validation_for_tool_result():
     block = format_validation_for_tool_result(
         {"ok": False, "tier": "student", "line_count": 10, "sections": [], "errors": ["x"], "warnings": []}
     )
-    assert block.startswith("[Report validate]")
+    assert block.startswith("Error: Report validation failed")
+    assert "[Report validate]" in block
     assert "error: x" in block
 
 
