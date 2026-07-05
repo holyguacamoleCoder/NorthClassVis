@@ -1,0 +1,79 @@
+# Report structure and length gates for validate_report (tiers align with load_reference).
+# Tune thresholds here — do not duplicate in skills.
+
+version: "0.1.0"
+
+global:
+  required_tail_sections: [evidence, limitations]
+  section_heading_pattern: "^##\\s+(.+)$" # ## <id> — id normalized to lowercase
+
+tiers:
+  student:
+    min_total_lines: 80 # Phase 0; raise toward 120 in Phase 3
+    required_sections:
+      - scope
+      - summary
+      - week_trend
+      - student_structure
+      - question_anchors
+      - peer_context
+      - actions
+      - evidence
+      - limitations
+    sections:
+      week_trend:
+        min_lines: 8
+        require_chart_views: [WeekView]
+      question_anchors:
+        min_lines: 6
+        min_table_rows: 2
+      actions:
+        min_lines: 4
+
+  class:
+    min_total_lines: 70
+    required_sections:
+      - scope
+      - summary
+      - week_trend
+      - question_anchors
+      - distribution
+      - actions
+      - evidence
+      - limitations
+    sections:
+      week_trend:
+        min_lines: 8
+      question_anchors:
+        min_lines: 6
+      distribution:
+        min_lines: 6
+
+  major:
+    min_total_lines: 70
+    required_sections:
+      - scope
+      - summary
+      - week_trend
+      - question_anchors
+      - distribution
+      - actions
+      - evidence
+      - limitations
+    sections:
+      week_trend:
+        min_lines: 8
+      distribution:
+        min_lines: 6
+
+  freeform:
+    min_total_lines: 40
+    required_sections:
+      - scope
+      - key_findings
+      - actions
+      - evidence
+      - limitations
+    sections:
+      key_findings:
+        min_lines: 6

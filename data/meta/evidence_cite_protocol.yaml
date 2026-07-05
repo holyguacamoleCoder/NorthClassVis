@@ -1,0 +1,19 @@
+# Inline citations in ## Evidence — bind conclusions to session datasets
+
+version: "0.1.0"
+
+cite_pattern: '\[@(ds|ref):([^\s\]]+)(?:\s+([^\]]+))?\]'
+
+kinds:
+  ds:
+    description: dataset_id from list_datasets / aggregate_data input chain
+    example: "[@ds:abc123def 班级周均 peak，week 13–15]"
+  ref:
+    description: result_ref under query-results/ (TabularResult JSON)
+    example: "[@ref:query-results/turn-3.json]"
+
+rules:
+  - Evidence section should list only data sources that support conclusions
+  - Do not cite load_skill, todo_write, or process-only tools
+  - Do not cite refs from prior sessions or historical reports
+  - Prefer ds when aggregate_data consumed a dataset_id; use ref for raw query slices

@@ -1,0 +1,22 @@
+# Embedded chart blocks in reports/*.md — complements visual_link_contract.yaml
+
+version: "0.1.0"
+
+fence_languages:
+  primary: report-chart
+  compatible: [chart, json]
+
+payload:
+  required_fields: [view, params]
+  view_enum_ref: visual_link_contract.yaml#view_enum
+
+limits:
+  max_per_view:
+    WeekView: 1
+  forbid_report_chart:
+    - StudentView
+  require_explanation_lines_below: 2
+
+notes:
+  - params must match build_visual_links from the same session
+  - StudentView only via build_visual_links, not report-chart fence
