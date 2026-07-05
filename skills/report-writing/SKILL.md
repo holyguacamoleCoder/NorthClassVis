@@ -39,6 +39,8 @@ description: >
 | 2…n | `edit_file` | 按 tier reference 顺序填充各分析章 |
 | 末 | `edit_file` | `evidence`（cite 标签）、`limitations` |
 
+分章 `edit_file`：`old_text` 首行写 `## <章节标题>` 即可**整节替换**（正文不必与文件完全一致）；精确替换时须与 `read_file` 原文一致。postprocess 自动改图后请先 `read_file` 或继续用 `##` 整节替换。
+
 禁止整篇重写（除非 validate 报大量 error）；禁止 `read_file` 旧 `reports/`。
 
 ## 标准路径

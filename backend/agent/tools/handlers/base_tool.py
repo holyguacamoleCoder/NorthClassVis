@@ -183,9 +183,26 @@ def run_edit_file(path: str, old_text: str, new_text: str) -> str:
         fp = _safe_path(path)
         content = fp.read_text(encoding="utf-8")
         if old_text not in content:
+            from report.sections import edit_context_hint, replace_section
+
+            first_line = next(
+                (ln.strip() for ln in (old_text or "").splitlines() if ln.strip()),
+                "",
+            )
+            if first_line.startswith("##"):
+                replaced = replace_section(content, first_line, new_text)
+                if replaced is not None:
+                    fp.write_text(replaced, encoding="utf-8", newline="\n")
+                    return (
+                        f"[Edit OK: path={path}, mode=section_replace] "
+                        f"| Replaced section {first_line!r} (heading match; body need not match old_text)"
+                    )
+            hint = edit_context_hint(content, old_text)
             return (
                 f"Error: Text not found in {path} | Next: read_file path=\"{path}\" "
-                "to copy an exact old_text snippet"
+                "to copy an exact old_text snippet, or start old_text with ## <section> "
+                "to replace the whole section.\n\n"
+                f"{hint}"
             )
         fp.write_text(content.replace(old_text, new_text, 1), encoding="utf-8", newline="\n")
         return f"[Edit OK: path={path}]"

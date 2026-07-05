@@ -15,6 +15,7 @@
 ```
 
 - params 必须与本轮 `build_visual_links` **完全一致**（先 build，再写入报告）
+- **禁止** `![说明](<report-chart>{...})` 或 `(<report-chart>{...})`；只用上方 fence 块
 - 全文 **WeekView report-chart ≤ 1**
 - **StudentView 禁止** report-chart（仅用 `build_visual_links`）
 - 每个 chart 下方 **至少 2 句**解释，说明图表支撑哪条结论

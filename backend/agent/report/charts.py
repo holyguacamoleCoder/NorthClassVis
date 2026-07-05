@@ -12,6 +12,8 @@ import yaml
 from common.paths import PROJECT_ROOT
 from data.visual_links import validate_links
 
+from .normalize import find_wrong_report_chart_syntax
+
 _META_DIR = PROJECT_ROOT / "data" / "meta"
 _DEFAULT_PROTOCOL_PATH = _META_DIR / "report_chart_protocol.yaml"
 
@@ -95,6 +97,7 @@ def validate_report_charts(
     forbid: set[str] = {str(v) for v in (limits.get("forbid_report_chart") or [])}
 
     result = ChartValidation()
+    result.errors.extend(find_wrong_report_chart_syntax(source))
     blocks = extract_chart_blocks(source)
     result.blocks = blocks
     view_counts: dict[str, int] = {}

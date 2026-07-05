@@ -138,6 +138,7 @@ def _maybe_append_report_validation(
     from permission.paths import normalize_path
     from common.paths import DATA_DIR
     from report.inject import inject_report_charts_from_links
+    from report.normalize import fix_wrong_report_chart_syntax
     from report.validate import format_validation_for_tool_result, validate_report
 
     rel = parse_deliverable_path_from_tool_content(tool_result) or str(
@@ -153,6 +154,9 @@ def _maybe_append_report_validation(
         return tool_result
     try:
         text = full.read_text(encoding="utf-8")
+        normalize_notes: list[str] = []
+        text, chart_fix_notes = fix_wrong_report_chart_syntax(text)
+        normalize_notes.extend(chart_fix_notes)
         links = (
             analysis_context.session_visual_links
             if analysis_context is not None
@@ -161,8 +165,9 @@ def _maybe_append_report_validation(
         injected_notes: list[str] = []
         if links:
             text, injected_notes = inject_report_charts_from_links(text, links)
-            if injected_notes:
-                full.write_text(text, encoding="utf-8", newline="\n")
+
+        if normalize_notes or injected_notes:
+            full.write_text(text, encoding="utf-8", newline="\n")
 
         result = validate_report(
             text,
@@ -171,9 +176,17 @@ def _maybe_append_report_validation(
         )
         block = format_validation_for_tool_result(result)
         prefix = tool_result.rstrip()
+        if normalize_notes:
+            note = "[Report normalize: " + ", ".join(normalize_notes) + "]"
+            prefix = f"{prefix}\n{note}"
         if injected_notes:
             note = "[Report charts: auto-injected " + ", ".join(injected_notes) + "]"
             prefix = f"{prefix}\n{note}"
+        if normalize_notes or injected_notes:
+            prefix = (
+                f"{prefix}\n[Edit note] File was auto-updated (charts/normalize). "
+                "Use ## heading section_replace or read_file before the next edit_file."
+            )
         return f"{prefix}\n\n{block}"
     except Exception:
         _log.exception("report_validate_failed")
