@@ -128,3 +128,65 @@ def validate_report_charts(
             result.warnings.append(str(warn))
 
     return result
+
+
+def _link_key(view: str | None, params: dict[str, Any]) -> str:
+    return json.dumps({"view": view, "params": params}, sort_keys=True, ensure_ascii=False)
+
+
+def validate_charts_against_session(
+    source: str,
+    session_links: list[dict[str, Any]] | None,
+) -> list[str]:
+    """Warn when report-chart params were not validated via build_visual_links this session."""
+    blocks = [b for b in extract_chart_blocks(source) if b.view and not b.error]
+    if not blocks:
+        return []
+    if not session_links:
+        return [
+            "report-chart present but no build_visual_links in session; params unverified"
+        ]
+    session_keys = {
+        _link_key(str(item.get("view")), item.get("params") or {})
+        for item in session_links
+        if isinstance(item, dict) and item.get("view")
+    }
+    issues: list[str] = []
+    for block in blocks:
+        key = _link_key(block.view, block.params)
+        if key not in session_keys:
+            issues.append(
+                f"report-chart {block.view} params not in session build_visual_links "
+                "(call build_visual_links with same params before write)"
+            )
+    return issues
+
+
+def check_chart_explanations(
+    source: str,
+    *,
+    min_lines: int = 2,
+) -> list[str]:
+    """Require non-empty prose lines after each report-chart fence."""
+    protocol = load_chart_protocol()
+    limits = protocol.get("limits") or {}
+    required = int(limits.get("require_explanation_lines_below") or min_lines)
+    warnings: list[str] = []
+    for match in _CHART_FENCE_RE.finditer(source or ""):
+        after = source[match.end() :]
+        lines: list[str] = []
+        for line in after.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("##"):
+                break
+            if stripped.startswith("```"):
+                break
+            if stripped:
+                lines.append(stripped)
+            if len(lines) >= required:
+                break
+        if len(lines) < required:
+            warnings.append(
+                f"report-chart block {match.start()}: need >={required} explanation line(s) below"
+            )
+    return warnings

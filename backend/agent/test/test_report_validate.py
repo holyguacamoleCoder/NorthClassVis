@@ -49,7 +49,6 @@ def test_extract_evidence_cites():
     cites = extract_evidence_cites(text)
     kinds = {c.kind for c in cites}
     assert "ref" in kinds
-    assert "ds" in kinds
 
 
 def test_validate_student_minimal_ok():

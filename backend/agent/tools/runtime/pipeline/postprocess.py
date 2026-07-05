@@ -1,3 +1,4 @@
+import json
 import logging
 
 from common.logger import get_logger, log_event
@@ -87,14 +88,80 @@ def postprocess_tool_result(
     ):
         tool_result = maybe_persist_output(call_id, tool_result)
 
+    if tool_name == "build_visual_links" and isinstance(tool_result, str):
+        _maybe_register_visual_links(tool_result, analysis_context=analysis_context)
+
     if tool_name in ("write_file", "edit_file") and isinstance(tool_result, str):
         _maybe_record_session_deliverable(
             tool_result,
             parsed_args=parsed_args,
             analysis_context=analysis_context,
         )
+        tool_result = _maybe_append_report_validation(
+            tool_result,
+            parsed_args=parsed_args,
+            analysis_context=analysis_context,
+        )
 
     return tool_result
+
+
+def _maybe_register_visual_links(
+    tool_result: str,
+    *,
+    analysis_context: AnalysisToolContext | None,
+) -> None:
+    if not analysis_context or not (tool_result or "").strip():
+        return
+    try:
+        payload = json.loads(tool_result)
+    except json.JSONDecodeError:
+        return
+    if not isinstance(payload, dict):
+        return
+    links = payload.get("visual_links")
+    if isinstance(links, list):
+        analysis_context.register_visual_links(links)
+
+
+def _maybe_append_report_validation(
+    tool_result: str,
+    *,
+    parsed_args: dict,
+    analysis_context: AnalysisToolContext | None,
+) -> str:
+    if not (tool_result or "").strip().startswith("["):
+        return tool_result
+    if "OK" not in tool_result:
+        return tool_result
+    from report_delivery import parse_deliverable_path_from_tool_content
+    from permission.paths import normalize_path
+    from common.paths import DATA_DIR
+    from report.validate import format_validation_for_tool_result, validate_report
+
+    rel = parse_deliverable_path_from_tool_content(tool_result) or str(
+        parsed_args.get("path") or ""
+    ).strip()
+    if not rel:
+        return tool_result
+    rel_norm = normalize_path(rel)
+    if not rel_norm.startswith("reports/") or not rel_norm.endswith(".md"):
+        return tool_result
+    full = (DATA_DIR / rel_norm).resolve()
+    if not full.is_file():
+        return tool_result
+    try:
+        text = full.read_text(encoding="utf-8")
+        result = validate_report(
+            text,
+            path=rel_norm,
+            analysis_context=analysis_context,
+        )
+        block = format_validation_for_tool_result(result)
+        return f"{tool_result.rstrip()}\n\n{block}"
+    except Exception:
+        _log.exception("report_validate_failed")
+        return tool_result
 
 
 def _maybe_record_session_deliverable(
@@ -107,10 +174,10 @@ def _maybe_record_session_deliverable(
         return
     if "OK" not in tool_result:
         return
-    from report_delivery import parse_deliverable_path_from_tool, deliverable_label
+    from report_delivery import parse_deliverable_path_from_tool_content, deliverable_label
     from session.deliverables_registry import record_deliverable_from_tool
 
-    rel = parse_deliverable_path_from_tool(tool_result) or str(parsed_args.get("path") or "").strip()
+    rel = parse_deliverable_path_from_tool_content(tool_result) or str(parsed_args.get("path") or "").strip()
     if not rel:
         return
     session_id = analysis_context.session_id if analysis_context else None

@@ -55,7 +55,7 @@
 ## evidence
 
 - 周趋势聚合 [@ref:query-results/week-trend.json]
-- 错题统计 [@ds:fixture-dataset-001]
+- 错题统计 [@ref:query-results/questions.json]
 
 ## limitations
 

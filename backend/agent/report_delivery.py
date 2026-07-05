@@ -8,7 +8,7 @@ from typing import Any
 
 from common.paths import DATA_DIR
 
-from .permission.paths import (
+from permission.paths import (
     WRITABLE_SUBDIRS,
     normalize_path,
     resolve_data_relative_path,

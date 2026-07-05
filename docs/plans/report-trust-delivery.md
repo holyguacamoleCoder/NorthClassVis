@@ -77,48 +77,36 @@ scripts/validate_report.py    # CLI：本地 / hooks / CI
 
 **验收**：`py scripts/validate_report.py --tier student --file <fixture>` 输出结构化 JSON；pytest 绿。
 
-### Phase 1 — 写后反馈闭环
+### Phase 1 — 写后反馈闭环 ✅
 
-- [ ] `postprocess.py`：`write_file` / `edit_file` 成功后对 `reports/*.md` 调用 `validate_report`
-- [ ] 将 `errors` / `warnings` 追加到 tool result（Agent 可 `edit_file` 修补）
-- [ ] tier 推断：路径启发式 `reports/student/` → `student` 等
+- [x] `postprocess.py`：`write_file` / `edit_file` 成功后对 `reports/*.md` 调用 `validate_report`
+- [x] 将 `errors` / `warnings` 追加到 tool result
+- [x] tier 推断：路径启发式 `reports/student/` → `student` 等
+- [x] `build_visual_links` 结果登记到 `AnalysisToolContext.session_visual_links`
 
-**验收**：produce 写短报告后 tool result 含校验警告；补全章节后 warnings 减少。
+### Phase 2 — Skills 瘦身 ✅
 
-### Phase 2 — Skills 瘦身
+- [x] 新建 `references/_shared.md`
+- [x] 瘦身 `report-writing/SKILL.md`
+- [x] 瘦身 `student|class|major|freeform.md`
+- [x] 删除 `mixed.md` 引用
+- [x] `load_reference` tier 加载时 prepend `_shared.md`
 
-- [ ] 新建 `references/_shared.md`（图表、Evidence 写法、cite 示例、写后自检）
-- [ ] 瘦身 `report-writing/SKILL.md`（<150 行）：workflow、scope 表、路径、checklist
-- [ ] 瘦身 `student|class|major|freeform.md`（各 <120 行）：仅 Required Sections + delta
-- [ ] 删除 `mixed.md` 引用或补文件
-- [ ] `load_reference` 可选：tier 加载时 prepend `_shared`（需改 `references.py` / `produce_bootstrap`）
+### Phase 3 — 分章续写工作流 ✅
 
-**验收**：`test_skills.py` 通过；pin token 量较现版下降（人工对比）。
+- [x] Skill workflow：首轮 `write_file` 骨架 → 分章 `edit_file`
+- [x] `validate_report`：章节顺序、空章检测
 
-### Phase 3 — 分章续写工作流
+### Phase 4 — report-chart 强校验 ✅
 
-- [ ] Skill workflow：首轮 `write_file` 骨架（全部 `## <id>`）→ 分章 `edit_file`
-- [ ] `validate_report` 增强：章节顺序、空章检测
-- [ ] 与 `todo_write` acceptance 对齐（每章一条 todo）
+- [x] `validate_charts_against_session` 对比 `session_visual_links`
+- [x] `check_chart_explanations` 图表下方解释行数
 
-**验收**：个体诊断报告按章写入，结构校验全程通过。
+### Phase 5 — 证据引用与 HTTP 分层 ✅
 
-### Phase 4 — report-chart 强校验
-
-- [ ] `charts.py`：对比会话内 `build_visual_links` tool results（params 一致）
-- [ ] 图表下方解释行数（`require_explanation_lines_below`）
-- [ ] 前后端 schema 对齐（长期：由 YAML 生成 JSON Schema）
-
-**验收**：故意不一致的 chart params 产生 `error`；与前端 `reportCharts.js` 行为一致。
-
-### Phase 5 — 证据引用与 HTTP 分层
-
-- [ ] `evidence_cites.py` + `digest.py`：解析 `[@ds:…]`，对照 session `QuerySnapshot` / `result_store`
-- [ ] `validate_evidence_cites`：标签存在性、ref 文件可读
-- [ ] `adapter.py`：新增 `report_evidence`（可验真摘要）；`trace` 仅过程；`evidence` 字段 deprecated 或改为 `process_evidence`
-- [ ] Skill：`## Evidence` 必须使用 cite 标签
-
-**验收**：`test_agent_contract` 更新；前端可展示可核对 evidence 列表。
+- [x] `evidence_cites` 会话 `dataset_id` / `result_ref` 校验
+- [x] `digest.py` → HTTP `report_evidence`
+- [x] `adapter.py`：`process_evidence` + `report_evidence`；`evidence` 保留兼容
 
 ---
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, TYPE_CHECKING
@@ -47,6 +48,7 @@ class AnalysisToolContext:
     working_active_ref: str | None = None
     last_dataset_id: str | None = None
     turn_snapshots: list[QuerySnapshot] = field(default_factory=list)
+    session_visual_links: list[dict[str, Any]] = field(default_factory=list)
 
     # 兼容旧字段（= working_active_ref，不再跨 turn 做 limit 启发式）
     last_result_ref: str | None = None
@@ -71,6 +73,26 @@ class AnalysisToolContext:
         self.last_resource = snap.resource
         self.last_result_rows = snap.result_rows
         self.last_rows_scanned = snap.rows_scanned
+
+    def register_visual_links(self, links: list[dict[str, Any]]) -> None:
+        for item in links or []:
+            if not isinstance(item, dict):
+                continue
+            view = item.get("view")
+            params = item.get("params")
+            if not view or not isinstance(params, dict):
+                continue
+            key = (str(view), json.dumps(params, sort_keys=True, ensure_ascii=False))
+            existing = {
+                (str(x.get("view")), json.dumps(x.get("params") or {}, sort_keys=True, ensure_ascii=False))
+                for x in self.session_visual_links
+            }
+            if key in existing:
+                continue
+            entry: dict[str, Any] = {"view": view, "params": params}
+            if item.get("label"):
+                entry["label"] = item["label"]
+            self.session_visual_links.append(entry)
 
 
 @dataclass

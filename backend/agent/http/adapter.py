@@ -293,6 +293,71 @@ def _extract_report_links(messages: list[dict[str, Any]]) -> list[dict[str, Any]
     return links
 
 
+def _extract_report_evidence(
+    messages: list[dict[str, Any]],
+    report_links: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Verifiable evidence from ## Evidence cites in the latest report deliverable."""
+    if not report_links:
+        return []
+    from common.paths import DATA_DIR
+    from report.digest import digest_from_report_markdown
+
+    latest = report_links[-1]
+    rel = str(latest.get("path") or "").strip()
+    if not rel.endswith(".md"):
+        return []
+    full = DATA_DIR / rel.replace("\\", "/")
+    if not full.is_file():
+        return []
+    try:
+        text = full.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    turn_snapshots = _turn_query_snapshots(messages)
+    return digest_from_report_markdown(text, turn_snapshots=turn_snapshots)
+
+
+def _turn_query_snapshots(messages: list[dict[str, Any]]) -> list[Any]:
+    """Best-effort refs from query_data tool results in this turn."""
+    from loop_state import QuerySnapshot
+
+    call_names: dict[str, str] = {}
+    for msg in messages:
+        if msg.get("role") != "assistant":
+            continue
+        for call in msg.get("tool_calls") or []:
+            call_id = str(call.get("id") or "")
+            fn = call.get("function") or {}
+            if call_id:
+                call_names[call_id] = str(fn.get("name") or "")
+
+    snaps: list[QuerySnapshot] = []
+    for msg in messages:
+        if msg.get("role") != "tool":
+            continue
+        call_id = str(msg.get("tool_call_id") or "")
+        if call_names.get(call_id) != "query_data":
+            continue
+        try:
+            payload = json.loads(msg.get("content") or "{}")
+        except json.JSONDecodeError:
+            continue
+        meta = payload.get("meta") or {}
+        ref = meta.get("result_ref")
+        if not ref:
+            continue
+        rows = payload.get("rows") or []
+        snaps.append(
+            QuerySnapshot(
+                result_ref=str(ref),
+                result_rows=len(rows) if isinstance(rows, list) else 0,
+                resource=meta.get("resource"),
+            )
+        )
+    return snaps
+
+
 def build_tool_step(
     tool_name: str,
     params: dict[str, Any],
@@ -495,6 +560,7 @@ def adapt_legacy_query_response(
     ]
     visual_links = _extract_visual_links(turn_messages)
     report_links = _extract_report_links(turn_messages)
+    report_evidence = _extract_report_evidence(turn_messages, report_links)
     actions: list[str] = []
     if visual_links:
         actions.append("点击下方图表入口查看可视化结果")
@@ -518,6 +584,8 @@ def adapt_legacy_query_response(
         "closing": closing,
         "thinking": thinking,
         "evidence": evidence,
+        "process_evidence": evidence,
+        "report_evidence": report_evidence,
         "actions": actions,
         "visual_links": visual_links,
         "report_links": report_links,

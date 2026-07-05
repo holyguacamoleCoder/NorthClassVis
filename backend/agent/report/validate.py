@@ -4,8 +4,15 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .charts import validate_report_charts
-from .evidence_cites import validate_evidence_section
+from loop_state import AnalysisToolContext
+
+from .charts import (
+    check_chart_explanations,
+    validate_charts_against_session,
+    validate_report_charts,
+)
+from .digest import known_ids_from_context, validate_cites_against_session
+from .evidence_cites import extract_evidence_cites, validate_evidence_section
 from .parse import (
     infer_tier_from_path,
     load_quality_rules,
@@ -20,6 +27,8 @@ def validate_report(
     path: str | Path | None = None,
     rules_path: Path | None = None,
     require_evidence_cites: bool = False,
+    analysis_context: AnalysisToolContext | None = None,
+    session_visual_links: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Validate report markdown; returns JSON-serializable result."""
     resolved_tier = (tier or "").strip().lower()
@@ -55,6 +64,18 @@ def validate_report(
     for sid in missing:
         errors.append(f"missing required section: ## {sid}")
 
+    present_ids = [s.id for s in parsed.sections]
+    expected_order = [sid for sid in required if sid in present_ids]
+    ordered_present = [sid for sid in present_ids if sid in required]
+    if ordered_present != expected_order:
+        warnings.append(
+            f"sections out of recommended order (expected {expected_order}, got {ordered_present})"
+        )
+
+    for section in parsed.sections:
+        if section.line_count == 0 and section.id not in missing:
+            warnings.append(f"section {section.id} is empty (use edit_file to fill)")
+
     section_specs: dict[str, Any] = tier_rules.get("sections") or {}
     for sid, spec in section_specs.items():
         if not isinstance(spec, dict):
@@ -84,6 +105,22 @@ def validate_report(
     errors.extend(chart_validation.errors)
     warnings.extend(chart_validation.warnings)
 
+    links = session_visual_links
+    if links is None and analysis_context is not None:
+        links = analysis_context.session_visual_links
+    warnings.extend(validate_charts_against_session(source, links))
+    warnings.extend(check_chart_explanations(source))
+
+    known_ds, known_refs = known_ids_from_context(analysis_context)
+    all_cites = extract_evidence_cites(source)
+    cite_errors, cite_warnings = validate_cites_against_session(
+        all_cites,
+        known_dataset_ids=known_ds,
+        known_result_refs=known_refs,
+    )
+    errors.extend(cite_errors)
+    warnings.extend(cite_warnings)
+
     evidence_section = section_map.get("evidence")
     if evidence_section:
         cite_validation = validate_evidence_section(
@@ -93,7 +130,7 @@ def validate_report(
         errors.extend(cite_validation.errors)
         warnings.extend(cite_validation.warnings)
     elif "evidence" in required:
-        pass  # already in missing
+        pass
 
     sections_out = [
         {
@@ -152,8 +189,15 @@ def validate_report_file(
     file_path: str | Path,
     *,
     tier: str | None = None,
+    analysis_context: AnalysisToolContext | None = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
     path = Path(file_path)
     text = path.read_text(encoding="utf-8")
-    return validate_report(text, tier=tier, path=path, **kwargs)
+    return validate_report(
+        text,
+        tier=tier,
+        path=path,
+        analysis_context=analysis_context,
+        **kwargs,
+    )
