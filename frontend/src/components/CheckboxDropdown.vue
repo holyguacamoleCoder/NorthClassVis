@@ -3,7 +3,7 @@
     <template #trigger>
       <DropdownTrigger>
         <div class="tag">{{ title }}</div>
-        {{ displayDropDownText(allChecked, items) }}
+        {{ selectionLabel }}
       </DropdownTrigger>
     </template>
     <DropdownContent>
@@ -16,7 +16,7 @@
         <div class="checkbox-for-all">
           <input name="all" type="checkbox" class="checkbox-input"
             :checked="allChecked" v-model="allChecked" @change="handleAllCheck">
-          <label for="all" class="checkbox-label">All</label>
+          <label for="all" class="checkbox-label">{{ allLabelText }}</label>
         </div>
       </form>
     </DropdownContent>
@@ -25,6 +25,8 @@
 
 <script>
 import { Dropdown, DropdownContent, DropdownTrigger } from 'v-dropdown'
+import { formatFilterSelectionLabel } from '@/utils/filterSelectionLabel.js'
+
 export default {
   name: 'CheckboxDropdown',
   components: {
@@ -37,7 +39,11 @@ export default {
       type: Array,
       default: () => []
     },
-    title: String
+    title: String,
+    maxVisible: {
+      type: Number,
+      default: 2,
+    },
   },
   computed: {
     allChecked: {
@@ -47,14 +53,17 @@ export default {
       set(value) {
         this.items.forEach(item => item.checked = value);
       }
-    }
+    },
+    selectionLabel() {
+      return formatFilterSelectionLabel(this.items, { maxVisible: this.maxVisible })
+    },
+    allLabelText() {
+      return '全部'
+    },
   },
   methods: {
-    displayDropDownText(checkoutAllData, selectedData) {
-      if (checkoutAllData) return 'All'
-      const selectedExist = selectedData.some(d => d.checked === true)
-      if (selectedExist) return 'Part'
-      else return 'None'
+    displayDropDownText() {
+      return this.selectionLabel
     },
     handleCheck(event) {
       if (!event.target.checked) {
@@ -62,14 +71,14 @@ export default {
       }
       this.$emit('change', 
       this.items.filter(item => item.checked).map(item => item.text),
-      this.displayDropDownText(this.allChecked, this.items))
+      this.displayDropDownText())
     },
     handleAllCheck(event) {
       const isChecked = event.target.checked
       this.items.forEach(item => item.checked = isChecked)
       this.$emit('change', 
       isChecked ? this.items.map(item => item.text) : [],
-      this.displayDropDownText(this.allChecked, this.items))
+      this.displayDropDownText())
     }
   }
 };

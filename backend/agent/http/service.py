@@ -384,6 +384,7 @@ class AgentHttpService:
         return adapt_legacy_query_response(
             session.messages,
             continue_reason=continue_reason,
+            session_id=session.id,
         )
 
     def _submit_slash_command(

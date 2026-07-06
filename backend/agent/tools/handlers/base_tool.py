@@ -183,7 +183,7 @@ def run_edit_file(path: str, old_text: str, new_text: str) -> str:
         fp = _safe_path(path)
         content = fp.read_text(encoding="utf-8")
         if old_text not in content:
-            from report.sections import edit_context_hint, replace_section
+            from report.sections import append_section, edit_context_hint, replace_section
 
             first_line = next(
                 (ln.strip() for ln in (old_text or "").splitlines() if ln.strip()),
@@ -196,6 +196,13 @@ def run_edit_file(path: str, old_text: str, new_text: str) -> str:
                     return (
                         f"[Edit OK: path={path}, mode=section_replace] "
                         f"| Replaced section {first_line!r} (heading match; body need not match old_text)"
+                    )
+                if (new_text or "").strip().startswith("##"):
+                    appended = append_section(content, new_text)
+                    fp.write_text(appended, encoding="utf-8", newline="\n")
+                    return (
+                        f"[Edit OK: path={path}, mode=section_append] "
+                        f"| Appended missing section {first_line!r} (heading was not in file)"
                     )
             hint = edit_context_hint(content, old_text)
             return (

@@ -137,8 +137,7 @@ def _maybe_append_report_validation(
     from report_delivery import parse_deliverable_path_from_tool_content
     from permission.paths import normalize_path
     from common.paths import DATA_DIR
-    from report.inject import inject_report_charts_from_links
-    from report.normalize import fix_wrong_report_chart_syntax
+    from report.finalize import normalize_report_deliverable
     from report.validate import format_validation_for_tool_result, validate_report
 
     rel = parse_deliverable_path_from_tool_content(tool_result) or str(
@@ -153,39 +152,33 @@ def _maybe_append_report_validation(
     if not full.is_file():
         return tool_result
     try:
-        text = full.read_text(encoding="utf-8")
-        normalize_notes: list[str] = []
-        text, chart_fix_notes = fix_wrong_report_chart_syntax(text)
-        normalize_notes.extend(chart_fix_notes)
+        text_on_disk = full.read_text(encoding="utf-8")
         links = (
             analysis_context.session_visual_links
             if analysis_context is not None
             else None
         )
-        injected_notes: list[str] = []
-        if links:
-            text, injected_notes = inject_report_charts_from_links(text, links)
-
-        if normalize_notes or injected_notes:
-            full.write_text(text, encoding="utf-8", newline="\n")
+        # Validate against a normalized preview only — do not mutate other sections on disk.
+        preview, normalize_notes = normalize_report_deliverable(
+            text_on_disk,
+            session_visual_links=links,
+        )
 
         result = validate_report(
-            text,
+            preview,
             path=rel_norm,
             analysis_context=analysis_context,
+            validation_level="draft",
         )
         block = format_validation_for_tool_result(result)
         prefix = tool_result.rstrip()
         if normalize_notes:
-            note = "[Report normalize: " + ", ".join(normalize_notes) + "]"
-            prefix = f"{prefix}\n{note}"
-        if injected_notes:
-            note = "[Report charts: auto-injected " + ", ".join(injected_notes) + "]"
-            prefix = f"{prefix}\n{note}"
-        if normalize_notes or injected_notes:
+            hint = ", ".join(normalize_notes[:3])
+            if len(normalize_notes) > 3:
+                hint += f" …+{len(normalize_notes) - 3}"
             prefix = (
-                f"{prefix}\n[Edit note] File was auto-updated (charts/normalize). "
-                "Use ## heading section_replace or read_file before the next edit_file."
+                f"{prefix}\n[Report hint] 交付时将自动：{hint}"
+                "（本次 edit 未改写磁盘上的其他章节）"
             )
         return f"{prefix}\n\n{block}"
     except Exception:

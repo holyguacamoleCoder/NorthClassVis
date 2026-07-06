@@ -137,6 +137,7 @@ function buildAssistantUiFromTurn(turnMsgs) {
     answer: stripAnswerMarkdown(answer, visual_links, report_links),
     closing: stripAnswerMarkdown(closing, visual_links, report_links),
     evidence: [],
+    report_evidence: [],
     actions: [],
     visual_links,
     report_links,
@@ -167,9 +168,14 @@ export function legacyToAssistantMessage(res) {
   return {
     role: 'assistant',
     thinking: (res.thinking || '').trim(),
+    thinking_updates: Array.isArray(res.thinking_updates)
+      ? res.thinking_updates.map((t) => String(t || '').trim()).filter(Boolean)
+      : [],
     answer,
     closing,
     evidence: res.evidence || [],
+    report_evidence: Array.isArray(res.report_evidence) ? res.report_evidence : [],
+    report_final_check: res.report_final_check || null,
     actions,
     visual_links,
     report_links,
@@ -189,6 +195,7 @@ export function turnResultToAssistantMessage(result) {
       answer: '未收到 Agent 响应。',
       closing: '',
       evidence: [],
+      report_evidence: [],
       actions: [],
       visual_links: [],
       report_links: [],
@@ -331,6 +338,14 @@ export const RECOVERY_HINTS = {
   todo_only_loop_guard: 'Agent 仅更新了计划但未完成数据分析，请继续等待或补充问题。',
   tool_loop_guard: '工具调用陷入循环，请换一种问法。',
   tool_error_loop_guard: '工具连续报错，请检查分析范围或权限模式。',
+  report_incomplete_guard:
+    '报告未写入成功，请勿把聊天摘要当正式报告；可让我先 read_file 再按章节补写，或新建会话用真实学号重来。',
+  max_turn_limit:
+    '本轮 Agent 轮次已达上限并已自动停止；报告草稿可先预览，或发送「继续补全」接着写。',
+  report_validate_loop_guard:
+    '报告同一校验错误反复出现，已停止空转；请先预览或 read_file 后再说明要改哪一节。',
+  report_polish_loop_guard:
+    '报告已基本可交付（仅剩提醒项），无需继续反复修补；可直接预览。',
   context_overflow_exhausted: '对话上下文过长，请新建会话或简化问题。',
   transient_error_exhausted: '网络或限流导致重试失败，请稍后再试。',
   llm_no_response: 'LLM 无响应，请稍后重试。',
@@ -340,9 +355,11 @@ export function createStreamingAssistantMessage() {
   return {
     role: 'assistant',
     thinking: '',
+    thinking_updates: [],
     answer: '',
     closing: '',
     evidence: [],
+    report_evidence: [],
     actions: [],
     visual_links: [],
     report_links: [],
@@ -406,8 +423,13 @@ export function applyProgressToMessage(msg, job) {
     )
   }
   msg._runningTool = progress.running_tool || null
+  if (Array.isArray(progress.thinking_updates) && progress.thinking_updates.length) {
+    msg.thinking_updates = progress.thinking_updates.map((t) => String(t || '').trim()).filter(Boolean)
+  }
   if (progress.thinking !== undefined && progress.thinking !== null && progress.thinking !== '') {
-    msg.thinking = progress.thinking
+    if (!msg.thinking || !String(msg.thinking).trim()) {
+      msg.thinking = progress.thinking
+    }
   }
   if (progress.answer !== undefined && progress.answer !== null && progress.answer !== '') {
     msg.answer = progress.answer

@@ -78,12 +78,17 @@ def enrich_query_payload(
             "student_info 无 class 列；按班统计请用 submit_record + classes，勿仅靠 classes 过滤本表。"
         )
 
-    ui_n = meta.get("ui_selected_students")
-    if ui_n is not None:
-        meta["scope_hint"] = (
-            f"已按可视化面板选中 {ui_n} 名学生过滤（student_ID）。"
-            "统计人数请对该结果 aggregate count_distinct(student_ID)，勿用未过滤的全班数据。"
-        )
+    if meta.get("nav_scope_suppressed"):
+        notes = list(meta.get("normalization_notes") or [])
+        scope_note = next((n for n in notes if "面板" in n or "用户消息" in n or "查询班级" in n), None)
+        meta["scope_hint"] = scope_note or "已忽略面板局部选区，按查询/用户意图全文分析。"
+    else:
+        ui_n = meta.get("ui_selected_students")
+        if ui_n is not None:
+            meta["scope_hint"] = (
+                f"已按可视化面板选中 {ui_n} 名学生过滤（student_ID）。"
+                "统计人数请对该结果 aggregate count_distinct(student_ID)，勿用未过滤的全班数据。"
+            )
 
     if warnings:
         meta["warnings"] = warnings

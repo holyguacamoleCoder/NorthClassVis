@@ -29,9 +29,16 @@ def main() -> int:
     )
     parser.add_argument("--json", action="store_true", help="Print full JSON result")
     parser.add_argument(
+        "--level",
+        "-l",
+        choices=["draft", "deliver", "strict"],
+        default="deliver",
+        help="Validation gate (default: deliver)",
+    )
+    parser.add_argument(
         "--require-cites",
         action="store_true",
-        help="Warn if Evidence has no [@ds|ref:…] tags",
+        help="Require [@ds|ref:…] in Evidence (default: from report_quality_rules.yaml global)",
     )
     args = parser.parse_args()
 
@@ -44,6 +51,7 @@ def main() -> int:
         path,
         tier=args.tier,
         require_evidence_cites=args.require_cites,
+        validation_level=args.level,
     )
 
     if args.json:

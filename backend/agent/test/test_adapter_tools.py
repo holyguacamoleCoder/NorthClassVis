@@ -136,7 +136,35 @@ def test_build_visual_links_injects_week_range_from_filter_context(data_dir, mon
     payload = json.loads(raw)
     assert len(payload["visual_links"]) == 1
     assert payload["visual_links"][0]["params"]["week_range"] == [10, 13]
-    assert any("student_ids" in w for w in payload.get("warnings") or [])
+    ids = payload["visual_links"][0]["params"].get("student_ids") or []
+    assert len(ids) >= 2
+    assert all(len(str(s)) >= 16 for s in ids)
+    assert "typical_student_ids" in payload
+
+
+def test_build_visual_links_replaces_placeholder_student_ids(data_dir, monkeypatch):
+    monkeypatch.chdir(BACKEND_ROOT.parent)
+    fc = FilterContext(classes=("Class2",), week_range=(13, 15), source="http_body")
+    raw = run_build_visual_links(
+        links=[
+            {
+                "view": "WeekView",
+                "params": {
+                    "student_ids": ["student1", "student2", "student3"],
+                    "week_range": [13, 15],
+                },
+            }
+        ],
+        archetype="class_overview",
+        _filter_context=fc,
+    )
+    payload = json.loads(raw)
+    params = payload["visual_links"][0]["params"]
+    ids = params.get("student_ids") or []
+    assert ids
+    assert "student1" not in ids
+    assert all(s.isalnum() and len(s) >= 16 for s in ids)
+    assert any("代表学生" in w or "占位" in w for w in payload.get("warnings") or [])
 
 
 def test_build_visual_links_no_student_ids_warning_when_single_selected():
@@ -214,6 +242,59 @@ def test_inject_filter_context_into_query(data_dir, monkeypatch):
     assert not raw.startswith("Error:")
     payload = json.loads(raw)
     assert payload.get("meta")
+
+
+def test_inject_teacher_message_into_query_data():
+    from loop_state import AnalysisToolContext
+
+    ctx = AnalysisToolContext(
+        session_id="s1",
+        user_turn=1,
+        current_user_message="Class2 第 13-15 周班级学情总览",
+        turn_snapshots=[],
+        working_active_ref=None,
+    )
+    args = inject_data_tool_context(
+        "query_data",
+        {"resource": "week_aggregation", "classes": ["Class2"]},
+        analysis_context=ctx,
+        batch_snapshots=[],
+        filter_context=FilterContext(classes=("Class1",), source="http_body"),
+    )
+    assert args.get("_teacher_message") == "Class2 第 13-15 周班级学情总览"
+
+
+def test_inject_query_class2_submit_record_e2e(data_dir, monkeypatch):
+    """Production path: inject → run_query_data matches session b99bab4ec9eb fix."""
+    from loop_state import AnalysisToolContext
+
+    monkeypatch.chdir(BACKEND_ROOT.parent)
+    fc = FilterContext(
+        classes=("Class1",),
+        selected_student_ids=("5d89810b20079366fcc2", "8b6d1125760bd3939b6e"),
+        majors=("J23517", "J40192"),
+        week_range=(13, 15),
+        source="http_body",
+    )
+    ctx = AnalysisToolContext(
+        session_id="sess-e2e",
+        user_turn=1,
+        current_user_message="Class2 这学期第 13 到 15 周整体学得怎么样",
+    )
+    args = inject_data_tool_context(
+        "query_data",
+        {"resource": "submit_record", "class": "Class2", "limit": 0},
+        analysis_context=ctx,
+        batch_snapshots=[],
+        filter_context=fc,
+    )
+    raw = run_query_data(**args, data_dir=data_dir)
+    assert not raw.startswith("Error:")
+    payload = json.loads(raw)
+    meta = payload.get("meta") or {}
+    assert meta.get("nav_scope_suppressed") is True
+    assert int(meta.get("rows_scanned") or 0) > 100
+    assert meta.get("ui_selected_students") is None
 
 
 def test_merge_resolve_params_explicit_wins():

@@ -11,7 +11,11 @@ def report_validation_failed(content: str) -> bool:
     text = content or ""
     if "[Report validate]" not in text:
         return False
-    return "status: ERRORS" in text or "\n  error:" in text
+    if "Error: Report validation failed" in text:
+        return True
+    if "status: fail" in text or "status: ERRORS" in text:
+        return True
+    return False
 
 
 def append_report_write_checks(
@@ -21,9 +25,9 @@ def append_report_write_checks(
     """Append fix reminder when report validation failed (in place)."""
     by_id = {c.get("id"): c.get("name") for c in tool_calls if c.get("id")}
     reminder = (
-        "<reminder>报告校验未通过（见上方 [Report validate] 的 error）。"
-        "本轮勿向教师宣称报告已完成；请用 edit_file 按 error 逐项修补"
-        "（缺章、图表、Evidence 引用标签等），直至 [Report validate: OK] 或仅剩 warn。</reminder>"
+        "<reminder>报告校验存在阻断项（[Report validate] status: fail）。"
+        "warn 提醒可暂忽、交付前会自动处理；请只修补 error。"
+        "若同一 error 反复出现，先 read_file 再 edit_file。</reminder>"
     )
 
     for result in reversed(tool_results):

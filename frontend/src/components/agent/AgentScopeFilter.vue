@@ -84,6 +84,7 @@ import CheckboxDropdown from '@/components/CheckboxDropdown.vue'
 import LoadingSpinner from '@/components/LoadingSpinner.vue'
 import { getConfig, setConfig } from '@/api/ConfigPanel.js'
 import { AGENT_UI } from '@/constants/agentUiText.js'
+import { formatFilterSelectionLabel } from '@/utils/filterSelectionLabel.js'
 
 export default {
   name: 'AgentScopeFilter',
@@ -96,8 +97,8 @@ export default {
       applying: false,
       checkoutClasses: [],
       checkoutMajors: [],
-      displayClassesText: 'Part',
-      displayMajorsText: 'All',
+      displayClassesText: '未选',
+      displayMajorsText: '未选',
       weekRangeMin: 0,
       weekRangeMax: 0,
       weekStart: 0,
@@ -223,12 +224,8 @@ export default {
       }
     },
     syncDisplayLabels() {
-      const allClasses = this.checkoutClasses.every((i) => i.checked)
-      const allMajors = this.checkoutMajors.every((i) => i.checked)
-      const someClasses = this.checkoutClasses.some((i) => i.checked)
-      const someMajors = this.checkoutMajors.some((i) => i.checked)
-      this.displayClassesText = allClasses ? 'All' : someClasses ? 'Part' : 'None'
-      this.displayMajorsText = allMajors ? 'All' : someMajors ? 'Part' : 'None'
+      this.displayClassesText = formatFilterSelectionLabel(this.checkoutClasses)
+      this.displayMajorsText = formatFilterSelectionLabel(this.checkoutMajors)
     },
     onClassesChange(_selected, text) {
       this.displayClassesText = text

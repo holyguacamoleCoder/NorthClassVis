@@ -65,6 +65,26 @@ def test_edit_file_section_replace_mode(tmp_path, monkeypatch):
     assert "old body line one" not in text
 
 
+def test_edit_file_section_append_mode(tmp_path, monkeypatch):
+    from common.paths import DATA_DIR
+
+    rel = "reports/student/T3/diagnosis.md"
+    dest = DATA_DIR / rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text("## scope\nonly scope\n", encoding="utf-8")
+
+    result = run_edit_file(
+        rel,
+        "## Limitations\nstale text",
+        "## Limitations\nshort window only\n",
+    )
+    assert "Edit OK" in result
+    assert "section_append" in result
+    text = dest.read_text(encoding="utf-8")
+    assert "## Limitations" in text
+    assert "short window only" in text
+
+
 def test_edit_file_failure_includes_hint(tmp_path, monkeypatch):
     from common.paths import DATA_DIR
 

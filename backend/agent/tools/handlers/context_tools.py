@@ -5,6 +5,7 @@ from typing import Any
 
 from data.filter_context import FilterContext, merge_defaults
 from data.visual_links import (
+    enrich_week_view_student_ids,
     enrich_week_view_week_range,
     validate_links,
     warn_week_view_missing_student_ids,
@@ -50,8 +51,23 @@ def run_build_visual_links(
         payload.get("visual_links") or [],
         fc,
     )
-    payload["warnings"] = list(payload.get("warnings") or []) + warn_week_view_missing_student_ids(
+    payload["visual_links"], student_notes = enrich_week_view_student_ids(
         payload.get("visual_links") or [],
         fc,
     )
+    payload["warnings"] = list(payload.get("warnings") or []) + student_notes + warn_week_view_missing_student_ids(
+        payload.get("visual_links") or [],
+        fc,
+    )
+    if fc is not None and not payload.get("typical_student_ids"):
+        from data.filter_context import sample_typical_student_ids
+
+        typical = sample_typical_student_ids(
+            fc.classes or (),
+            majors=fc.majors,
+            week_range=fc.week_range,
+            limit=3,
+        )
+        if typical:
+            payload["typical_student_ids"] = typical
     return _json_result(payload)

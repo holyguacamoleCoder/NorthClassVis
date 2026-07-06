@@ -9,7 +9,80 @@ from typing import Any, Literal
 SourceType = Literal["session", "http_body", "env_default", "default"]
 
 _CLASS_FILE_RE = re.compile(r"^SubmitRecord-(Class\d+)\.csv$", re.IGNORECASE)
+_MESSAGE_CLASS_RE = re.compile(r"\bClass\d+\b", re.IGNORECASE)
+_VALID_STUDENT_ID_RE = re.compile(r"^[0-9a-f]{16,24}$", re.I)
+_PLACEHOLDER_STUDENT_RE = re.compile(
+    r"^(student\d*|stu\d*|user\d*|example|dummy|test|placeholder|xxx+|\?+)$",
+    re.I,
+)
 
+
+def is_placeholder_student_id(value: str) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return True
+    if text.startswith("<") and text.endswith(">"):
+        return True
+    if _PLACEHOLDER_STUDENT_RE.match(text):
+        return True
+    return text.lower() in ("student_id", "studentid", "unknown", "n/a", "na")
+
+
+def is_valid_student_id(value: str) -> bool:
+    return bool(_VALID_STUDENT_ID_RE.match(str(value or "").strip()))
+
+
+def clean_student_ids(values: list[str] | tuple[str, ...] | None) -> list[str]:
+    if not values:
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in values:
+        sid = str(raw or "").strip()
+        if not sid or is_placeholder_student_id(sid) or not is_valid_student_id(sid):
+            continue
+        if sid in seen:
+            continue
+        seen.add(sid)
+        out.append(sid)
+    return out
+
+
+def sample_typical_student_ids(
+    classes: tuple[str, ...] | list[str],
+    *,
+    majors: tuple[str, ...] | list[str] | None = None,
+    week_range: tuple[int, int] | None = None,
+    limit: int = 3,
+    data_dir: Path | None = None,
+) -> list[str]:
+    """Pick 2–3 representative student_IDs for WeekView (most submissions in scope)."""
+    if not classes:
+        return []
+    try:
+        from .loaders import load_student_info, load_submit_records
+
+        df = load_submit_records(list(classes), data_dir=data_dir)
+        if df.empty or "student_ID" not in df.columns:
+            return []
+        if week_range is not None and "week_index" in df.columns:
+            lo, hi = week_range
+            scoped = df[(df["week_index"] >= lo) & (df["week_index"] <= hi)]
+            if not scoped.empty:
+                df = scoped
+        if majors:
+            student_df = load_student_info(data_dir)
+            if not student_df.empty and "major" in student_df.columns:
+                allowed = set(
+                    student_df[student_df["major"].isin(list(majors))]["student_ID"].astype(str)
+                )
+                df = df[df["student_ID"].astype(str).isin(allowed)]
+        if df.empty:
+            return []
+        counts = df.groupby("student_ID").size().sort_values(ascending=False)
+        return [str(sid) for sid in counts.head(max(1, limit)).index.tolist()]
+    except Exception:
+        return []
 
 def _project_data_dir() -> Path:
     return Path(__file__).resolve().parents[3] / "data"
@@ -67,6 +140,98 @@ def discover_default_classes(data_dir: Path | None = None) -> tuple[str, ...]:
     return ("Class1",)
 
 
+def _classes_mentioned_in_message(message: str | None) -> set[str]:
+    if not message:
+        return set()
+    return {m.group(0) for m in _MESSAGE_CLASS_RE.finditer(message)}
+
+
+def _normalize_explicit_classes(explicit: dict[str, Any]) -> set[str]:
+    classes: set[str] = set()
+    raw_class = explicit.get("class")
+    if raw_class is not None and str(raw_class).strip():
+        classes.add(str(raw_class).strip())
+    for item in explicit.get("classes") or []:
+        if item is not None and str(item).strip():
+            classes.add(str(item).strip())
+    return classes
+
+
+def _students_present_in_classes(
+    student_ids: tuple[str, ...] | list[str],
+    classes: set[str],
+    *,
+    data_dir: Path | None = None,
+) -> bool:
+    if not student_ids or not classes:
+        return False
+    try:
+        from .loaders import load_submit_records
+
+        df = load_submit_records(sorted(classes), data_dir=data_dir)
+        if df.empty or "student_ID" not in df.columns:
+            return False
+        present = set(df["student_ID"].astype(str))
+        return any(str(sid) in present for sid in student_ids)
+    except Exception:
+        return True
+
+
+def nav_scope_suppressed_reason(
+    filter_context: "FilterContext",
+    explicit: dict[str, Any],
+    *,
+    teacher_message: str | None = None,
+    data_dir: Path | None = None,
+) -> str | None:
+    """
+    When tool/query scope conflicts with Nav, teacher intent wins over panel selection.
+    Returns a human-readable note if nav student_ids/majors must be ignored.
+    """
+    from session.ui_scope import teacher_has_selection_intent
+
+    if explicit.get("student_ids"):
+        return None
+
+    explicit_classes = _normalize_explicit_classes(explicit)
+    nav_classes = set(filter_context.classes or ())
+
+    message_classes = _classes_mentioned_in_message(teacher_message)
+    if message_classes and explicit_classes and not message_classes.intersection(explicit_classes):
+        return (
+            f"用户消息提及 {sorted(message_classes)}，查询为 {sorted(explicit_classes)}，"
+            "已忽略面板选区（以用户消息/查询范围为准）"
+        )
+
+    if explicit_classes and nav_classes and not explicit_classes.intersection(nav_classes):
+        return (
+            f"查询班级 {sorted(explicit_classes)} 与面板班级 {sorted(nav_classes)} 不一致，"
+            "已按查询班级全文分析（忽略面板选中的学生/专业）"
+        )
+
+    if explicit_classes and filter_context.selected_student_ids:
+        if not _students_present_in_classes(
+            filter_context.selected_student_ids,
+            explicit_classes,
+            data_dir=data_dir,
+        ):
+            return (
+                "面板选中的学生不属于本次查询班级，已按查询班级全文分析"
+            )
+
+    if (
+        explicit_classes
+        and filter_context.selected_student_ids
+        and not teacher_has_selection_intent(teacher_message)
+    ):
+        return (
+            "查询指定班级且未限定 student_ids，教师未表达「所选学生」意图，"
+            "已按班级全文分析（忽略面板局部选中）"
+        )
+
+    return None
+
+
 @dataclass(frozen=True)
 class FilterContext:
     """Nav / session analysis scope for query_data resolve params."""
@@ -110,17 +275,48 @@ class FilterContext:
             return out
         return dict(raw)
 
-    def merge_resolve_params(
+    def effective_nav_scope_for_query(
         self,
         explicit: dict[str, Any],
         *,
+        teacher_message: str | None = None,
         resource_id: str | None = None,
-    ) -> dict[str, Any]:
+        data_dir: Path | None = None,
+    ) -> tuple[dict[str, Any], str | None]:
+        """Nav resolve params to apply; omit student_ids/majors when teacher/query scope wins."""
         scoped = (
             self.resolve_params_for_resource(resource_id)
             if resource_id
             else self.to_resolve_params()
         )
+        reason = nav_scope_suppressed_reason(
+            self,
+            explicit,
+            teacher_message=teacher_message,
+            data_dir=data_dir,
+        )
+        if not reason:
+            return scoped, None
+        trimmed = {k: v for k, v in scoped.items() if k not in ("student_ids", "majors")}
+        return trimmed, reason
+
+    def merge_resolve_params(
+        self,
+        explicit: dict[str, Any],
+        *,
+        resource_id: str | None = None,
+        teacher_message: str | None = None,
+        data_dir: Path | None = None,
+        scope_notes: list[str] | None = None,
+    ) -> dict[str, Any]:
+        scoped, reason = self.effective_nav_scope_for_query(
+            explicit,
+            teacher_message=teacher_message,
+            resource_id=resource_id,
+            data_dir=data_dir,
+        )
+        if reason and scope_notes is not None:
+            scope_notes.append(reason)
         merged = dict(explicit)
         for key, value in scoped.items():
             if key == "classes":
@@ -169,6 +365,18 @@ class FilterContext:
 
         out["selected_student_ids"] = None
         if not ids:
+            typical = sample_typical_student_ids(
+                self.classes or (),
+                majors=self.majors,
+                week_range=self.week_range,
+                limit=3,
+            )
+            if typical:
+                out["typical_student_ids"] = typical
+                out["week_view_hint"] = (
+                    "班级 WeekView / report-chart 请使用 typical_student_ids（2–3 人），"
+                    "勿编造 student1 等占位符。"
+                )
             return out
 
         if len(ids) <= preview_limit:

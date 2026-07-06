@@ -7,8 +7,10 @@ from enum import Enum
 from typing import Any
 
 
-# Rows at or below this are treated as intentional slices (top-N, preview).
+# Rows above this strongly indicate a broad submit_record-style scan.
 SLICE_MAX_ROWS = 500
+# Intentional top-N / preview slices are usually this small.
+PREVIEW_SLICE_ROWS = 50
 # Auto-pick must beat explicit ref by this margin to silently correct.
 CORRECTION_MARGIN = 1.5
 CROSS_TURN_PENALTY = 100.0
@@ -43,18 +45,30 @@ class BindingCandidate:
     def is_slice(self) -> bool:
         if self.query_limit is not None and self.query_limit > 0:
             return True
-        return self.result_rows <= SLICE_MAX_ROWS
+        scanned = self.rows_scanned or 0
+        rows = self.result_rows
+        # Preview truncation: scanned many rows but returned a small subset.
+        if scanned > rows:
+            return True
+        if rows <= PREVIEW_SLICE_ROWS:
+            return True
+        return False
 
     @property
     def is_broad_scan(self) -> bool:
-        if self.query_limit is not None:
+        if self.query_limit is not None and self.query_limit > 0:
             return False
-        if self.result_rows > SLICE_MAX_ROWS:
-            return True
+        rows = self.result_rows
         scanned = self.rows_scanned or 0
-        return scanned > SLICE_MAX_ROWS and self.result_rows >= min(
-            scanned, max(self.result_rows, SLICE_MAX_ROWS + 1)
-        )
+        if rows > SLICE_MAX_ROWS:
+            return True
+        # Full scan: all matching rows returned (e.g. week_aggregation ~ students×weeks).
+        if scanned > 0 and rows >= scanned:
+            return True
+        # Legacy rows without rows_scanned metadata: trust non-trivial unbounded results.
+        if scanned == 0 and rows > PREVIEW_SLICE_ROWS:
+            return True
+        return False
 
 
 @dataclass

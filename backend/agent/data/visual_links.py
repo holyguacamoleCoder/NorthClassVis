@@ -6,7 +6,14 @@ from typing import Any
 
 import yaml
 
-from .filter_context import FilterContext, _coerce_week_range
+from .filter_context import (
+    FilterContext,
+    _coerce_week_range,
+    clean_student_ids,
+    is_placeholder_student_id,
+    is_valid_student_id,
+    sample_typical_student_ids,
+)
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_CONTRACT_PATH = _PROJECT_ROOT / "data" / "meta" / "visual_link_contract.yaml"
@@ -102,10 +109,21 @@ def _week_range_in_params(params: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+def _week_student_ids_param(params: dict[str, Any]) -> dict[str, Any]:
+    raw = params.get("student_ids")
+    if not isinstance(raw, list):
+        return {}
+    clean = clean_student_ids([str(x) for x in raw])
+    if not clean:
+        return {}
+    return {"student_ids": clean[:8]}
+
+
 def normalize_week_params(params: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
     kind = params.get("kind")
     cluster = params.get("cluster")
     week_extra = _week_range_in_params(params)
+    student_extra = _week_student_ids_param(params)
     if kind is not None and cluster is not None:
         return None, "WeekView: kind and cluster are mutually exclusive"
     if cluster is not None:
@@ -115,7 +133,7 @@ def normalize_week_params(params: dict[str, Any]) -> tuple[dict[str, Any] | None
             return None, "WeekView: cluster must be integer 0|1|2"
         if cluster_int not in (0, 1, 2):
             return None, "WeekView: cluster must be 0, 1, or 2"
-        return {"kind": cluster_int + 1, **week_extra}, None
+        return {"kind": cluster_int + 1, **week_extra, **student_extra}, None
     if kind is not None:
         try:
             kind_int = int(kind)
@@ -123,9 +141,9 @@ def normalize_week_params(params: dict[str, Any]) -> tuple[dict[str, Any] | None
             return None, "WeekView: kind must be integer 1|2|3"
         if kind_int not in (1, 2, 3):
             return None, "WeekView: kind must be 1, 2, or 3"
-        return {"kind": kind_int, **week_extra}, None
+        return {"kind": kind_int, **week_extra, **student_extra}, None
     # 无 kind/cluster：展示当前选中学生的全部簇（勿一次推 3 个 kind 按钮）
-    return {**week_extra}, None
+    return {**week_extra, **student_extra}, None
 
 
 def normalize_link(
@@ -325,7 +343,7 @@ def warn_week_view_missing_student_ids(
             continue
         params = link.get("params") or {}
         ids = params.get("student_ids")
-        if isinstance(ids, list) and [x for x in ids if str(x).strip()]:
+        if isinstance(ids, list) and clean_student_ids([str(x) for x in ids]):
             continue
         if len(selected) == 1:
             continue
@@ -355,3 +373,61 @@ def enrich_week_view_week_range(
             link = {**link, "params": params}
         out.append(link)
     return out
+
+
+def enrich_week_view_student_ids(
+    visual_links: list[dict[str, Any]],
+    filter_context: FilterContext | None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """
+    Inject real student_IDs into WeekView links.
+
+    Strips placeholder IDs (student1, …); uses Nav selection or class samples.
+    """
+    if filter_context is None:
+        return visual_links, []
+
+    notes: list[str] = []
+    selected = clean_student_ids(list(filter_context.selected_student_ids or ()))
+    typical = sample_typical_student_ids(
+        filter_context.classes or (),
+        majors=filter_context.majors,
+        week_range=filter_context.week_range,
+        limit=3,
+    )
+
+    out: list[dict[str, Any]] = []
+    for link in visual_links:
+        if link.get("view") != "WeekView":
+            out.append(link)
+            continue
+        params = dict(link.get("params") or {})
+        raw_ids = params.get("student_ids")
+        had_placeholders = False
+        if isinstance(raw_ids, list):
+            had_placeholders = any(is_placeholder_student_id(str(x)) for x in raw_ids)
+        clean = clean_student_ids(
+            [str(x) for x in raw_ids] if isinstance(raw_ids, list) else []
+        )
+
+        if clean:
+            params["student_ids"] = clean[:8]
+        elif selected:
+            pick = selected[:3] if len(selected) > 1 else selected[:1]
+            params["student_ids"] = pick
+            notes.append(
+                f"WeekView: 已注入 Nav 选中学生 {len(pick)} 人（勿使用 student1 等占位符）"
+            )
+        elif typical:
+            params["student_ids"] = typical
+            notes.append(
+                f"WeekView: 已注入班级代表学生 {typical}（来自提交记录，勿编造 student_ids）"
+            )
+        elif had_placeholders:
+            notes.append(
+                "WeekView: 已移除占位 student_ids，但未能解析真实学号；"
+                "请先 query_data 或确认 Nav 班级/周次。"
+            )
+
+        out.append({**link, "params": params})
+    return out, notes

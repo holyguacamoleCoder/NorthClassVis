@@ -48,7 +48,7 @@ export function buildTurnTimeline(turnMsgs) {
       if (firstTool >= 0 && idx < firstTool) {
         timeline.push({ kind: 'narration', phase: 'plan', text })
       } else if (hasTools) {
-        timeline.push({ kind: 'narration', phase: 'process', text })
+        timeline.push({ kind: 'narration', phase: 'plan_update', text })
       } else {
         timeline.push({ kind: 'narration', phase: 'conclusion', text })
       }

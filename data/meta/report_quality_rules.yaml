@@ -5,11 +5,38 @@ version: "0.1.0"
 
 global:
   required_tail_sections: [evidence, limitations]
-  section_heading_pattern: "^##\\s+(.+)$" # ## <id> — id normalized to lowercase
+  require_evidence_cites: true # Evidence must use [@ds|ref:…] tags (not markdown links)
+  default_min_section_coverage_ratio: 0.75 # deliver: 6/8 sections for class tier
+  section_heading_pattern: "^#{2,4}\\s+(.+)$" # ## / ### / #### — id normalized + aliases
+  validation_levels:
+    draft:
+      description: "write/edit postprocess — block only chart-breaking issues"
+      block_on: [chart_json_invalid, chart_syntax_forbidden, weekview_cap_exceeded]
+    deliver:
+      description: "turn-end finalize / goal_check — teacher delivery"
+      block_on: [chart_*, section_coverage_below_threshold, evidence_cite_missing]
+      warn_on: [line_count, section_order, chart_explanation, cite_not_in_catalog]
+    strict:
+      description: "CI — all sections required, cite catalog strict"
+      block_on: [all_current_errors]
+  # Map canonical section ids (ontology) to Chinese / numbered headings agents write
+  section_id_aliases:
+    scope: [scope, 范围, 概况, 一、概况, 1.范围, 1._范围]
+    summary: [summary, 摘要, 2.摘要, 2._摘要]
+    week_trend: [week_trend, 班级趋势, 周趋势, 班级趋势图, 二、班级趋势, 3.周趋势]
+    question_anchors: [question_anchors, 问题类型, 问题题型, 薄弱知识点, 三、薄弱知识点, 4.问题题型]
+    distribution: [distribution, 评分分布, 成绩分布, 分布, 班内差异, 四、班内差异, 5.成绩分布]
+    student_structure: [student_structure, 学生结构, 知识结构]
+    peer_context: [peer_context, 同伴, 班内对比, peer_context]
+    actions: [actions, 行动建议, 教学建议, 五、教学建议, 6.行动建议]
+    evidence: [evidence, 证据, 六、证据]
+    limitations: [limitations, 限制因素, 局限, 七、局限]
+    key_findings: [key_findings, 关键发现, 主要发现]
 
 tiers:
   student:
     min_total_lines: 80 # Phase 0; raise toward 120 in Phase 3
+    min_section_coverage_ratio: 0.75
     required_sections:
       - scope
       - summary
@@ -32,6 +59,7 @@ tiers:
 
   class:
     min_total_lines: 70
+    min_section_coverage_ratio: 0.75
     required_sections:
       - scope
       - summary

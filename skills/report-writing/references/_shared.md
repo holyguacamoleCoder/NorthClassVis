@@ -16,6 +16,7 @@
 
 - params 必须与本轮 `build_visual_links` **完全一致**（先 build，再写入报告）
 - **禁止** `![说明](<report-chart>{...})` 或 `(<report-chart>{...})`；只用上方 fence 块
+- fence **内只能有 JSON**，说明文字写在 ` ``` ` 闭合**之后**（写进 fence 会报 `Extra data` 解析错误）
 - 全文 **WeekView report-chart ≤ 1**
 - **StudentView 禁止** report-chart（仅用 `build_visual_links`）
 - 每个 chart 下方 **至少 2 句**解释，说明图表支撑哪条结论
@@ -29,6 +30,8 @@
 - `[@ds:<dataset_id>]` — 来自 `list_datasets` / `aggregate_data` 链
 - `[@ref:query-results/<file>.json]` — 来自 `query_data` 的 `result_ref`
 - 可选摘要：`[@ds:abc123 班级周均 peak，week 13–15]`
+
+**禁止** Markdown 链接写法 `[说明](query-results/…)`；校验会报错，须改为 `[@ref:…]`。
 
 禁止：无标签的「见上文」；禁止引用 `load_skill`、`todo_write`；禁止旧会话或 `reports/` 历史稿。
 

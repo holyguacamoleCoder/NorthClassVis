@@ -53,17 +53,21 @@ export default {
   data() {
     return {
       isConfigPanelVisible: false,
-      selectedClasses: 'Part',
-      selectedMajors: 'All',
     }
   },
   computed:{
-    ...mapGetters(['getSelectedIds', 'getAgentPanelVisible', 'getAgentPanelMinimized'])
+    ...mapGetters(['getSelectedIds', 'getAgentPanelVisible', 'getAgentPanelMinimized', 'getNavClasses', 'getNavMajors']),
+    selectedClasses() {
+      return this.getNavClasses || '未选'
+    },
+    selectedMajors() {
+      return this.getNavMajors || '未选'
+    },
   },
   created() {
     this.$store.commit('setNavFilter', {
-      classes: this.selectedClasses,
-      majors: this.selectedMajors,
+      classes: this.getNavClasses,
+      majors: this.getNavMajors,
     })
   },
   methods: {
@@ -76,8 +80,6 @@ export default {
     },
     hideConfigPanel(classesText, majorsText) {
       this.isConfigPanelVisible = false
-      this.selectedClasses = classesText
-      this.selectedMajors = majorsText
       this.$store.commit('setNavFilter', { classes: classesText, majors: majorsText })
       const scope = this.$store.state
       if (scope.navSelectedClasses?.length) {

@@ -3,7 +3,10 @@ import request from '@/utils/request'
 const USE_MOCK = import.meta.env.VUE_APP_AGENT_MOCK !== 'false'
 const JOB_POLL_MS = 400
 const JOB_POLL_MS_FAST = 250
-const JOB_TIMEOUT_MS = 180000
+/** No progress update for this long → timeout (sliding). */
+const JOB_IDLE_TIMEOUT_MS = 180000
+/** Hard cap even if progress keeps updating (produce / long reports). */
+const JOB_ABSOLUTE_MAX_MS = 900000
 
 export class JobAbortedError extends Error {
   constructor(message = '已停止生成') {
@@ -220,11 +223,29 @@ export async function resolveAgentApproval(approvalId, decision, remember = fals
 
 export async function pollAgentJob(jobId, { onApproval, onProgress, shouldAbort } = {}) {
   const started = Date.now()
+  let lastProgressAt = Date.now()
   let pendingApprovalId = null
   let lastProgressKey = ''
-  while (Date.now() - started < JOB_TIMEOUT_MS) {
+  while (true) {
     if (shouldAbort?.()) {
       throw new JobAbortedError()
+    }
+    const now = Date.now()
+    if (now - started > JOB_ABSOLUTE_MAX_MS) {
+      try {
+        await cancelAgentJob(jobId)
+      } catch (e) {
+        console.warn('cancelAgentJob after absolute timeout failed', e)
+      }
+      throw new Error('Agent 执行时间过长已自动停止，请简化问题或新建会话重试')
+    }
+    if (now - lastProgressAt > JOB_IDLE_TIMEOUT_MS) {
+      try {
+        await cancelAgentJob(jobId)
+      } catch (e) {
+        console.warn('cancelAgentJob after idle timeout failed', e)
+      }
+      throw new Error('Agent 响应超时，已停止后台任务，请稍后重试')
     }
     const job = await getAgentJob(jobId)
     if (onProgress && job.progress) {
@@ -242,6 +263,7 @@ export async function pollAgentJob(jobId, { onApproval, onProgress, shouldAbort 
       })
       if (progressKey !== lastProgressKey) {
         lastProgressKey = progressKey
+        lastProgressAt = Date.now()
         onProgress(job)
       }
     }
@@ -263,7 +285,6 @@ export async function pollAgentJob(jobId, { onApproval, onProgress, shouldAbort 
     }
     await sleep(job.progress?.running_tool ? JOB_POLL_MS_FAST : JOB_POLL_MS)
   }
-  throw new Error('Agent 响应超时，请稍后重试')
 }
 
 async function mockStreamResponse(content, onProgress) {

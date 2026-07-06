@@ -26,7 +26,7 @@ _DATA_CORE = """## 学业数据（逻辑 resource）
 - **禁止** `read_file` 打开上述原始 CSV；结构化分析用 `inspect_schema` → `query_data` → `aggregate_data`
 - 常用 resource：`student_info`、`title_info`、`submit_record`（需 `class` 或 `classes`）、`week_aggregation`
 - 关联键：`student_ID`、`title_ID`、`class`、`major`
-- Nav「当前分析范围」每轮同步 scope（system 仅摘要人数；`query_data` 自动应用选区；完整学号用 `get_current_filter_context(include_student_ids=true)`）"""
+- Nav「当前分析范围」每轮同步 scope（**用户消息 / query 参数优先**；与面板班级或选区冲突时自动忽略面板局部选中；完整学号用 `get_current_filter_context(include_student_ids=true)`）"""
 
 _DATA_DECISIONS = """## 常用决策（IF → THEN）
 | 目标 | 做法 |
@@ -35,7 +35,7 @@ _DATA_DECISIONS = """## 常用决策（IF → THEN）
 | 全量统计 | `query_data` **省略** `limit`；禁止 `limit:0` |
 | 聚合 | 先 `query_data`，再 `aggregate_data` 且 `input={"result_ref": "<meta.result_ref>"}` |
 | 专业过滤 | `submit_record` 传 `majors` 或 `where` 字段 `major`（勿把专业码写入 `student_ID`） |
-| 选中学生 | Nav 选区已绑定；`query_data` 自动 `student_ids`（勿在 prompt 抄学号列表） |
+| 选中学生 | 教师说「我选的」→ 用 Nav 选区；**班级总览/消息中指定 ClassN** → `query_data` 用该班，**忽略**面板错位选区 |
 | 图表跳转 | 结论后用 `build_visual_links`（勿手写未校验的 view 名） |
 | 多步任务 | `todo_write` 含 `acceptance`；`meta.warnings` 未清勿标 completed |"""
 
@@ -277,6 +277,19 @@ def format_filter_context_section(scope: dict) -> str:
         )
     else:
         lines.append("- 已选学生: （散点图未选中）")
+        typical = scope.get("typical_student_ids") or []
+        if typical:
+            lines.append(
+                f"- WeekView 代表学生 typical_student_ids: {', '.join(str(s) for s in typical)}"
+            )
+            lines.append(
+                "  - build_visual_links / report-chart 必须使用以上真实学号，禁止 student1 等占位符。"
+            )
+
+    lines.append(
+        "- **范围优先级**：教师消息或 `query_data` 中的 class/classes 优先于面板；"
+        "班级总览且未说「我选的」时，自动忽略与查询班级不一致的面板选区。"
+    )
 
     return "\n".join(lines)
 

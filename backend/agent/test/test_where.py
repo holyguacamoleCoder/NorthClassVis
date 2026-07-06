@@ -153,7 +153,7 @@ def test_query_missing_op_repaired(data_dir, monkeypatch):
     assert any("eq" in n for n in notes)
 
 
-def test_query_week_on_submit_record_error(data_dir, monkeypatch):
+def test_query_week_on_submit_record(data_dir, monkeypatch):
     monkeypatch.chdir(BACKEND_ROOT.parent)
     raw = run_query_data(
         resource="submit_record",
@@ -162,5 +162,7 @@ def test_query_week_on_submit_record_error(data_dir, monkeypatch):
         limit=10,
         data_dir=data_dir,
     )
-    assert raw.startswith("Error:")
-    assert "week_aggregation" in raw
+    assert not raw.startswith("Error:"), raw
+    payload = json.loads(raw)
+    notes = payload.get("meta", {}).get("normalization_notes") or []
+    assert any("week_index" in n for n in notes)

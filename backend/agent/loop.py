@@ -42,8 +42,30 @@ from tools.handlers.todo_write import (
 )
 from hints.plan_checks import append_data_tool_checks
 from hints.report_checks import append_report_write_checks
+from hints.data_chain_guard import (
+    aggregate_errors_in_batch,
+    query_signatures_in_batch,
+    should_break_aggregate_retry_loop,
+    should_break_repeated_query_loop,
+)
+from hints.turn_stop_summary import build_turn_stop_summary
+from hints.report_validate_guard import collect_report_tool_signatures
+from hints.report_continue import (
+    inject_report_continue_reminder,
+    messages_since_last_user,
+    latest_report_path,
+    report_false_completion_guard_text,
+    should_replace_report_false_completion,
+)
 
-_log = get_logger("loop")
+from loop_limits import (
+    AGGREGATE_RETRY_LOOP_WINDOW,
+    MAX_TURNS_PER_USER_ROUND,
+    REPEATED_QUERY_LOOP_WINDOW,
+    REPEATED_QUERY_THRESHOLD,
+    REPORT_POLISH_LOOP_WINDOW,
+    REPORT_VALIDATE_LOOP_WINDOW,
+)
 
 MAX_TOKENS = 8192
 TOOL_LOOP_WINDOW = 6
@@ -56,6 +78,8 @@ _AGGREGATE_INPUT_ERROR_MARKERS = (
     "aggregate_data 需要 input",
     "input is required",
 )
+
+_log = get_logger("loop")
 
 
 # AgentLoop 声明周期（loop层级）
@@ -93,6 +117,14 @@ class AgentLoop:
         self._recent_todo_only_batches: deque[bool] = deque(maxlen=_TODO_ONLY_LOOP_WINDOW)
         self._recent_tool_error_signatures: deque[tuple[str, ...]] = deque(maxlen=ERROR_LOOP_WINDOW)
         self._recent_aggregate_input_errors: deque[bool] = deque(maxlen=ERROR_LOOP_WINDOW)
+        self._recent_aggregate_retry_signatures: list[str] = []
+        self._recent_query_data_signatures: list[str] = []
+        self._recent_report_blocker_signatures: deque[str] = deque(
+            maxlen=REPORT_VALIDATE_LOOP_WINDOW
+        )
+        self._recent_report_soft_signatures: deque[str] = deque(
+            maxlen=REPORT_POLISH_LOOP_WINDOW
+        )
         self._progress_callback = progress_callback
         self._should_cancel = should_cancel
         self._run_registry = run_registry
@@ -283,6 +315,10 @@ class AgentLoop:
                 filter_context=self.loop_state.filter_context,
                 loaded_skills=self.loop_state.loaded_skills,
             )
+        inject_report_continue_reminder(
+            self.loop_state.messages,
+            self.loop_state.analysis_context.current_user_message,
+        )
         self._apply_pre_turn_compaction()
 
         log_event(
@@ -358,21 +394,33 @@ class AgentLoop:
 
         # 如果LLM没有工具调用，则结束循环
         if response.finish_reason != "tool_calls":
-            self.loop_state.continue_reason = None
-            preview = truncate_for_log(response.message.content or "")
-            if response.message.content:
-                answer_event: dict[str, Any] = {
-                    "type": "answer",
-                    "content": response.message.content,
-                }
-                if self.loop_state.turn_count == 0:
-                    answer_event["clear_thinking"] = True
-                self._emit_progress(answer_event)
+            turn_slice = messages_since_last_user(self.loop_state.messages)
+            false_completion = should_replace_report_false_completion(
+                turn_slice,
+                produce_mode=self.permission.mode == CapabilityMode.PRODUCE,
+            )
+            if false_completion:
+                guard = report_false_completion_guard_text(latest_report_path(turn_slice))
+                assistant_message["content"] = guard
+                self.loop_state.continue_reason = "report_incomplete_guard"
+                preview = truncate_for_log(guard)
+                self._emit_progress({"type": "answer", "content": guard})
+            else:
+                self.loop_state.continue_reason = None
+                preview = truncate_for_log(response.message.content or "")
+                if response.message.content:
+                    answer_event: dict[str, Any] = {
+                        "type": "answer",
+                        "content": response.message.content,
+                    }
+                    if self.loop_state.turn_count == 0:
+                        answer_event["clear_thinking"] = True
+                    self._emit_progress(answer_event)
             log_event(
                 _log,
                 logging.INFO,
                 "turn_end",
-                reason="no_tool_calls",
+                reason="report_incomplete_guard" if false_completion else "no_tool_calls",
                 finish_reason=response.finish_reason,
                 assistant_preview=preview,
             )
@@ -470,6 +518,35 @@ class AgentLoop:
         )
         self._check_cancelled()
 
+        if self._should_break_data_chain_oscillation(tool_calls, tool_results):
+            self.loop_state.continue_reason = "data_chain_oscillation_guard"
+            guard_hint = build_turn_stop_summary(
+                self.loop_state.messages,
+                reason_title="数据链震荡停止摘要",
+                extra_lines=[
+                    "query_data 与 aggregate_data 反复失败或重复查询，已自动停止。",
+                    "请换 resource/参数后一次 query（省略 limit）再 aggregate，勿重复同一查询。",
+                ],
+            )
+            _sync_tool_results_to_messages(
+                self.loop_state.messages,
+                tool_calls,
+                tool_results,
+            )
+            self.loop_state.messages.append({"role": "assistant", "content": guard_hint})
+            self._emit_progress(
+                {"type": "answer", "content": guard_hint, "clear_thinking": True}
+            )
+            log_event(
+                _log,
+                logging.WARNING,
+                "data_chain_oscillation_guard_triggered",
+                turn=self.loop_state.turn_count,
+                aggregate_retries=list(self._recent_aggregate_retry_signatures)[-3:],
+                query_sigs=list(self._recent_query_data_signatures)[-5:],
+            )
+            return False
+
         # 错误响应防护
         if self._should_break_error_loop(tool_calls, tool_results):
             self.loop_state.continue_reason = "tool_error_loop_guard"
@@ -525,6 +602,30 @@ class AgentLoop:
         
         append_data_tool_checks(tool_calls, tool_results)
         append_report_write_checks(tool_calls, tool_results)
+
+        report_guard = self._check_report_validate_loop_guard(tool_calls, tool_results)
+        if report_guard:
+            self.loop_state.continue_reason = report_guard
+            _sync_tool_results_to_messages(
+                self.loop_state.messages, tool_calls, tool_results
+            )
+            self.loop_state.messages.append(
+                {"role": "assistant", "content": self._report_loop_guard_text(report_guard)}
+            )
+            self._emit_progress(
+                {
+                    "type": "answer",
+                    "content": self._report_loop_guard_text(report_guard),
+                }
+            )
+            log_event(
+                _log,
+                logging.WARNING,
+                "report_validate_loop_guard_triggered",
+                turn=self.loop_state.turn_count,
+                reason=report_guard,
+            )
+            return False
 
         if not tool_results:
             # 工具调用失败
@@ -722,6 +823,44 @@ class AgentLoop:
             return False
         return all(self._recent_aggregate_input_errors)
 
+    def _should_break_data_chain_oscillation(
+        self,
+        tool_calls: list[dict[str, Any]],
+        tool_results: list[dict[str, Any]],
+    ) -> bool:
+        """
+        Stop query ↔ aggregate ping-pong (batch dedupe alone cannot catch this).
+        """
+        names = {str(c.get("name") or "") for c in tool_calls if c.get("name")}
+        agg_errors = aggregate_errors_in_batch(tool_calls, tool_results)
+
+        if names & {"aggregate_data"}:
+            if agg_errors:
+                self._recent_aggregate_retry_signatures.append(agg_errors[0])
+                if should_break_aggregate_retry_loop(
+                    self._recent_aggregate_retry_signatures,
+                    window=AGGREGATE_RETRY_LOOP_WINDOW,
+                ):
+                    return True
+            else:
+                self._recent_aggregate_retry_signatures.clear()
+                self._recent_query_data_signatures.clear()
+
+        if "query_data" in names and "aggregate_data" not in names:
+            q_sigs = query_signatures_in_batch(tool_calls)
+            if q_sigs:
+                self._recent_query_data_signatures.extend(q_sigs)
+                if (
+                    self._recent_aggregate_retry_signatures
+                    and should_break_repeated_query_loop(
+                        self._recent_query_data_signatures,
+                        window=REPEATED_QUERY_LOOP_WINDOW,
+                        repeat_threshold=REPEATED_QUERY_THRESHOLD,
+                    )
+                ):
+                    return True
+        return False
+
     def _align_turn_count_for_user_round(self) -> None:
         """Continue turn index after restart / new user message (not reset to 1)."""
         self.loop_state.turn_count = resolve_loop_turn_count(
@@ -729,17 +868,96 @@ class AgentLoop:
             stored_user_turn_count=self.loop_state.turn_count,
         )
 
+    def _check_report_validate_loop_guard(
+        self,
+        tool_calls: list[dict[str, Any]],
+        tool_results: list[dict[str, Any]],
+    ) -> str | None:
+        signatures = collect_report_tool_signatures(tool_calls, tool_results)
+        if not signatures:
+            self._recent_report_blocker_signatures.clear()
+            self._recent_report_soft_signatures.clear()
+            return None
+
+        last = signatures[-1]
+        if last.startswith("blocker:"):
+            self._recent_report_soft_signatures.clear()
+            self._recent_report_blocker_signatures.append(last)
+            if (
+                len(self._recent_report_blocker_signatures) >= REPORT_VALIDATE_LOOP_WINDOW
+                and len(set(self._recent_report_blocker_signatures)) == 1
+            ):
+                return "report_validate_loop_guard"
+            return None
+
+        if last.startswith("warn:") or last == "ok":
+            self._recent_report_blocker_signatures.clear()
+            self._recent_report_soft_signatures.append(last)
+            if (
+                len(self._recent_report_soft_signatures) >= REPORT_POLISH_LOOP_WINDOW
+                and all(s.startswith("warn:") or s == "ok" for s in self._recent_report_soft_signatures)
+            ):
+                return "report_polish_loop_guard"
+        return None
+
+    @staticmethod
+    def _report_loop_guard_text(reason: str) -> str:
+        if reason == "report_validate_loop_guard":
+            return (
+                "报告同一校验错误已连续多次未解决，已自动停止反复 edit，避免卡顿。"
+                "请先 read_file 查看当前 md，或新建会话用真实学号路径重来；"
+                "交付前系统仍会做一次自动修复与终检。"
+            )
+        if reason == "report_polish_loop_guard":
+            return (
+                "报告已达可交付状态（仅剩 warn 提醒项，如行数/顺序），"
+                "继续修补收益不大，已自动停止。"
+                "你可以直接预览报告，或说明要改的具体章节。"
+            )
+        return "报告编辑循环已自动停止。"
+
+    def _break_max_turn_limit(self, *, start_turn: int, turns_used: int) -> None:
+        guard = build_turn_stop_summary(
+            self.loop_state.messages,
+            reason_title="轮次上限停止摘要",
+            turns_used=turns_used,
+            max_turns=MAX_TURNS_PER_USER_ROUND,
+            compact_summary=self.loop_state.compact.last_summary or None,
+        )
+        self.loop_state.continue_reason = "max_turn_limit"
+        self.loop_state.messages.append({"role": "assistant", "content": guard})
+        self._emit_progress({"type": "answer", "content": guard, "clear_thinking": True})
+        log_event(
+            _log,
+            logging.WARNING,
+            "max_turn_limit_triggered",
+            turn=self.loop_state.turn_count,
+            max_turns=MAX_TURNS_PER_USER_ROUND,
+            turns_used=turns_used,
+            report_path=latest_report_path(messages_since_last_user(self.loop_state.messages)),
+        )
+
     def run_loop(self):
         self._align_turn_count_for_user_round()
+        start_turn = self.loop_state.turn_count
         log_event(
             _log,
             logging.INFO,
             "loop_begin",
             turn=self.loop_state.turn_count,
+            max_turns=MAX_TURNS_PER_USER_ROUND,
         )
         while True:
             self._check_cancelled()
+            turns_used = self.loop_state.turn_count - start_turn
+            if turns_used >= MAX_TURNS_PER_USER_ROUND:
+                self._break_max_turn_limit(start_turn=start_turn, turns_used=turns_used)
+                break
             if not self.run_turn():
+                break
+            turns_used = self.loop_state.turn_count - start_turn
+            if turns_used >= MAX_TURNS_PER_USER_ROUND:
+                self._break_max_turn_limit(start_turn=start_turn, turns_used=turns_used)
                 break
         record_loop_end(
             continue_reason=self.loop_state.continue_reason,

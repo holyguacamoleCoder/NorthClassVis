@@ -32,16 +32,18 @@ def inject_data_tool_context(
     if tool_name in ("query_data", "inspect_schema", "aggregate_data") and filter_context is not None:
         args["_filter_context"] = filter_context
 
-    if tool_name in ("list_datasets", "resolve_dataset_binding"):
-        if analysis_context:
-            if analysis_context.session_id:
-                args["_session_id"] = analysis_context.session_id
-            args["_current_user_turn"] = analysis_context.user_turn
-            if analysis_context.current_user_message:
-                args["_teacher_message"] = analysis_context.current_user_message
+    if analysis_context:
+        if analysis_context.session_id:
+            args["_session_id"] = analysis_context.session_id
+        args["_current_user_turn"] = analysis_context.user_turn
+        if analysis_context.current_user_message:
+            args["_teacher_message"] = analysis_context.current_user_message
+        if tool_name in ("list_datasets", "resolve_dataset_binding"):
             args["_turn_snapshots"] = list(analysis_context.turn_snapshots)
             if llm_client is not None:
                 args["_llm_client"] = llm_client
+
+    if tool_name in ("list_datasets", "resolve_dataset_binding"):
         return args
 
     if tool_name == "aggregate_data":

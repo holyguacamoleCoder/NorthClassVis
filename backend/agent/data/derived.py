@@ -58,9 +58,12 @@ def build_week_aggregation(
 
     start_date = df["time"].min()
     df = df.copy()
-    df["week"] = df["time"].apply(
-        lambda value: week_service.calculate_week_of_year(value, start_date=start_date)
-    )
+    if "week_index" in df.columns:
+        df["week"] = df["week_index"]
+    else:
+        df["week"] = df["time"].apply(
+            lambda value: week_service.calculate_week_of_year(value, start_date=start_date)
+        )
 
     if student_ids:
         df = df[df["student_ID"].isin(student_ids)]

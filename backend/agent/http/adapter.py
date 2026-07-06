@@ -7,6 +7,11 @@ import re
 from typing import Any
 
 _ERROR_PREFIXES = ("Error:", "Permission denied", "Tool blocked")
+_DATA_RESULT_TOOLS = frozenset({"query_data", "aggregate_data"})
+_COMPACTED_RESULT_REF_RE = re.compile(
+    r"result_ref=(query-results/[0-9a-f]{32}\.json)",
+    re.IGNORECASE,
+)
 
 
 def _parse_tool_arguments(raw: Any) -> dict[str, Any]:
@@ -314,6 +319,8 @@ def _extract_report_links(messages: list[dict[str, Any]]) -> list[dict[str, Any]
 def _extract_report_evidence(
     messages: list[dict[str, Any]],
     report_links: list[dict[str, Any]],
+    *,
+    session_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Verifiable evidence from ## Evidence cites in the latest report deliverable."""
     if not report_links:
@@ -332,12 +339,43 @@ def _extract_report_evidence(
         text = full.read_text(encoding="utf-8")
     except OSError:
         return []
-    turn_snapshots = _turn_query_snapshots(messages)
-    return digest_from_report_markdown(text, turn_snapshots=turn_snapshots)
+    turn_snapshots = _turn_data_snapshots(messages)
+    return digest_from_report_markdown(
+        text,
+        session_id=session_id,
+        turn_snapshots=turn_snapshots,
+    )
 
 
-def _turn_query_snapshots(messages: list[dict[str, Any]]) -> list[Any]:
-    """Best-effort refs from query_data tool results in this turn."""
+def _parse_tool_result_ref(content: str) -> tuple[str | None, dict[str, Any]]:
+    """Extract result_ref and meta from tool JSON or compacted summaries."""
+    text = (content or "").strip()
+    if not text or text.startswith("Error:"):
+        return None, {}
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        payload = None
+    if isinstance(payload, dict):
+        meta = payload.get("meta") or {}
+        ref = meta.get("result_ref")
+        if ref:
+            rows = payload.get("rows") or []
+            row_count = len(rows) if isinstance(rows, list) else meta.get("row_count")
+            return str(ref), {
+                "resource": meta.get("resource"),
+                "dataset_id": meta.get("dataset_id"),
+                "result_rows": int(row_count) if row_count is not None else 0,
+                "rows_scanned": meta.get("rows_scanned"),
+            }
+    match = _COMPACTED_RESULT_REF_RE.search(text)
+    if match:
+        return match.group(1), {}
+    return None, {}
+
+
+def _turn_data_snapshots(messages: list[dict[str, Any]]) -> list[Any]:
+    """Refs from query_data / aggregate_data tool results in this turn."""
     from loop_state import QuerySnapshot
 
     call_names: dict[str, str] = {}
@@ -351,26 +389,27 @@ def _turn_query_snapshots(messages: list[dict[str, Any]]) -> list[Any]:
                 call_names[call_id] = str(fn.get("name") or "")
 
     snaps: list[QuerySnapshot] = []
+    seen_refs: set[str] = set()
     for msg in messages:
         if msg.get("role") != "tool":
             continue
         call_id = str(msg.get("tool_call_id") or "")
-        if call_names.get(call_id) != "query_data":
+        if call_names.get(call_id) not in _DATA_RESULT_TOOLS:
             continue
-        try:
-            payload = json.loads(msg.get("content") or "{}")
-        except json.JSONDecodeError:
-            continue
-        meta = payload.get("meta") or {}
-        ref = meta.get("result_ref")
+        ref, meta = _parse_tool_result_ref(str(msg.get("content") or ""))
         if not ref:
             continue
-        rows = payload.get("rows") or []
+        norm = ref.replace("\\", "/")
+        if norm in seen_refs:
+            continue
+        seen_refs.add(norm)
         snaps.append(
             QuerySnapshot(
-                result_ref=str(ref),
-                result_rows=len(rows) if isinstance(rows, list) else 0,
+                result_ref=norm,
+                result_rows=int(meta.get("result_rows") or 0),
+                rows_scanned=meta.get("rows_scanned"),
                 resource=meta.get("resource"),
+                dataset_id=meta.get("dataset_id"),
             )
         )
     return snaps
@@ -474,6 +513,22 @@ def _first_tool_index(messages: list[dict[str, Any]]) -> int | None:
     return None
 
 
+def _turn_thinking_updates(messages: list[dict[str, Any]]) -> list[str]:
+    """Assistant rationale before tool batches after the initial plan."""
+    first_tool = _first_tool_index(messages)
+    updates: list[str] = []
+    for idx, msg in enumerate(messages):
+        if msg.get("role") != "assistant":
+            continue
+        text = str(msg.get("content") or "").strip()
+        if not text or not msg.get("tool_calls"):
+            continue
+        if first_tool is not None and idx < first_tool:
+            continue
+        updates.append(text)
+    return updates
+
+
 def _split_turn_narrative(
     messages: list[dict[str, Any]],
 ) -> tuple[str, str, str]:
@@ -532,7 +587,7 @@ def build_turn_timeline(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if first_tool is not None and idx < first_tool:
                 timeline.append({"kind": "narration", "phase": "plan", "text": text})
             elif has_tools:
-                timeline.append({"kind": "narration", "phase": "process", "text": text})
+                timeline.append({"kind": "narration", "phase": "plan_update", "text": text})
             else:
                 timeline.append({"kind": "narration", "phase": "conclusion", "text": text})
         elif role == "tool":
@@ -550,7 +605,65 @@ def build_turn_timeline(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return timeline
 
 
-def _turn_has_report_validate_errors(turn_messages: list[dict[str, Any]]) -> bool:
+def _report_paths_from_turn(turn_messages: list[dict[str, Any]]) -> list[str]:
+    from ..report_delivery import parse_deliverable_path_from_tool_content
+
+    call_names: dict[str, str] = {}
+    call_params: dict[str, dict[str, Any]] = {}
+    for msg in turn_messages:
+        if msg.get("role") != "assistant":
+            continue
+        for call in msg.get("tool_calls") or []:
+            fn = call.get("function") or {}
+            call_id = str(call.get("id") or "")
+            if call_id:
+                call_names[call_id] = str(fn.get("name") or "")
+                call_params[call_id] = _parse_tool_arguments(fn.get("arguments"))
+
+    paths: list[str] = []
+    seen: set[str] = set()
+    for msg in turn_messages:
+        if msg.get("role") != "tool":
+            continue
+        call_id = str(msg.get("tool_call_id") or "")
+        tool_name = call_names.get(call_id, str(msg.get("name") or ""))
+        if tool_name not in ("write_file", "edit_file"):
+            continue
+        content = str(msg.get("content") or "")
+        params = call_params.get(call_id) or {}
+        rel = parse_deliverable_path_from_tool_content(content) or str(
+            params.get("path") or ""
+        ).strip()
+        if not rel or not rel.endswith(".md") or rel in seen:
+            continue
+        seen.add(rel)
+        paths.append(rel.replace("\\", "/"))
+    return paths
+
+
+def _finalize_turn_reports(turn_messages: list[dict[str, Any]]) -> dict[str, Any] | None:
+    paths = _report_paths_from_turn(turn_messages)
+    if not paths:
+        return None
+    from report.finalize import finalize_report_file
+
+    return finalize_report_file(
+        paths[-1],
+        turn_snapshots=_turn_data_snapshots(turn_messages),
+        write_back=True,
+    )
+
+
+def _turn_has_report_validate_errors(
+    turn_messages: list[dict[str, Any]],
+    *,
+    report_final_check: dict[str, Any] | None = None,
+) -> bool:
+    if report_final_check is not None:
+        status = report_final_check.get("delivery_status")
+        if status:
+            return status == "fail"
+        return not bool(report_final_check.get("ok"))
     from hints.report_checks import report_validation_failed
 
     for msg in turn_messages:
@@ -572,6 +685,7 @@ def adapt_legacy_query_response(
     messages: list[dict[str, Any]],
     *,
     continue_reason: str | None = None,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     """Top-level answer/evidence/trace contract for AgentChatFloat."""
     turn_messages = messages[_turn_start_index(messages) :]
@@ -582,14 +696,26 @@ def adapt_legacy_query_response(
         answer = _last_assistant_content(turn_messages)
     elif not thinking:
         thinking = _turn_thinking_content(turn_messages)
+    thinking_updates = _turn_thinking_updates(turn_messages)
     evidence = [
         {"tool": step["tool"], "summary": step["summary"]}
         for step in steps
         if step.get("status") == "ok"
     ]
     visual_links = _extract_visual_links(turn_messages)
+    report_final_check = _finalize_turn_reports(turn_messages)
     report_links = _extract_report_links(turn_messages)
-    report_evidence = _extract_report_evidence(turn_messages, report_links)
+    if report_final_check and report_final_check.get("ok") and report_links:
+        path = report_final_check.get("path")
+        if path and not any(item.get("path") == path for item in report_links):
+            from ..report_delivery import deliverable_label
+
+            report_links.append({"path": path, "label": deliverable_label(path)})
+    report_evidence = _extract_report_evidence(
+        turn_messages,
+        report_links,
+        session_id=session_id,
+    )
     actions: list[str] = []
     if visual_links:
         actions.append("点击下方图表入口查看可视化结果")
@@ -599,6 +725,10 @@ def adapt_legacy_query_response(
         "consult_list_loop_guard",
         "todo_only_loop_guard",
         "tool_loop_guard",
+        "max_turn_limit",
+        "report_validate_loop_guard",
+        "report_polish_loop_guard",
+        "data_chain_oscillation_guard",
     ):
         actions.append("可切换到「分析」模式后重新提问")
 
@@ -610,15 +740,36 @@ def adapt_legacy_query_response(
     elif any(step.get("status") in ("fail", "denied", "blocked") for step in steps):
         overall_status = "partial" if answer else "failed"
 
-    report_validate_pending = _turn_has_report_validate_errors(turn_messages)
+    report_validate_pending = _turn_has_report_validate_errors(
+        turn_messages,
+        report_final_check=report_final_check,
+    )
+
+    if report_final_check and not report_final_check.get("ok"):
+        key_findings = list(report_final_check.get("fixes") or [])[:2]
+        key_findings.extend((report_final_check.get("errors") or [])[:3])
+    else:
+        key_findings = evidence[:3] and [e["summary"] for e in evidence[:3]] or []
+
+    unresolved = [
+        _friendly_tool_failure(step)
+        for step in steps
+        if step.get("status") in ("fail", "denied", "blocked")
+    ]
+    if report_final_check and not report_final_check.get("ok"):
+        for err in (report_final_check.get("errors") or [])[:3]:
+            if err not in unresolved:
+                unresolved.append(err)
 
     return {
         "answer": answer,
         "closing": closing,
         "thinking": thinking,
+        "thinking_updates": thinking_updates,
         "evidence": evidence,
         "process_evidence": evidence,
         "report_evidence": report_evidence,
+        "report_final_check": report_final_check,
         "actions": actions,
         "visual_links": visual_links,
         "report_links": report_links,
@@ -633,14 +784,19 @@ def adapt_legacy_query_response(
         },
         "summary": {
             "overall_status": overall_status,
-            "key_findings": evidence[:3] and [e["summary"] for e in evidence[:3]] or [],
-            "unresolved_points": [
-                step.get("error") or step.get("summary") or ""
-                for step in steps
-                if step.get("status") in ("fail", "denied", "blocked")
-            ],
+            "key_findings": key_findings,
+            "unresolved_points": unresolved,
         },
     }
+
+
+def _friendly_tool_failure(step: dict[str, Any]) -> str:
+    raw = str(step.get("error") or step.get("summary") or "")
+    if "Text not found in reports/" in raw:
+        return "报告编辑未命中：请先 read_file 再按 ## 章节名整节修改"
+    if "Report validation failed" in raw or "status: ERRORS" in raw:
+        return "报告校验未通过：见执行过程中的 [Report validate] 错误"
+    return raw[:200] if raw else "工具执行失败"
 
 
 def serialize_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -708,6 +864,7 @@ def adapt_turn_response(
     legacy = adapt_legacy_query_response(
         session.messages,
         continue_reason=continue_reason,
+        session_id=getattr(session, "id", None),
     )
     if run_registry is not None and getattr(session, "id", None):
         from runs.enrich import enrich_trace_and_timeline

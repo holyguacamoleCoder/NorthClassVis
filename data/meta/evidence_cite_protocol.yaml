@@ -4,6 +4,9 @@ version: "0.1.0"
 
 cite_pattern: '\[@(ds|ref):([^\s\]]+)(?:\s+([^\]]+))?\]'
 
+# Legacy markdown links in Evidence are rejected at validate time; still parsed for digest migration.
+legacy_link_pattern: '\[[^\]]+\]\((query-results/[^)\s]+)\)'
+
 kinds:
   ds:
     description: dataset_id from list_datasets / aggregate_data input chain

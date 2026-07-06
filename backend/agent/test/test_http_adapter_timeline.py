@@ -45,12 +45,13 @@ def test_timeline_interleaves_narration_and_tools():
     kinds = [item["kind"] for item in timeline]
     assert kinds == ["narration", "tool", "narration", "tool", "narration"]
     assert timeline[0]["phase"] == "plan"
-    assert timeline[2]["phase"] == "process"
+    assert timeline[2]["phase"] == "plan_update"
     assert timeline[4]["phase"] == "conclusion"
 
     res = adapt_legacy_query_response(messages)
     assert len(res["timeline"]) == 5
     assert res["thinking"] == "先查 week_aggregation。"
+    assert res["thinking_updates"] == ["继续聚合弱项。"]
     assert res["closing"] == "Class1 班均 0.81。"
 
 

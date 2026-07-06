@@ -183,6 +183,10 @@ def repair_submit_record_week_usage(
     """
     if resource != _SUBMIT_RECORD:
         return resource, kwargs, where, group_by, order_by, []
+    from .column_aliases import RESOURCE_COLUMNS
+
+    if "week_index" in RESOURCE_COLUMNS.get(_SUBMIT_RECORD, ()):
+        return resource, kwargs, where, group_by, order_by, []
     if not _uses_week_dimension(group_by=group_by, order_by=order_by):
         return resource, kwargs, where, group_by, order_by, []
 

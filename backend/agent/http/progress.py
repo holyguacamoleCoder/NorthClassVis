@@ -125,21 +125,33 @@ def make_job_progress_handler(
                 patch["thinking"] = ""
         elif et == "thinking":
             text = str(event.get("content") or "")
-            phase = "plan" if not plan_state["sent"] else "process"
-            if phase == "plan":
+            if not plan_state["sent"]:
                 plan_state["sent"] = True
-            patch.update({
-                "phase": "thinking",
-                "hint": "正在整理分析思路…",
-                "thinking": text,
-                "running_tool": None,
-            })
-            if text:
-                patch["append_timeline"] = {
-                    "kind": "narration",
-                    "phase": phase,
-                    "text": text,
-                }
+                patch.update({
+                    "phase": "thinking",
+                    "hint": "正在整理分析思路…",
+                    "thinking": text,
+                    "running_tool": None,
+                })
+                if text:
+                    patch["append_timeline"] = {
+                        "kind": "narration",
+                        "phase": "plan",
+                        "text": text,
+                    }
+            else:
+                patch.update({
+                    "phase": "thinking",
+                    "hint": "正在继续分析…",
+                    "running_tool": None,
+                    "append_thinking_update": text,
+                })
+                if text:
+                    patch["append_timeline"] = {
+                        "kind": "narration",
+                        "phase": "plan_update",
+                        "text": text,
+                    }
         elif et == "thinking_delta":
             patch.update({
                 "phase": "thinking",
@@ -181,6 +193,7 @@ def empty_job_progress(
         "loaded_references": list(loaded_references or []),
         "report_links": [],
         "memory_saved": [],
+        "thinking_updates": [],
     }
 
 
@@ -198,6 +211,7 @@ def merge_progress_patch(progress: dict[str, Any], patch: dict[str, Any]) -> Non
     append_timeline = patch.pop("append_timeline", None)
     append_answer = patch.pop("append_answer", None)
     append_thinking = patch.pop("append_thinking", None)
+    append_thinking_update = patch.pop("append_thinking_update", None)
     for key, value in patch.items():
         if key == "updated_at":
             continue
@@ -207,6 +221,10 @@ def merge_progress_patch(progress: dict[str, Any], patch: dict[str, Any]) -> Non
         steps.append(append)
     if append_timeline is not None:
         progress.setdefault("timeline", []).append(append_timeline)
+    if append_thinking_update:
+        text = str(append_thinking_update).strip()
+        if text:
+            progress.setdefault("thinking_updates", []).append(text)
     if append_thinking:
         progress["thinking"] = (progress.get("thinking") or "") + append_thinking
         delta = append_thinking.strip()

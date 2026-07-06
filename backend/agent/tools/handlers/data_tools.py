@@ -48,10 +48,18 @@ def _resolve_params_with_context(
     filter_context: FilterContext | None,
     *,
     resource: str | None = None,
+    teacher_message: str | None = None,
+    scope_notes: list[str] | None = None,
 ) -> dict[str, Any]:
     resolve = _resolve_params(kwargs)
     if filter_context is not None:
-        resolve = filter_context.merge_resolve_params(resolve, resource_id=resource)
+        resolve = filter_context.merge_resolve_params(
+            resolve,
+            resource_id=resource,
+            teacher_message=teacher_message,
+            data_dir=kwargs.get("data_dir"),
+            scope_notes=scope_notes,
+        )
     return resolve
 
 
@@ -265,7 +273,9 @@ def run_query_data(
     if where is not None:
         where, where_repair_notes = repair_where(where)
     filter_context = _pop_filter_context(kwargs)
+    teacher_message = kwargs.pop("_teacher_message", None)
     limit_notes: list[str] = []
+    scope_notes: list[str] = []
     try:
         limit, limit_note = normalize_limit(limit)
         if limit_note:
@@ -279,7 +289,13 @@ def run_query_data(
             order_by=order_by,
         )
         notes = list(notes) + week_notes + limit_notes + where_repair_notes
-        resolve = _resolve_params_with_context(kwargs, filter_context, resource=resource)
+        resolve = _resolve_params_with_context(
+            kwargs,
+            filter_context,
+            resource=resource,
+            teacher_message=teacher_message,
+            scope_notes=scope_notes,
+        )
         validate_resolve_params(resource, resolve)
         spec = QuerySpec(
             resource=resource,
@@ -293,8 +309,10 @@ def run_query_data(
         result = execute_query(
             spec,
             filter_context=filter_context,
+            teacher_message=teacher_message,
             data_dir=kwargs.get("data_dir"),
         )
+        notes = notes + scope_notes
         _enrich_query_payload(result, notes)
         enrich_query_payload(
             result,

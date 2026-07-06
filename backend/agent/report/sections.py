@@ -2,13 +2,9 @@ from __future__ import annotations
 
 import re
 
+from .parse import normalize_section_id as normalize_section_id
+
 _SECTION_HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
-
-
-def normalize_section_id(raw: str) -> str:
-    text = (raw or "").strip().lower()
-    text = re.sub(r"\s+", "_", text)
-    return text
 
 
 def _heading_matches(section_title: str, needle: str) -> bool:
@@ -43,6 +39,18 @@ def replace_section(content: str, section_heading: str, new_section: str) -> str
     start, end = span
     replacement = new_section.rstrip() + "\n\n"
     return content[:start] + replacement + content[end:].lstrip()
+
+
+def append_section(content: str, new_section: str) -> str:
+    """Append a ## section before evidence/limitations, or at document end."""
+    block = new_section.rstrip() + "\n\n"
+    lowered = (content or "").lower()
+    for marker in ("## evidence", "## limitations"):
+        idx = lowered.find(marker)
+        if idx >= 0:
+            return content[:idx].rstrip() + "\n\n" + block + content[idx:].lstrip()
+    base = (content or "").rstrip()
+    return f"{base}\n\n{block}" if base else block
 
 
 def section_excerpt(content: str, section_heading: str, *, body_lines: int = 14) -> str | None:

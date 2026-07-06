@@ -44,9 +44,16 @@ def inspect_resource(
         "column_hint": list(RESOURCE_COLUMNS.get(resource, ())),
     }
     if resource == "submit_record":
-        payload["filter_hint"] = (
-            "无 week/week_index 列；按周次分析请用 week_aggregation + week_range 或 where.week_index。"
-        )
+        col_names = [str(c["name"]) for c in columns]
+        if "week_index" in col_names:
+            payload["filter_hint"] = (
+                "含 week_index 列（由 time 按班内最早提交日推算，第 0 周起）；"
+                "可按 week_index 过滤/分组；peak 特征分析仍用 week_aggregation。"
+            )
+        else:
+            payload["filter_hint"] = (
+                "无 week/week_index 列；按周次分析请用 week_aggregation + week_range 或 where.week_index。"
+            )
     elif resource == "week_aggregation":
         payload["filter_hint"] = (
             "周次列名为 week_index（where 中可写 week，会自动映射）；推荐传 week_range=[start,end]。"

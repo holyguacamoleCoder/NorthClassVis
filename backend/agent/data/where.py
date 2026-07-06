@@ -185,7 +185,8 @@ def _normalize_leaf_field(
 ) -> tuple[str, str | None]:
     token = _week_field_token(field)
     if resource == "submit_record" and token in _WEEK_FIELD_TOKENS:
-        _raise_week_on_submit_record(field)
+        if "week_index" not in allowed_columns:
+            _raise_week_on_submit_record(field)
 
     resolved = resolve_column(field, allowed_columns)
     if resolved:

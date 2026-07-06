@@ -61,8 +61,7 @@ _WHERE_SCHEMA: dict[str, Any] = {
     "description": (
         "Safe filter DSL. Leaf must include op+field+value (op: eq|in|gte|lte; missing op defaults to eq). "
         "Combine: {op: and, conditions: [<leaf>, ...]}. Fields must exist on the resource. "
-        "Week ranges: use week_aggregation + week_range=[start,end], or where on week_index "
-        "(week aliases to week_index on week_aggregation only; submit_record has no week column)."
+        "Week ranges: week_index on submit_record (or week alias), or week_aggregation + week_range=[start,end]."
     ),
     "properties": {
         "op": {"type": "string", "enum": ["eq", "in", "gte", "lte", "and"]},

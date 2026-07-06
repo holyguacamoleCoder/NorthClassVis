@@ -12,6 +12,13 @@ _SELECTION_INTENT = re.compile(
 )
 
 
+def teacher_has_selection_intent(message: str | None) -> bool:
+    text = (message or "").strip()
+    if not text:
+        return False
+    return bool(_SELECTION_INTENT.search(text))
+
+
 def augment_user_message_with_ui_scope(
     content: str,
     fc: FilterContext | None,
@@ -23,7 +30,7 @@ def augment_user_message_with_ui_scope(
     text = (content or "").strip()
     if not text or fc is None or not fc.selected_student_ids:
         return content
-    if not _SELECTION_INTENT.search(text):
+    if not teacher_has_selection_intent(text):
         return content
 
     ids = list(fc.selected_student_ids)

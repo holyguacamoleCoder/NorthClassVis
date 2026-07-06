@@ -36,10 +36,16 @@ def validate_decision(
                 "跨轮请传 input.dataset_id，或先对本题 query_data（省略 limit）。"
             )
         if cand.is_slice and not cand.is_broad_scan:
+            scanned = cand.rows_scanned
+            scan_note = (
+                f"，rows_scanned={scanned}"
+                if scanned is not None
+                else ""
+            )
             return (
-                f"Error: 绑定 scope=class_wide 但 {decision.dataset_id} 仅为 "
-                f"{cand.result_rows} 行"
-                f"{f'（limit={cand.query_limit}）' if cand.query_limit else ''}。"
+                f"Error: 绑定 scope=class_wide 但 {decision.dataset_id} 为切片数据集"
+                f"（result_rows={cand.result_rows}{scan_note}"
+                f"{f'，limit={cand.query_limit}' if cand.query_limit else ''}）。"
                 "全班统计请先 query_data（省略 limit）再 aggregate。"
             )
     elif scope == "prior_turn_dataset":

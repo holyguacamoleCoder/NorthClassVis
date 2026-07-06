@@ -127,6 +127,16 @@ export const AGENT_UI = {
   memoryListHint: '具名记忆（停用项为灰色）；滚动笔记见下方。',
 
   reportSection: '报告与导出',
+  reportEvidenceSection: '数据依据验真',
+  reportEvidenceHint: '以下对照本会话查询结果核对报告 Evidence 中的引用标签（与上方执行过程分开）。',
+  reportEvidenceOk: '可核对',
+  reportEvidenceFail: '无法核对',
+  reportValidateSection: '报告交付检查未通过',
+  reportValidateWarnSection: '报告可交付（有提醒）',
+  reportValidatePassSection: '报告交付检查通过',
+  reportValidateFailHint: '报告尚未达到交付标准，请让 Agent 继续修补后再预览。',
+  reportValidateWarnHint: '报告基本可用，仍有少量提醒项；可先预览，建议让 Agent 按需修补。',
+  reportValidatePassHint: '结构、图表与证据引用已通过交付检查，可直接预览。',
   reportPreview: '预览',
   reportExport: '导出',
   reportExportMd: '下载 Markdown',
@@ -159,6 +169,7 @@ export const AGENT_UI = {
   toolStatusRunning: '执行中',
 
   sectionPlan: '分析计划',
+  sectionPlanUpdate: (n) => `分析进展 ${n}`,
   sectionProcess: '执行过程',
   sectionConclusion: '分析结论',
 

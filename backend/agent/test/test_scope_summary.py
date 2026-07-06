@@ -32,6 +32,17 @@ def test_to_summary_dict_include_ids():
     assert full["selected_student_ids"] == ["a", "b"]
 
 
+def test_to_summary_dict_includes_typical_student_ids(monkeypatch):
+    repo_root = AGENT_ROOT.parent.parent
+    monkeypatch.chdir(repo_root)
+    fc = FilterContext(classes=("Class2",), week_range=(13, 15), source="http_body")
+    summary = fc.to_summary_dict()
+    typical = summary.get("typical_student_ids") or []
+    assert len(typical) >= 2
+    assert all(len(str(s)) >= 16 for s in typical)
+    assert "week_view_hint" in summary
+
+
 def test_format_filter_context_section_no_40_id_dump():
     fc = FilterContext(
         classes=("Class1",),
@@ -45,6 +56,7 @@ def test_format_filter_context_section_no_40_id_dump():
     assert "s0, s1" not in text
     assert "s40" not in text
     assert "include_student_ids" in text
+    assert "范围优先级" in text
 
 
 def test_get_current_filter_context_default_summary():

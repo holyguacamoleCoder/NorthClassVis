@@ -19,10 +19,8 @@ def test_postprocess_appends_report_validation(tmp_path, monkeypatch):
     rel = "reports/student/J1/diagnosis.md"
     dest = DATA_DIR / rel
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(
-        (FIXTURES / "student_incomplete.md").read_text(encoding="utf-8"),
-        encoding="utf-8",
-    )
+    original = (FIXTURES / "student_incomplete.md").read_text(encoding="utf-8")
+    dest.write_text(original, encoding="utf-8")
 
     tool_result = f"[Write OK: path={rel}, bytes=100]"
     ctx = AnalysisToolContext(session_id="sess-test")
@@ -37,7 +35,8 @@ def test_postprocess_appends_report_validation(tmp_path, monkeypatch):
         batch_snapshots=[],
     )
     assert "[Report validate]" in out
-    assert "missing required section" in out
+    assert "level=draft" in out
+    assert dest.read_text(encoding="utf-8") == original
 
 
 def test_postprocess_registers_visual_links():

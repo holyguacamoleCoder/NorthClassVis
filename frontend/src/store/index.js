@@ -53,8 +53,8 @@ export default createStore({
     agentHighlightAt: 0, // 最近一次跳转时间戳，用于目标视图高亮
     agentJumpFeedback: '', // 跳转后给聊天浮窗展示的文案，若干秒后清除
     agentSuggestedStudentIds: [], // 仅当用户点击「应用到选择」时才写入 selectedStudentIds，避免牵一发而动全身
-    navClasses: 'Part',
-    navMajors: 'All',
+    navClasses: '未选',
+    navMajors: '未选',
     navSelectedClasses: [],
     navSelectedMajors: [],
     navWeekRange: null,

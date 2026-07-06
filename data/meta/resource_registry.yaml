@@ -49,7 +49,7 @@ resources:
     loader: build_submit_record_joined
     depends_on: [title_info, student_info]
     join_keys: [student_ID, title_ID, class, major, knowledge, sex, age]
-    columns: [index, class, time, state, score, title_ID, method, memory, timeconsume, student_ID, knowledge, sub_knowledge, major, sex, age]
+    columns: [index, class, time, week_index, state, score, title_ID, method, memory, timeconsume, student_ID, knowledge, sub_knowledge, major, sex, age]
     params:
       class:
         required: false

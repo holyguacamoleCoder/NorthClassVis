@@ -49,6 +49,7 @@ import CheckboxDropdown from './CheckboxDropdown.vue'
 import LoadingSpinner from './LoadingSpinner.vue'
 import { setConfig, getConfig } from '@/api/ConfigPanel.js'
 import { mapActions, mapGetters } from 'vuex'
+import { formatFilterSelectionLabel } from '@/utils/filterSelectionLabel.js'
 export default {
   name: 'ConfigPanel',
   components: {
@@ -60,8 +61,8 @@ export default {
       loading: false,
       CheckoutClasses: [],
       CheckoutMajors: [],
-      displayClassesText: 'Part',
-      displayMajorsText: 'All',
+      displayClassesText: '未选',
+      displayMajorsText: '未选',
       weekRangeMin: 0,
       weekRangeMax: 0,
       weekStart: 0,
@@ -95,6 +96,7 @@ export default {
         this.weekEnd = Array.isArray(sel) && sel.length >= 2 ? Math.min(this.weekRangeMax, sel[1]) : wr.max
         if (this.weekStart > this.weekEnd) this.weekStart = this.weekEnd
       }
+      this.syncDisplayLabels()
       console.log('Config loaded successfully');
     } else {
       console.error('Failed to fetch config data:', response);
@@ -151,6 +153,10 @@ export default {
   },
   methods: {
     ...mapActions(['updateConfig']),
+    syncDisplayLabels() {
+      this.displayClassesText = formatFilterSelectionLabel(this.CheckoutClasses)
+      this.displayMajorsText = formatFilterSelectionLabel(this.CheckoutMajors)
+    },
     updateSelectedClasses(selectedClasses, text) {
       this.displayClassesText = text
     },

@@ -13,6 +13,7 @@ RESOURCE_COLUMNS: dict[str, tuple[str, ...]] = {
         "index",
         "class",
         "time",
+        "week_index",
         "state",
         "score",
         "title_ID",
@@ -32,7 +33,7 @@ RESOURCE_COLUMNS: dict[str, tuple[str, ...]] = {
 }
 
 FIELD_RESOURCE_HINTS: dict[str, str] = {
-    "week_index": "week_aggregation（列名 week_index，勿写 week）",
+    "week_index": "submit_record 或 week_aggregation（列名 week_index，where 中可写 week）",
     "peak_value": "week_aggregation",
     "direction": "week_aggregation",
     "score": "submit_record 或 title_info（week_aggregation 无 score）",

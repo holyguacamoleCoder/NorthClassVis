@@ -7,7 +7,7 @@ import pandas as pd
 
 from .exceptions import InvalidParameterError
 from .result_hints import normalize_limit
-from .filter_context import FilterContext
+from .filter_context import FilterContext, nav_scope_suppressed_reason
 from .limits import QueryLimits
 from .registry import default_limits, resolve
 from .result_store import save_result
@@ -20,15 +20,23 @@ PREVIEW_ROW_LIMIT = 50
 def _apply_ui_student_selection(
     df: pd.DataFrame,
     filter_context: FilterContext | None,
-) -> tuple[pd.DataFrame, int | None]:
+    *,
+    scope_suppressed: bool = False,
+) -> tuple[pd.DataFrame, int | None, str | None]:
     """When the scatter plot has a selection, restrict rows to those student_IDs."""
-    if filter_context is None or not filter_context.selected_student_ids:
-        return df, None
+    if scope_suppressed or filter_context is None or not filter_context.selected_student_ids:
+        return df, None, None
     if "student_ID" not in df.columns:
-        return df, None
+        return df, None, None
     ids = set(filter_context.selected_student_ids)
     filtered = df[df["student_ID"].isin(ids)].copy()
-    return filtered, len(ids)
+    if filtered.empty and len(df) > 0:
+        return (
+            df,
+            None,
+            "面板选中学生与本次查询无交集，已忽略面板选区并按查询范围全文分析",
+        )
+    return filtered, len(ids), None
 
 
 @dataclass
@@ -128,6 +136,7 @@ def execute_query(
     spec: QuerySpec,
     *,
     filter_context: FilterContext | None = None,
+    teacher_message: str | None = None,
     limits: QueryLimits | None = None,
     data_dir=None,
     preview_limit: int = PREVIEW_ROW_LIMIT,
@@ -135,8 +144,23 @@ def execute_query(
     """执行查询，返回 TabularResult dict。"""
     limits = limits or default_limits()
     params = dict(spec.resolve_params)
+    scope_suppressed = False
+    scope_note: str | None = None
     if filter_context is not None:
-        for key, value in filter_context.resolve_params_for_resource(spec.resource).items():
+        scope_note = nav_scope_suppressed_reason(
+            filter_context,
+            params,
+            teacher_message=teacher_message,
+            data_dir=data_dir,
+        )
+        scope_suppressed = scope_note is not None
+        nav_scoped, _ = filter_context.effective_nav_scope_for_query(
+            params,
+            teacher_message=teacher_message,
+            resource_id=spec.resource,
+            data_dir=data_dir,
+        )
+        for key, value in nav_scoped.items():
             if key not in params or params[key] is None:
                 params[key] = value
 
@@ -145,7 +169,11 @@ def execute_query(
     if not isinstance(df, pd.DataFrame):
         raise InvalidParameterError("loader 未返回 DataFrame", param="resource")
 
-    df, ui_selection_count = _apply_ui_student_selection(df, filter_context)
+    df, ui_selection_count, stale_selection_note = _apply_ui_student_selection(
+        df,
+        filter_context,
+        scope_suppressed=scope_suppressed,
+    )
 
     allowed = _allowed_columns(resolved)
     if not allowed:
@@ -187,5 +215,15 @@ def execute_query(
         meta = result.setdefault("meta", {})
         existing = list(meta.get("normalization_notes") or [])
         meta["normalization_notes"] = existing + where_notes
+    if scope_note:
+        meta = result.setdefault("meta", {})
+        existing = list(meta.get("normalization_notes") or [])
+        meta["normalization_notes"] = existing + [scope_note]
+        meta["nav_scope_suppressed"] = True
+    elif stale_selection_note:
+        meta = result.setdefault("meta", {})
+        existing = list(meta.get("normalization_notes") or [])
+        meta["normalization_notes"] = existing + [stale_selection_note]
+        meta["nav_scope_suppressed"] = True
     validate_tabular_result(result)
     return result

@@ -164,7 +164,10 @@ export default {
         this.syncNavScopeFromFilterContext(res.filter_context)
       }
       const links = final.report_links || []
-      if (links.length) {
+      const canPreviewReport =
+        final.goal_check?.is_satisfied !== false &&
+        final.report_final_check?.ok !== false
+      if (links.length && canPreviewReport) {
         const latest = links[links.length - 1]
         if (latest?.path && String(latest.path).toLowerCase().endsWith('.md')) {
           this.$nextTick(() => this.openReportPreview(latest))
