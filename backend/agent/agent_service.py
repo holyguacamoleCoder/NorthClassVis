@@ -2,7 +2,7 @@ import os
 import runtime_bootstrap  # noqa: F401  # must run before loop/tools → data → core
 
 from loop import AgentLoop
-from common.llm_client import LLMClient
+from common.llm_router import LLMRouter
 from common.memory import get_memory_manager
 from common.paths import bootstrap_agent_paths
 from data.filter_context import FilterContext, merge_defaults
@@ -191,7 +191,14 @@ def pipeline():
         print("[SessionStart: data catalog injected into agent context]")
     _print_session_banner(session_manager)
 
-    llm_client = LLMClient()
+    llm_router = LLMRouter.from_env()
+    models = llm_router.models_summary()
+    print(
+        "[LLM models: "
+        f"main={models['main']}, consult={models['consult']}, "
+        f"produce={models['produce']}, binding={models['binding']}, "
+        f"compact={models['compact']}]"
+    )
 
     # query_turn循环
     while True:
@@ -273,7 +280,7 @@ def pipeline():
 
         agent_loop = AgentLoop(
             loop_state,
-            llm_client=llm_client,
+            llm_router=llm_router,
             permission=perms,
             hooks=hooks,
         )

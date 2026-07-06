@@ -78,7 +78,9 @@ class IntentConfig:
 
     @classmethod
     def from_env(cls) -> IntentConfig:
+        binding_model = (os.environ.get("OPENAI_MODEL_BINDING") or "").strip() or None
         return cls(
+            model=binding_model,
             disable_llm=_env_flag("BINDING_RESOLVER_DISABLE_LLM"),
             force_fallback=_env_flag("BINDING_RESOLVER_FORCE"),
         )
@@ -323,11 +325,11 @@ def llm_resolve(
     user_body = build_llm_user_body(ctx)
 
     try:
-        # config.model / config.temperature reserved for per-intent client override
         resp = llm_client.create_completion(
             system_prompt=config.system_prompt,
             messages=[{"role": "user", "content": user_body}],
             max_tokens=config.max_tokens,
+            model=config.model,
             langfuse_name="binding_intent",
             langfuse_metadata={"purpose": "binding_intent"},
         )

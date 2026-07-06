@@ -14,6 +14,7 @@ import runtime_bootstrap  # noqa: F401
 
 from common.langfuse_tracing import user_turn_trace
 from common.llm_client import LLMClient
+from common.llm_router import LLMRouter
 from common.logger import get_logger, log_event
 from common.memory import get_memory_manager
 from common.paths import bootstrap_agent_paths
@@ -86,7 +87,8 @@ class AgentHttpService:
         self.session_manager.bootstrap(permission_mode="analyze")
         self.approval_store = ApprovalStore()
         self.approval_store.set_on_awaiting(self._on_job_awaiting_approval)
-        self.llm_client = LLMClient()
+        self.llm_router = LLMRouter.from_env()
+        self.llm_client = self.llm_router.main
         self._jobs: dict[str, AgentJob] = {}
         self._jobs_lock = threading.Lock()
         self.run_registry = RunRegistry()
@@ -605,7 +607,7 @@ class AgentHttpService:
             ):
                 agent_loop = AgentLoop(
                     loop_state,
-                    llm_client=self.llm_client,
+                    llm_router=self.llm_router,
                     permission=perms,
                     hooks=self.hooks,
                     progress_callback=progress_cb,

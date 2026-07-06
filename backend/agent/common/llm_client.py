@@ -109,6 +109,7 @@ class LLMClient:
         messages: List[Dict[str, Any]],
         max_tokens: int = 1024,
         *,
+        model: str | None = None,
         langfuse_name: str | None = None,
         langfuse_metadata: dict[str, Any] | None = None,
     ) -> Optional[Any]:
@@ -119,6 +120,7 @@ class LLMClient:
             tools=None,
             parallel_tool_calls=False,
             max_tokens=max_tokens,
+            model=model,
             langfuse_name=langfuse_name or "llm_text",
             langfuse_metadata=langfuse_metadata,
         )
@@ -151,6 +153,7 @@ class LLMClient:
         max_tokens: int = 1024,
         on_content_delta: Optional[Any] = None,
         *,
+        model: str | None = None,
         langfuse_name: str | None = None,
         langfuse_metadata: dict[str, Any] | None = None,
     ) -> Optional[Any]:
@@ -158,6 +161,7 @@ class LLMClient:
         client = self.get_client()
         if not client:
             raise LLMCallError("LLM client not configured (missing API key or SDK)")
+        resolved_model = model or self._config.model
         try:
             request_messages = list(messages or [])
             if system_prompt:
@@ -181,14 +185,14 @@ class LLMClient:
                 _llm_log,
                 logging.DEBUG,
                 "llm_request",
-                model=self._config.model,
+                model=resolved_model,
                 messages_count=len(request_messages),
                 tools_count=len(tools) if tools else 0,
                 user_preview=truncate_for_log(user_preview),
                 stream=bool(on_content_delta),
             )
             request_kwargs = {
-                "model": self._config.model,
+                "model": resolved_model,
                 "messages": request_messages,
                 "max_tokens": max_tokens,
             }
@@ -211,7 +215,7 @@ class LLMClient:
                 )
             with llm_generation(
                 name=gen_name,
-                model=self._config.model,
+                model=resolved_model,
                 messages=request_messages,
                 tools_count=len(tools) if tools else 0,
                 metadata=langfuse_metadata,

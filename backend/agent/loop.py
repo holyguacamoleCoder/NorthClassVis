@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Callable
 
 from common.langfuse_tracing import agent_turn_span, record_loop_end
 from common.llm_client import LLMClient
+from common.llm_router import LLMRouter
 from common.logger import get_logger, log_event, truncate_for_log
 from common.message import coerce_tool_calls_for_api, normalize_message
 from common.system_prompt import SystemPromptBuilder, SystemPromptContext
@@ -90,6 +91,7 @@ class AgentLoop:
         self,
         loop_state: LoopState,
         llm_client: LLMClient | None = None,
+        llm_router: LLMRouter | None = None,
         compact_config=DEFAULT_CONFIG,
         permission: PermissionManager | None = None,
         hooks: HookManager | None = None,
@@ -99,14 +101,20 @@ class AgentLoop:
         run_registry: Any | None = None,
         job_id: str | None = None,
     ):
-        self.llm_client = llm_client or LLMClient()
+        if llm_router is not None:
+            self.llm_router = llm_router
+        elif llm_client is not None:
+            self.llm_router = LLMRouter.from_single_client(llm_client)
+        else:
+            self.llm_router = LLMRouter.from_env()
+        self.llm_client = self.llm_router.main
         self.loop_state = loop_state or LoopState(messages=[])
         self.compact_config = compact_config
         self.permission = permission or loop_state.permission or PermissionManager()
         self.hooks = hooks if hooks is not None else loop_state.hooks
         self._prompt_builder = SystemPromptBuilder()
         self._recovery = RecoveryHandler(
-            self.llm_client,
+            self._active_main_client(),
             config=recovery_config,
             state=self.loop_state.recovery,
         )
@@ -141,6 +149,14 @@ class AgentLoop:
             except Exception:
                 _log.exception("progress_callback_failed")
 
+    def _active_main_client(self) -> LLMClient:
+        return self.llm_router.main_for_mode(self.permission.mode)
+
+    def _sync_main_llm(self) -> None:
+        active = self._active_main_client()
+        self.llm_client = active
+        self._recovery.llm_client = active
+
     def _system_prompt(self) -> str:
         registry = self.loop_state.skills or get_registry()
         todo_items, _rounds = export_todo_snapshot()
@@ -167,7 +183,7 @@ class AgentLoop:
             return
         self.loop_state.messages = compact_history(
             self.loop_state.messages,
-            self.llm_client,
+            self.llm_router.compact,
             self.loop_state.compact,
             config=self.compact_config,
             reason="auto",
@@ -181,7 +197,7 @@ class AgentLoop:
         tail = extract_tail_messages(messages, config=self.compact_config)
         self.loop_state.messages = compact_history(
             messages,
-            self.llm_client,
+            self.llm_router.compact,
             self.loop_state.compact,
             focus=focus,
             config=self.compact_config,
@@ -222,13 +238,14 @@ class AgentLoop:
             return
         self.loop_state.messages = compact_history(
             self.loop_state.messages,
-            self.llm_client,
+            self.llm_router.compact,
             self.loop_state.compact,
             config=self.compact_config,
             reason="recovery",
         )
 
     def run_turn(self):
+        self._sync_main_llm()
         with agent_turn_span(turn=self.loop_state.turn_count):
             return self._run_turn_body()
 
@@ -266,7 +283,7 @@ class AgentLoop:
             analysis_context=self.loop_state.analysis_context,
             loaded_skills=self.loop_state.loaded_skills,
             loaded_references=self.loop_state.loaded_references,
-            llm_client=self.llm_client,
+            llm_client=self.llm_router.binding,
             filter_context=self.loop_state.filter_context,
             on_tool_event=self._emit_progress,
             run_registry=self._run_registry,
@@ -297,6 +314,7 @@ class AgentLoop:
         return True
 
     def _run_turn_body(self):
+        self._sync_main_llm()
         self._check_cancelled()
         if self._try_modify_bootstrap():
             return True
@@ -509,7 +527,7 @@ class AgentLoop:
             analysis_context=self.loop_state.analysis_context,
             loaded_skills=self.loop_state.loaded_skills,
             loaded_references=self.loop_state.loaded_references,
-            llm_client=self.llm_client,
+            llm_client=self.llm_router.binding,
             filter_context=self.loop_state.filter_context,
             on_tool_event=self._emit_progress,
             run_registry=self._run_registry,
