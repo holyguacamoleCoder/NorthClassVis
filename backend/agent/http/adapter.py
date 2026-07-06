@@ -641,7 +641,11 @@ def _report_paths_from_turn(turn_messages: list[dict[str, Any]]) -> list[str]:
     return paths
 
 
-def _finalize_turn_reports(turn_messages: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _finalize_turn_reports(
+    turn_messages: list[dict[str, Any]],
+    *,
+    session_id: str | None = None,
+) -> dict[str, Any] | None:
     paths = _report_paths_from_turn(turn_messages)
     if not paths:
         return None
@@ -650,6 +654,7 @@ def _finalize_turn_reports(turn_messages: list[dict[str, Any]]) -> dict[str, Any
     return finalize_report_file(
         paths[-1],
         turn_snapshots=_turn_data_snapshots(turn_messages),
+        session_id=session_id,
         write_back=True,
     )
 
@@ -703,7 +708,7 @@ def adapt_legacy_query_response(
         if step.get("status") == "ok"
     ]
     visual_links = _extract_visual_links(turn_messages)
-    report_final_check = _finalize_turn_reports(turn_messages)
+    report_final_check = _finalize_turn_reports(turn_messages, session_id=session_id)
     report_links = _extract_report_links(turn_messages)
     if report_final_check and report_final_check.get("ok") and report_links:
         path = report_final_check.get("path")

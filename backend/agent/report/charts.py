@@ -259,30 +259,82 @@ def repair_report_chart_fences(source: str) -> tuple[str, list[str]]:
     return text, notes
 
 
-def sync_report_chart_week_view_params(
-    source: str,
+def _resolve_week_view_canonical_params(
     session_links: list[dict[str, Any]] | None,
-) -> tuple[str, list[str]]:
-    """Replace placeholder WeekView student_ids in report-chart with session link params."""
-    if not session_links:
-        return source, []
-
-    from data.filter_context import clean_student_ids, is_placeholder_student_id
+    filter_context: Any | None = None,
+) -> tuple[list[str], Any | None, str | None]:
+    """Prefer build_visual_links params; fall back to Nav / class typical students."""
+    from data.filter_context import (
+        FilterContext,
+        clean_student_ids,
+        sample_typical_student_ids,
+    )
 
     week_links = [
         link
-        for link in session_links
+        for link in session_links or []
         if link.get("view") == "WeekView" and isinstance(link.get("params"), dict)
     ]
-    if not week_links:
-        return source, []
+    if week_links:
+        canonical = week_links[-1].get("params") or {}
+        canon_ids = clean_student_ids(canonical.get("student_ids") or [])
+        if canon_ids:
+            return canon_ids, canonical.get("week_range"), "visual_links"
 
-    canonical = week_links[-1].get("params") or {}
-    canon_ids = clean_student_ids(canonical.get("student_ids") or [])
+    if filter_context is None:
+        return [], None, None
+    if not isinstance(filter_context, FilterContext):
+        try:
+            filter_context = FilterContext.from_dict(filter_context)
+        except Exception:
+            return [], None, None
+
+    selected = clean_student_ids(list(filter_context.selected_student_ids or ()))
+    if selected:
+        pick = selected[:3] if len(selected) > 1 else selected[:1]
+        wr = filter_context.week_range
+        return (
+            pick,
+            [wr[0], wr[1]] if wr and len(wr) >= 2 else None,
+            "filter_context",
+        )
+
+    typical = sample_typical_student_ids(
+        filter_context.classes or (),
+        majors=filter_context.majors,
+        week_range=filter_context.week_range,
+        limit=3,
+    )
+    if typical:
+        wr = filter_context.week_range
+        return (
+            typical,
+            [wr[0], wr[1]] if wr and len(wr) >= 2 else None,
+            "filter_context",
+        )
+    return [], None, None
+
+
+def sync_report_chart_week_view_params(
+    source: str,
+    session_links: list[dict[str, Any]] | None,
+    filter_context: Any | None = None,
+) -> tuple[str, list[str]]:
+    """Replace placeholder WeekView student_ids in report-chart with real IDs."""
+    from data.filter_context import clean_student_ids, is_placeholder_student_id
+
+    canon_ids, canon_wr, patch_source = _resolve_week_view_canonical_params(
+        session_links,
+        filter_context,
+    )
     if not canon_ids:
         return source, []
 
-    canon_wr = canonical.get("week_range")
+    source_note = (
+        "patched WeekView report-chart student_ids from build_visual_links"
+        if patch_source == "visual_links"
+        else "patched WeekView report-chart student_ids from filter_context"
+    )
     notes: list[str] = []
 
     def _patch(match: re.Match[str]) -> str:
@@ -304,8 +356,21 @@ def sync_report_chart_week_view_params(
         params["student_ids"] = canon_ids
         if canon_wr is not None:
             params["week_range"] = canon_wr
+        elif not params.get("week_range") and filter_context is not None:
+            try:
+                from data.filter_context import FilterContext
+
+                fc = (
+                    filter_context
+                    if isinstance(filter_context, FilterContext)
+                    else FilterContext.from_dict(filter_context)
+                )
+                if fc.week_range and len(fc.week_range) >= 2:
+                    params["week_range"] = [fc.week_range[0], fc.week_range[1]]
+            except Exception:
+                pass
         obj["params"] = params
-        notes.append("patched WeekView report-chart student_ids from build_visual_links")
+        notes.append(source_note)
         formatted = json.dumps(obj, ensure_ascii=False, indent=2)
         suffix = f"\n\n{trailing}" if trailing else ""
         return f"```report-chart\n{formatted}\n```{suffix}"

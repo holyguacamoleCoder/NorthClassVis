@@ -1,5 +1,6 @@
 import json
 import logging
+from typing import Any
 
 from common.logger import get_logger, log_event
 from context import maybe_persist_output, track_recent_file
@@ -62,6 +63,7 @@ def postprocess_tool_result(
     compact_state: CompactState | None,
     analysis_context: AnalysisToolContext | None,
     batch_snapshots: list[QuerySnapshot],
+    filter_context: Any | None = None,
 ) -> str:
     if tool_name == "query_data" and isinstance(tool_result, str):
         enriched = record_query_result(
@@ -73,6 +75,16 @@ def postprocess_tool_result(
         if enriched:
             tool_result = enriched
         tool_result = append_query_summary_to_result(tool_result)
+
+    if tool_name == "aggregate_data" and isinstance(tool_result, str):
+        enriched = record_query_result(
+            tool_result,
+            parsed_args=parsed_args,
+            analysis_context=analysis_context,
+            batch_snapshots=batch_snapshots,
+        )
+        if enriched:
+            tool_result = enriched
 
     if compact_state and tool_name in PATH_TOOLS:
         path_arg = parsed_args.get("path") or "."
@@ -101,6 +113,7 @@ def postprocess_tool_result(
             tool_result,
             parsed_args=parsed_args,
             analysis_context=analysis_context,
+            filter_context=filter_context,
         )
 
     return tool_result
@@ -129,6 +142,7 @@ def _maybe_append_report_validation(
     *,
     parsed_args: dict,
     analysis_context: AnalysisToolContext | None,
+    filter_context: Any | None = None,
 ) -> str:
     if not (tool_result or "").strip().startswith("["):
         return tool_result
@@ -162,6 +176,7 @@ def _maybe_append_report_validation(
         preview, normalize_notes = normalize_report_deliverable(
             text_on_disk,
             session_visual_links=links,
+            filter_context=filter_context,
         )
 
         result = validate_report(

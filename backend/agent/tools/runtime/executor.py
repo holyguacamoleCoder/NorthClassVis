@@ -459,6 +459,7 @@ def execute_tool_calls(
                 compact_state=compact_state,
                 analysis_context=analysis_context,
                 batch_snapshots=batch_snapshots,
+                filter_context=filter_context,
             )
 
             if hooks is not None:

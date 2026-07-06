@@ -259,11 +259,11 @@ ReAct典型回复范式
 
 
 
-### 3. 数据Context与会话级信息管理
+### 3. 报告生成
 
 ![agent-session-manage](src/README/agent-session-manage.png)
 
-
+![image-20260706210021362](src/README/agent-report-generation.png)
 
 ---
 

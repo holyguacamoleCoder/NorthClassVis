@@ -74,6 +74,24 @@ def test_resolve_ds_cite_mislabeled_aggregate_ref():
     assert "[@ref:" in out["note"]
 
 
+def test_resolve_ds_cite_mislabeled_aggregate_ref_path():
+    ref_id = "b2c3d4e5f6478990abcdef1234567890"
+    save_result(
+        {
+            "schema": [{"name": "students", "type": "integer"}],
+            "rows": [[92]],
+            "meta": {"resource": "submit_record", "truncated": False},
+        },
+        ref_id=ref_id,
+    )
+    out = resolve_ds_cite(None, f"query-results/{ref_id}")
+    assert out is not None
+    assert out["verifiable"] is True
+    assert out["result_ref"] == f"query-results/{ref_id}.json"
+    assert out.get("note")
+    assert "[@ref:" in out["note"]
+
+
 def test_validate_mislabeled_ds_is_warning_not_unknown():
     ref = "query-results/deadbeefdeadbeefdeadbeefdeadbeef.json"
     save_result(
@@ -94,7 +112,7 @@ def test_validate_mislabeled_ds_is_warning_not_unknown():
 def test_validate_evidence_section_warns_ds_uuid_shape():
     body = "[@ds:70b45c43f80c471fb1869b5b8ef0dd60]"
     result = validate_evidence_section(body)
-    assert any("result_ref UUID" in w for w in result.warnings)
+    assert any("实为 result_ref" in w for w in result.warnings)
 
 
 def test_parse_tool_result_from_compacted_summary():

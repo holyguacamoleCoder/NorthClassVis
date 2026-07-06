@@ -20,6 +20,7 @@ from report.finalize import normalize_report_deliverable  # noqa: E402
 
 def test_clean_student_ids_rejects_placeholders():
     assert is_placeholder_student_id("student1")
+    assert is_placeholder_student_id("代表学生ID1")
     clean = clean_student_ids(["student1", "6ae7d356ba998218af82"])
     assert clean == ["6ae7d356ba998218af82"]
 
@@ -74,3 +75,27 @@ def test_sync_report_chart_week_view_params(monkeypatch):
     )
     assert "student1" not in normalized
     assert any("patched" in n for n in fix_notes)
+
+
+def test_sync_report_chart_from_filter_context_without_visual_links(monkeypatch):
+    repo_root = AGENT_ROOT.parent.parent
+    monkeypatch.chdir(repo_root)
+    from data.filter_context import FilterContext
+
+    fc = FilterContext(classes=("Class2",), week_range=(13, 15), source="http_body")
+    md = """## week_trend
+
+```report-chart
+{
+  "view": "WeekView",
+  "params": {
+    "week_range": [13, 15],
+    "student_ids": ["代表学生ID1", "代表学生ID2"]
+  }
+}
+```
+"""
+    patched, notes = sync_report_chart_week_view_params(md, None, fc)
+    assert any("filter_context" in n for n in notes)
+    assert "代表学生ID1" not in patched
+    assert "79fdbcf16db75f75383a" in patched or "6ae7d356ba998218af82" in patched

@@ -14,6 +14,7 @@ _META_DIR = PROJECT_ROOT / "data" / "meta"
 _DEFAULT_PROTOCOL_PATH = _META_DIR / "evidence_cite_protocol.yaml"
 
 _RESULT_REF_TOKEN = re.compile(r"^[0-9a-f]{32}(?:\.json)?$", re.I)
+_RESULT_REF_PATH = re.compile(r"^query-results/[0-9a-f]{32}\.json$", re.I)
 
 
 def normalize_result_ref(target: str) -> str:
@@ -28,7 +29,13 @@ def normalize_result_ref(target: str) -> str:
 
 
 def is_result_ref_token(target: str) -> bool:
-    return bool(_RESULT_REF_TOKEN.match(str(target or "").strip()))
+    raw = str(target or "").strip().replace("\\", "/")
+    if _RESULT_REF_TOKEN.match(raw):
+        return True
+    if raw.startswith("query-results/"):
+        norm = raw if raw.endswith(".json") else f"{raw}.json"
+        return bool(_RESULT_REF_PATH.match(norm))
+    return False
 
 
 @lru_cache(maxsize=1)
@@ -151,8 +158,6 @@ def validate_evidence_section(
         else:
             result.errors.append("Evidence section is empty")
 
-    from .evidence_cites import is_result_ref_token, normalize_result_ref
-
     for cite in tag_cites:
         if cite.kind == "ref" and not cite.target.startswith("query-results/"):
             result.warnings.append(
@@ -161,7 +166,7 @@ def validate_evidence_section(
         if cite.kind == "ds" and is_result_ref_token(cite.target):
             ref = normalize_result_ref(cite.target)
             result.warnings.append(
-                f"[@ds:{cite.target}] 形如 result_ref UUID；聚合结果请用 [@ref:{ref}]，"
+                f"[@ds:{cite.target}] 实为 result_ref；聚合输出请用 [@ref:{ref}]，"
                 "query 数据集请用 list_datasets 返回的 ds_… id"
             )
 

@@ -86,6 +86,7 @@ def normalize_report_deliverable(
     text: str,
     *,
     session_visual_links: list[dict[str, Any]] | None = None,
+    filter_context: Any | None = None,
     inject_missing_charts: bool = True,
 ) -> tuple[str, list[str]]:
     """Repair charts/sections in memory before validate or write-back."""
@@ -96,9 +97,12 @@ def normalize_report_deliverable(
     notes.extend(n)
     text, n = repair_report_chart_fences(text)
     notes.extend(n)
-    if session_visual_links:
-        text, n = sync_report_chart_week_view_params(text, session_visual_links)
-        notes.extend(n)
+    text, n = sync_report_chart_week_view_params(
+        text,
+        session_visual_links,
+        filter_context,
+    )
+    notes.extend(n)
     text, n = dedupe_report_sections(text)
     notes.extend(n)
     text, n = dedupe_report_chart_fences(text)
@@ -117,6 +121,7 @@ def finalize_report_markdown(
     path: str | Path | None = None,
     analysis_context: AnalysisToolContext | None = None,
     session_visual_links: list[dict[str, Any]] | None = None,
+    filter_context: Any | None = None,
 ) -> dict[str, Any]:
     """Normalize then validate; does not write to disk."""
     links = session_visual_links
@@ -125,6 +130,7 @@ def finalize_report_markdown(
     normalized, notes = normalize_report_deliverable(
         text,
         session_visual_links=links,
+        filter_context=filter_context,
     )
     tier = infer_tier_from_path(path) if path else None
     validation = validate_report(
@@ -139,12 +145,31 @@ def finalize_report_markdown(
     return validation
 
 
+def _load_filter_context_for_session(session_id: str | None) -> Any | None:
+    if not session_id:
+        return None
+    from common.paths import AGENT_STATE_DIR
+    from data.filter_context import FilterContext
+
+    path = AGENT_STATE_DIR / "sessions" / session_id / "filter_context.json"
+    if not path.is_file():
+        return None
+    try:
+        import json
+
+        return FilterContext.from_dict(json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+
+
 def finalize_report_file(
     rel_path: str | Path,
     *,
     analysis_context: AnalysisToolContext | None = None,
     session_visual_links: list[dict[str, Any]] | None = None,
     turn_snapshots: list[QuerySnapshot] | None = None,
+    session_id: str | None = None,
+    filter_context: Any | None = None,
     write_back: bool = True,
 ) -> dict[str, Any]:
     """Last-mile check: auto-fix, optionally persist, return validation JSON."""
@@ -166,12 +191,18 @@ def finalize_report_file(
     if ctx is None and turn_snapshots is not None:
         ctx = AnalysisToolContext(turn_snapshots=list(turn_snapshots))
 
+    fc = filter_context
+    if fc is None:
+        sid = session_id or (ctx.session_id if ctx else None)
+        fc = _load_filter_context_for_session(sid)
+
     original = full.read_text(encoding="utf-8")
     result = finalize_report_markdown(
         original,
         path=rel_norm,
         analysis_context=ctx,
         session_visual_links=session_visual_links,
+        filter_context=fc,
     )
     normalized = result.pop("normalized_text", original)
     fixes = result.pop("fixes", [])

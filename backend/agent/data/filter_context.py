@@ -15,6 +15,10 @@ _PLACEHOLDER_STUDENT_RE = re.compile(
     r"^(student\d*|stu\d*|user\d*|example|dummy|test|placeholder|xxx+|\?+)$",
     re.I,
 )
+_CHINESE_PLACEHOLDER_STUDENT_RE = re.compile(
+    r"(代表|示例|样例|虚拟).*(学生|学号)|学号\s*\d+$",
+    re.I,
+)
 
 
 def is_placeholder_student_id(value: str) -> bool:
@@ -24,6 +28,10 @@ def is_placeholder_student_id(value: str) -> bool:
     if text.startswith("<") and text.endswith(">"):
         return True
     if _PLACEHOLDER_STUDENT_RE.match(text):
+        return True
+    if _CHINESE_PLACEHOLDER_STUDENT_RE.search(text):
+        return True
+    if re.search(r"ID\d+$", text, re.I) and not is_valid_student_id(text):
         return True
     return text.lower() in ("student_id", "studentid", "unknown", "n/a", "na")
 
