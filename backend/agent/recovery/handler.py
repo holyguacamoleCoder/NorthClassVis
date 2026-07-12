@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from common.llm_client import LLMCallError, LLMClient
-from common.message import coerce_tool_calls_for_api
+from common.message import attach_reasoning_from_sdk, coerce_tool_calls_for_api
 from common.logger import get_logger, log_event
 
 from .backoff import sleep_backoff
@@ -27,6 +27,7 @@ def _append_assistant_from_response(messages: list, response: Any) -> None:
     }
     if getattr(msg, "tool_calls", None):
         assistant_message["tool_calls"] = coerce_tool_calls_for_api(msg.tool_calls)
+    attach_reasoning_from_sdk(assistant_message, msg)
     messages.append(assistant_message)
 
 

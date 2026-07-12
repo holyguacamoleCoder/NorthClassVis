@@ -191,25 +191,50 @@ def _sanitize_tool_protocol(messages: list[dict[str, Any]]) -> list[dict[str, An
 
 def repair_stored_message(msg: dict[str, Any]) -> dict[str, Any]:
     """Fix persisted assistant tool_calls before the next LLM request."""
+    msg = dict(msg)
     if msg.get("role") == "assistant" and msg.get("tool_calls"):
         api_calls = coerce_tool_calls_for_api(msg["tool_calls"])
         if api_calls:
-            msg = dict(msg)
             msg["tool_calls"] = api_calls
             if not (msg.get("content") or "").strip():
                 msg["content"] = None
         else:
-            msg = dict(msg)
             msg.pop("tool_calls", None)
     return msg
 
 
+def reasoning_content_from_sdk(message: Any) -> str | None:
+    """Extract DeepSeek thinking-mode chain-of-thought from an SDK message object."""
+    if message is None:
+        return None
+    if isinstance(message, dict):
+        raw = message.get("reasoning_content")
+    else:
+        raw = getattr(message, "reasoning_content", None)
+    if isinstance(raw, str) and raw.strip():
+        return raw
+    return None
+
+
+def attach_reasoning_from_sdk(target: dict[str, Any], source: Any) -> dict[str, Any]:
+    """Copy reasoning_content from an SDK assistant message into a stored dict."""
+    rc = reasoning_content_from_sdk(source)
+    if rc:
+        target["reasoning_content"] = rc
+    return target
+
+
 # Openai规范
-def normalize_message(messages):
+def normalize_message(messages, *, include_reasoning_content: bool | None = None):
     """
     Normalize messages for OpenAI Chat Completions tool-calling protocol.
     Keep only required fields and preserve tool linkage.
     """
+    if include_reasoning_content is None:
+        from common.llm_provider import should_include_reasoning_content_in_api
+
+        include_reasoning_content = should_include_reasoning_content_in_api()
+
     normalized_messages = []
 
     for msg in messages:
@@ -232,6 +257,14 @@ def normalize_message(messages):
                 clean["tool_calls"] = api_calls
                 if not clean.get("content"):
                     clean["content"] = None
+
+        if (
+            include_reasoning_content
+            and role == "assistant"
+            and isinstance(msg.get("reasoning_content"), str)
+            and msg["reasoning_content"].strip()
+        ):
+            clean["reasoning_content"] = msg["reasoning_content"]
 
         if role == "tool" and msg.get("tool_call_id"):
             clean["tool_call_id"] = msg["tool_call_id"]

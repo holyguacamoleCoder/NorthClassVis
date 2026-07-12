@@ -239,15 +239,13 @@ python -m agent.eval.run_binding_online_eval   # 需配置 LLM
 
 ### 1. 双入口
 
- a. 工作台网址：<http://localhost:8080/agent>
+a. 工作台网址：<http://localhost:8080/agent>
 
 ![agent-entry-float](src/README/agent-entry-page.png)
 
- b. 进入浮窗：点击右上角“浮窗”按钮进入dashboard，agent变为浮窗
+b. 进入浮窗：点击右上角“浮窗”按钮进入dashboard，agent变为浮窗
 
 ![agent-entry-page](src/README/agent-entry-float.png)
-
-
 
 ### 2. 三段式分析与工具透明
 
@@ -257,13 +255,54 @@ ReAct典型回复范式
 
 <img src="src/README/agent-three-segment.png" alt="agent-three-segment" style="zoom: 67%;" />
 
-
-
 ### 3. 报告生成
 
 ![agent-session-manage](src/README/agent-session-manage.png)
 
 ![image-20260706210021362](src/README/agent-report-generation.png)
+
+---
+
+### 4. 报告样例：Class2 班级总览
+
+完整交付物见 [`src/README/class2-overview.md`](src/README/samples/class2-overview.md)  
+（由 Agent 在 **produce** 模式下自动生成）
+
+**教师输入（示意）**
+
+> 为 Class2 写第 13–15 周班级学情总览，包含趋势、薄弱知识点和教学建议。
+
+**Agent 逻辑（三层）**
+
+1. **模板层** — 加载 `class` 报告规范，确定 8 个标准章节
+2. **数据层** — `inspect_schema` → `query_data` → `aggregate_data`，从 CSV 实时聚合
+3. **交付层** — 分章 `edit_file` 写入；Evidence 用 `[@ref:…]` 溯源；`report-chart` 与五视图联动
+
+**样例中的关键结论**
+
+| 发现                        | 数据依据（报告内章节）               |
+| --------------------------- | ------------------------------------ |
+| 全班均分 1.46/3.0           | `summary` + Evidence ref             |
+| 周 peak 三连降（0.78→0.49） | `week_trend` + WeekView 图           |
+| 最薄弱 `r8S3g`（0.75）      | `question_anchors` + QuestionView 图 |
+| 班内两极分化（3.0 vs 0.74） | `distribution` + ScatterView 图      |
+
+**分章写入（为何不是一次性生成）**
+
+| 步骤 | 工具         | 对应章节                                    |
+| ---- | ------------ | ------------------------------------------- |
+| 1    | `write_file` | 标题 + 全部 `##` 骨架 + `scope` / `summary` |
+| 2…n  | `edit_file`  | 逐章填充 `week_trend` … `actions`           |
+| 末   | `edit_file`  | `evidence`、`limitations`（cite 标签）      |
+
+`edit_file` 用 `## 章节名` 整节替换，避免把整篇报告反复塞进模型上下文。
+
+**与静态知识库的区别**
+
+- `overview.md` 里的**数字、趋势、排名** → 运行时 `aggregate_data`
+- 题目/知识点**语义说明**（考什么、概念是什么）→ 规划中的 RAG 静态库，**不**写进班级总览的数字结论
+
+![报告预览](src/README/demo-class2-report.jpg)
 
 ---
 

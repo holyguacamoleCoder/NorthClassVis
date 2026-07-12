@@ -9,7 +9,11 @@ from common.langfuse_tracing import agent_turn_span, record_loop_end
 from common.llm_client import LLMClient
 from common.llm_router import LLMRouter
 from common.logger import get_logger, log_event, truncate_for_log
-from common.message import coerce_tool_calls_for_api, normalize_message
+from common.message import (
+    attach_reasoning_from_sdk,
+    coerce_tool_calls_for_api,
+    normalize_message,
+)
 from common.system_prompt import SystemPromptBuilder, SystemPromptContext
 from context import (
     DEFAULT_CONFIG,
@@ -411,6 +415,8 @@ class AgentLoop:
                 assistant_message["content"] = None
         elif response.message.content:
             assistant_message["content"] = response.message.content
+
+        attach_reasoning_from_sdk(assistant_message, response.message)
 
         # 如果LLM没有工具调用，则结束循环
         if response.finish_reason != "tool_calls":

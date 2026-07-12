@@ -196,6 +196,18 @@ class LLMClient:
                 "messages": request_messages,
                 "max_tokens": max_tokens,
             }
+            from common.llm_provider import deepseek_thinking_enabled, is_deepseek_provider
+
+            if is_deepseek_provider(self._config.base_url):
+                request_kwargs["extra_body"] = {
+                    "thinking": {
+                        "type": (
+                            "enabled"
+                            if deepseek_thinking_enabled(self._config.base_url)
+                            else "disabled"
+                        )
+                    }
+                }
             if tools:
                 request_kwargs["tools"] = tools
                 request_kwargs["tool_choice"] = "auto"
@@ -279,6 +291,7 @@ class LLMClient:
             try:
                 stream = client.chat.completions.create(**request_kwargs)
                 content_parts: list[str] = []
+                reasoning_parts: list[str] = []
                 tool_calls_acc: dict[int, dict[str, str]] = {}
                 finish_reason = None
 
@@ -294,6 +307,9 @@ class LLMClient:
                     if delta.content:
                         content_parts.append(delta.content)
                         on_content_delta(delta.content)
+                    reasoning_delta = getattr(delta, "reasoning_content", None)
+                    if reasoning_delta:
+                        reasoning_parts.append(reasoning_delta)
                     if delta.tool_calls:
                         for tc in delta.tool_calls:
                             idx = tc.index
@@ -311,6 +327,7 @@ class LLMClient:
 
                 resp = self._build_streamed_response(
                     content="".join(content_parts),
+                    reasoning_content="".join(reasoning_parts) or None,
                     tool_calls_acc=tool_calls_acc,
                     finish_reason=finish_reason,
                 )
@@ -321,7 +338,13 @@ class LLMClient:
                 raise
 
     @staticmethod
-    def _build_streamed_response(*, content: str, tool_calls_acc: dict, finish_reason):
+    def _build_streamed_response(
+        *,
+        content: str,
+        reasoning_content: str | None = None,
+        tool_calls_acc: dict,
+        finish_reason,
+    ):
         class _Fn:
             def __init__(self, name, arguments):
                 self.name = name
@@ -333,9 +356,10 @@ class LLMClient:
                 self.function = _Fn(name, arguments)
 
         class _Message:
-            def __init__(self, content, tool_calls):
+            def __init__(self, content, tool_calls, reasoning_content=None):
                 self.content = content or None
                 self.tool_calls = tool_calls or None
+                self.reasoning_content = reasoning_content or None
 
         class _Choice:
             def __init__(self, message, finish_reason):
@@ -359,7 +383,7 @@ class LLMClient:
             elif finish_reason is None:
                 finish_reason = "tool_calls"
 
-        message = _Message(content, tool_calls)
+        message = _Message(content, tool_calls, reasoning_content)
         if tool_calls and finish_reason != "tool_calls":
             finish_reason = "tool_calls"
         if not tool_calls and finish_reason is None:
