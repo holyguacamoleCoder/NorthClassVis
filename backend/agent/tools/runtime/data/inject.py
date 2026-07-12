@@ -23,6 +23,8 @@ def inject_data_tool_context(
     filter_context: FilterContext | None = None,
 ) -> dict[str, Any]:
     args = dict(parsed_args)
+    if tool_name == "review_report" and analysis_context is not None:
+        args["_analysis_context"] = analysis_context
     if tool_name in ADAPTER_CONTEXT_TOOLS and filter_context is not None:
         args["_filter_context"] = filter_context
 

@@ -18,7 +18,8 @@ description: >
 - [ ] 4. **build_visual_links** — 分析结论对应的图表 params；`report-chart` 与之完全一致
 - [ ] 5. **分章写入** — 见下方「分章续写」
 - [ ] 6. **Evidence + Limitations** — 末章含 cite 标签
-- [ ] 7. 确认 `[Report validate]` 无 error
+- [ ] 7. **修订通读** — `review_report(path=…)` 跨节一致性检查；按 fix 用 `edit_file` `## <id>` 整节替换
+- [ ] 8. 确认 `[Report validate]` 无 error
 
 ## Scope → Reference
 
@@ -38,10 +39,14 @@ description: >
 | 1 | `write_file` | 标题 + 全部 `## <id>` 标题 + `scope` / `summary` 首稿 |
 | 2…n | `edit_file` | 按 tier reference 顺序填充各分析章 |
 | 末 | `edit_file` | `evidence`（cite 标签）、`limitations` |
+| 修订 | `review_report` | 全部必填章节写完后；返回 issues，**不**回传全文 |
+| 修补 | `edit_file` | 按 review 的 fix 逐节替换；再 `review_report` 直至 status: ok |
 
 分章 `edit_file`：`old_text` 首行写 `## <章节标题>` 即可**整节替换**（正文不必与文件完全一致）；精确替换时须与 `read_file` 原文一致。postprocess 自动改图后请先 `read_file` 或继续用 `##` 整节替换。
 
-禁止整篇重写（除非 validate 报大量 error）；禁止 `read_file` 旧 `reports/`。
+**修订阶段**：优先 `review_report`（磁盘通读、仅返回问题清单），避免为通读而 `read_file` 整篇占满上下文。仅当 `review_report` fix 需要核对原文时，再 `read_file` 单节或短 excerpt。
+
+禁止整篇重写（除非 validate 报大量 error）；禁止 `read_file` 旧 `reports/`（修订当前会话正在写的同一路径除外）。
 
 ## 标准路径
 

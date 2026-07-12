@@ -144,6 +144,12 @@ def test_filter_tools_includes_session_in_analyze():
 def test_filter_tools_includes_write_in_produce():
     names = {t["function"]["name"] for t in filter_tools(TOOLS, CapabilityMode.PRODUCE)}
     assert "write_file" in names
+    assert "review_report" in names
+
+
+def test_filter_tools_excludes_review_in_analyze():
+    names = {t["function"]["name"] for t in filter_tools(TOOLS, CapabilityMode.ANALYZE)}
+    assert "review_report" not in names
 
 
 def test_safe_path_error_message():

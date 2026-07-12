@@ -43,6 +43,7 @@ from tools.handlers.todo_write import (
 )
 from hints.plan_checks import append_data_tool_checks
 from hints.report_checks import append_report_write_checks
+from hints.report_revision import append_report_revision_hint
 from hints.data_chain_guard import (
     aggregate_errors_in_batch,
     query_signatures_in_batch,
@@ -296,6 +297,7 @@ class AgentLoop:
 
         append_data_tool_checks(tool_calls, tool_results)
         append_report_write_checks(tool_calls, tool_results)
+        append_report_revision_hint(tool_calls, tool_results)
         synced = _sync_tool_results_to_messages(
             self.loop_state.messages,
             tool_calls,
@@ -620,6 +622,7 @@ class AgentLoop:
         
         append_data_tool_checks(tool_calls, tool_results)
         append_report_write_checks(tool_calls, tool_results)
+        append_report_revision_hint(tool_calls, tool_results)
 
         report_guard = self._check_report_validate_loop_guard(tool_calls, tool_results)
         if report_guard:

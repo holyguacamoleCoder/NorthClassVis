@@ -20,6 +20,7 @@ DATA_QUERY_TOOLS = frozenset({"query_data", "aggregate_data"})
 ADAPTER_TOOLS = frozenset({"get_current_filter_context", "build_visual_links"})
 SESSION_TOOLS = frozenset({"todo_write", "compact", "memory", "save_memory"})
 WRITE_TOOLS = frozenset({"write_file", "edit_file"})
+REPORT_REVIEW_TOOLS = frozenset({"review_report"})
 
 MODE_TOOL_ALLOWLIST: dict[CapabilityMode, frozenset[str]] = {
     CapabilityMode.CONSULT: CONSULT_TOOLS,
@@ -33,5 +34,6 @@ MODE_TOOL_ALLOWLIST: dict[CapabilityMode, frozenset[str]] = {
     | DATA_QUERY_TOOLS
     | SESSION_TOOLS
     | WRITE_TOOLS
+    | REPORT_REVIEW_TOOLS
     | ADAPTER_TOOLS,
 }

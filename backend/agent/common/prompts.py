@@ -52,6 +52,7 @@ _MODE_EXTENSIONS: dict[str, str] = {
 - **在 analyze 基础上**：可**写入** `reports/`（所有 Markdown 报告）；`exports/` 仅非报告导出
 - **报告写作规范**：produce 下 `report-writing` 自动登记；正文在 load_skill 的 tool result（勿重复 load）
 - **标准**个体/班级/专业总览：按需 `load_reference` 对应 tier 参考（如 student/class/major）
+- **修订通读**：全部章节写完后用 `review_report` 做跨节一致性检查（返回 issues，非全文）
 - **通用**报告（窄窗、备忘、对比）：仅遵守 `report-writing`，路径如 `reports/notes/<主题>.md`；勿硬套 analysis-*""",
 }
 
@@ -71,6 +72,7 @@ _LOAD_SKILL_TABLE = """## 何时 load_skill
 | 专业、跨班 | `load_reference("major")` |
 | 不知 resource / 字段、纯探查 | `data-exploration` |
 | 写报告（produce） | `report-writing`（produce 自动登记）；标准诊断/总览再按需 `load_reference` |
+| 报告修订（produce） | 章节写完后 `review_report` → 按 fix `edit_file` ## 整节替换 |
 | analyze 中向教师展示图 | `build_visual_links`（与后续 report-chart params 一致） |
 
 规划约束见 `meta/analysis_ontology.yaml`。所有报告写入 `reports/`；禁止 read 参考旧稿。"""

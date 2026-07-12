@@ -9,6 +9,7 @@ from typing import Any, Callable
 from data.registry import get_registry_defaults, list_agent_resource_ids
 
 from ..handlers.base_tool import run_edit_file, run_list_files, run_read_file, run_write_file
+from ..handlers.report_tools import run_review_report
 from ..handlers.compact import run_compact
 from ..handlers.context_tools import run_build_visual_links, run_get_current_filter_context
 from ..handlers.data_tools import (
@@ -191,6 +192,7 @@ CONCURRENCY_SAFE_TOOL = frozenset({
     "get_current_filter_context",
     "build_visual_links",
     "load_reference",
+    "review_report",
 })
 CONCURRENCY_UNSAFE_TOOL = frozenset({"write_file", "edit_file"})
 
@@ -304,6 +306,27 @@ _EDIT_FILE_PARAMS = {
         "new_text": {"type": "string"},
     },
     "required": ["path", "old_text", "new_text"],
+}
+
+_REVIEW_REPORT_PARAMS = {
+    "type": "object",
+    "properties": {
+        "path": {
+            "type": "string",
+            "description": (
+                "Report markdown under reports/ (e.g. reports/student/<id>/diagnosis.md). "
+                "Reads from disk; returns cross-section issues only, not the full file."
+            ),
+        },
+        "validation_level": {
+            "type": "string",
+            "enum": ["draft", "deliver", "strict"],
+            "description": (
+                "Validation strictness. Default deliver — use after all required sections are filled."
+            ),
+        },
+    },
+    "required": ["path"],
 }
 
 _TODO_WRITE_PARAMS = {
@@ -698,6 +721,20 @@ MANIFEST: tuple[ToolDefinition, ...] = (
         ),
         parameters=_EDIT_FILE_PARAMS,
         handler=run_edit_file,
+    ),
+    ToolDefinition(
+        name="review_report",
+        description=(
+            "Cross-section consistency review for an on-disk reports/*.md deliverable "
+            "(produce mode only). "
+            "Use when: all required ## sections are filled — revision pass before delivery; "
+            "after review_report hints appear; teacher asks to check coherence. "
+            "Do NOT use for: consult/analyze; files outside reports/; substituting read_file "
+            "for routine section fills. "
+            "Returns structured issues + deliver-level validate summary — not the full markdown."
+        ),
+        parameters=_REVIEW_REPORT_PARAMS,
+        handler=run_review_report,
     ),
 
     # Session Tools
