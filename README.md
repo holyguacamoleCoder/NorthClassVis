@@ -265,7 +265,7 @@ ReAct典型回复范式
 
 ### 4. 报告样例：Class2 班级总览
 
-完整交付物见 [`src/README/class2-overview.md`](src/README/samples/class2-overview.md)  
+完整交付物见 [`src/README/class2-overview.md`](src/README/class2-overview.md)  
 （由 Agent 在 **produce** 模式下自动生成）
 
 **教师输入（示意）**
