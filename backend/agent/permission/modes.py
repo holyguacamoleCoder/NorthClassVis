@@ -21,6 +21,7 @@ ADAPTER_TOOLS = frozenset({"get_current_filter_context", "build_visual_links"})
 SESSION_TOOLS = frozenset({"todo_write", "compact", "memory", "save_memory"})
 WRITE_TOOLS = frozenset({"write_file", "edit_file"})
 REPORT_REVIEW_TOOLS = frozenset({"review_report"})
+SUBAGENT_TOOLS = frozenset({"run_subagent"})
 
 MODE_TOOL_ALLOWLIST: dict[CapabilityMode, frozenset[str]] = {
     CapabilityMode.CONSULT: CONSULT_TOOLS,
@@ -28,6 +29,7 @@ MODE_TOOL_ALLOWLIST: dict[CapabilityMode, frozenset[str]] = {
     | DATA_INSPECT_TOOLS
     | DATA_QUERY_TOOLS
     | SESSION_TOOLS
+    | SUBAGENT_TOOLS
     | ADAPTER_TOOLS,
     CapabilityMode.PRODUCE: FILE_READ_TOOLS | {"list_files", "load_skill", "load_reference"}
     | DATA_INSPECT_TOOLS
@@ -35,5 +37,6 @@ MODE_TOOL_ALLOWLIST: dict[CapabilityMode, frozenset[str]] = {
     | SESSION_TOOLS
     | WRITE_TOOLS
     | REPORT_REVIEW_TOOLS
+    | SUBAGENT_TOOLS
     | ADAPTER_TOOLS,
 }

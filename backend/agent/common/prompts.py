@@ -73,6 +73,7 @@ _LOAD_SKILL_TABLE = """## 何时 load_skill
 | 不知 resource / 字段、纯探查 | `data-exploration` |
 | 写报告（produce） | `report-writing`（produce 自动登记）；标准诊断/总览再按需 `load_reference` |
 | 报告修订（produce） | 章节写完后 `review_report` → 按 fix `edit_file` ## 整节替换 |
+| 长报告流水线（analyze/produce） | `run_subagent(data_analyst)` → 父 Agent 整合 → `run_subagent(report_writer)` → 可选 `report_reviewer` |
 | analyze 中向教师展示图 | `build_visual_links`（与后续 report-chart params 一致） |
 
 规划约束见 `meta/analysis_ontology.yaml`。所有报告写入 `reports/`；禁止 read 参考旧稿。"""

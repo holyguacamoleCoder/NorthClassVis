@@ -32,6 +32,7 @@ from runs.derive import resolve_reaggregate_source
 from runs.modify_resolver import resolve_modify_intent
 from ..slash_commands import SlashCommand, execute_slash_command, list_skills_payload, parse_slash_command
 from .adapter import adapt_legacy_query_response, adapt_turn_response, serialize_messages
+from session.turn_trace import build_turn_trace_record
 from .approval import ApprovalStore, HttpApprovalHandler
 from .progress import (
     empty_job_progress,
@@ -476,6 +477,7 @@ class AgentHttpService:
                 job.status = JobStatus.COMPLETED
                 job.result = result
                 job.updated_at = time.time()
+                self._record_turn_trace(session, result, job.progress)
         except TurnCancelled:
             log_event(_log, logging.INFO, "agent_job_cancelled", job_id=job_id)
             with self._jobs_lock:
@@ -652,11 +654,26 @@ class AgentHttpService:
             "updated_at": session.updated_at,
             "message_count": len(session.messages),
             "messages": serialize_messages(session.messages),
+            "turn_traces": self.session_manager.store.load_turn_traces(session.id),
             "todo_items": list(session.todo_items or []),
             "loaded_skills": list(session.loaded_skills or []),
             "loaded_references": list(session.loaded_references or []),
             "filter_context": session.filter_context,
         }
+
+    def _record_turn_trace(
+        self,
+        session: ChatSession,
+        result: dict[str, Any],
+        progress: dict[str, Any] | None,
+    ) -> None:
+        record = build_turn_trace_record(
+            session_id=session.id,
+            messages=session.messages,
+            result=result,
+            progress=progress,
+        )
+        self.session_manager.store.append_turn_trace(session.id, record)
 
     def _job_payload(self, job: AgentJob) -> dict[str, Any]:
         payload: dict[str, Any] = {

@@ -145,7 +145,7 @@ export default {
       const preservedMemory = msg.memory_saved
       let final = legacyToAssistantMessage(res)
       final = mergeRunMetaIntoPayload(final, msg)
-      Object.assign(msg, final, { streaming: false, revealPhase: 1, statusHint: '', _runningTool: null })
+      Object.assign(msg, final, { streaming: false, revealPhase: 1, statusHint: '', _runningTool: null, _runningSubagent: null })
       if (idx > 0 && Array.isArray(res?.messages)) {
         const lastUser = [...res.messages].reverse().find((m) => m.role === 'user')
         const userBubble = this.messages[idx - 1]
@@ -305,7 +305,7 @@ export default {
       this.permissionMode = session.permission_mode || 'analyze'
       this.todoItems = session.todo_items || []
       this.loadedSkills = session.loaded_skills || []
-      let ui = sessionMessagesToUi(session.messages || [])
+      let ui = sessionMessagesToUi(session.messages || [], session.turn_traces || [])
       if (Array.isArray(runs) && runs.length) {
         ui = enrichUiMessagesWithRuns(ui, runs)
       }

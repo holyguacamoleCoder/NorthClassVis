@@ -118,6 +118,7 @@
                 :summary-status-text="summaryStatusText"
                 :visual-link-label="visualLinkLabel"
                 :running-tool="msg.streaming ? (msg._runningTool || null) : null"
+                :running-subagent="msg.streaming ? (msg._runningSubagent || null) : null"
                 @visual-link-click="onVisualLinkClick"
                 @report-preview="openReportPreview"
                 @report-download="downloadReport"

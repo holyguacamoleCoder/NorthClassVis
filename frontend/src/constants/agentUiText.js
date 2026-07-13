@@ -168,6 +168,13 @@ export const AGENT_UI = {
   toolStatusBlocked: '拦截',
   toolStatusRunning: '执行中',
 
+  subagentStepTitle: '子 Agent',
+  subagentTask: '委派任务',
+  subagentInnerTools: '子循环工具',
+  subagentRefs: '数据引用',
+  subagentSummary: '返回摘要',
+  subagentTurns: (n) => `${n} 轮`,
+
   sectionPlan: '分析计划',
   sectionPlanUpdate: (n) => `分析进展 ${n}`,
   sectionProcess: '执行过程',

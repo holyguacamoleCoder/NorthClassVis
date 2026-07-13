@@ -48,6 +48,7 @@
       v-if="showProcess(msg)"
       :items="processItems(msg)"
       :running-tool="msg.streaming ? runningTool : null"
+      :running-subagent="msg.streaming ? runningSubagent : null"
       :streaming="!!msg.streaming"
       :default-expanded="processDefaultExpanded(msg)"
       :run-actions-enabled="!loading || !!msg.streaming"
@@ -200,6 +201,7 @@ export default {
     summaryStatusText: { type: Function, required: true },
     visualLinkLabel: { type: Function, required: true },
     runningTool: { type: Object, default: null },
+    runningSubagent: { type: Object, default: null },
     loading: { type: Boolean, default: false },
   },
   emits: ['visual-link-click', 'report-preview', 'report-download', 'cancel-run', 'derive-run'],
@@ -244,7 +246,7 @@ export default {
     },
     showProcess(msg) {
       if (this.processItems(msg).length) return true
-      if (msg.streaming && this.runningTool) return true
+      if (msg.streaming && (this.runningTool || this.runningSubagent)) return true
       return false
     },
     processDefaultExpanded(msg) {

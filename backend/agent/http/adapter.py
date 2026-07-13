@@ -146,6 +146,35 @@ def _enrich_tool_step(step: dict[str, Any]) -> dict[str, Any]:
             step["resource"] = resource
         if status in ("fail", "denied", "blocked") and step.get("error"):
             step["summary"] = _summarize_tool_error(str(step["error"]))
+    elif tool_name == "run_subagent":
+        from subagent.result_parse import parse_subagent_tool_result
+
+        parsed = parse_subagent_tool_result(str(step.get("raw_content") or ""))
+        kind = (
+            parsed.get("kind")
+            or str(params.get("kind") or "").strip()
+        )
+        step["kind"] = "subagent"
+        step["subagent"] = {
+            "kind": kind,
+            "task_preview": str(params.get("task") or "")[:240],
+            "turns": parsed.get("turns") or 0,
+            "refs": parsed.get("refs") or [],
+            "dataset_ids": parsed.get("dataset_ids") or [],
+            "summary": parsed.get("summary") or "",
+            "error": parsed.get("error"),
+            "inner_steps": [],
+            "status": "ok" if parsed.get("ok") else "fail",
+        }
+        if parsed.get("summary"):
+            preview = " ".join(parsed["summary"].split())[:80]
+            label = kind or "subagent"
+            step["summary"] = f"子 Agent {label} · {preview}"
+        elif kind:
+            step["summary"] = f"子 Agent {kind} · {parsed.get('turns') or 0} 轮"
+        if parsed.get("error") and status == "ok":
+            step["status"] = "fail"
+            step["error"] = parsed.get("error")
     elif tool_name in ("memory", "save_memory"):
         from ..memory_delivery import memory_event_from_tool
 

@@ -152,6 +152,16 @@ def test_filter_tools_excludes_review_in_analyze():
     assert "review_report" not in names
 
 
+def test_filter_tools_includes_subagent_in_analyze_and_produce():
+    analyze = {t["function"]["name"] for t in filter_tools(TOOLS, CapabilityMode.ANALYZE)}
+    produce = {t["function"]["name"] for t in filter_tools(TOOLS, CapabilityMode.PRODUCE)}
+    assert "run_subagent" in analyze
+    assert "run_subagent" in produce
+    assert "run_subagent" not in {
+        t["function"]["name"] for t in filter_tools(TOOLS, CapabilityMode.CONSULT)
+    }
+
+
 def test_safe_path_error_message():
     from tools.handlers.base_tool import HIDDEN_PATH_ERROR, WORKSPACE_PATH_ERROR, run_read_file
 

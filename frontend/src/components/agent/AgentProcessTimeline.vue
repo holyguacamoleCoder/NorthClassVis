@@ -33,9 +33,20 @@
           @cancel-run="$emit('cancel-run', $event)"
           @derive-run="$emit('derive-run', $event)"
         />
+        <AgentSubagentStepCard
+          v-else-if="item.kind === 'subagent' && item.step"
+          :step="item.step"
+          :default-expanded="isFailed(item.step) || streaming"
+        />
       </div>
       <div v-if="runningStep" class="agent-process-item agent-process-item--tool">
+        <AgentSubagentStepCard
+          v-if="runningStepKind === 'subagent'"
+          :step="runningStep"
+          :default-expanded="true"
+        />
         <AgentToolBubbles
+          v-else
           :steps="[runningStep]"
           :default-expanded="true"
           :run-actions-enabled="runActionsEnabled"
@@ -45,6 +56,9 @@
           @derive-run="$emit('derive-run', $event)"
         />
       </div>
+      <div v-else-if="runningSubagentStep" class="agent-process-item agent-process-item--subagent">
+        <AgentSubagentStepCard :step="runningSubagentStep" :default-expanded="true" />
+      </div>
     </div>
   </div>
 </template>
@@ -52,16 +66,19 @@
 <script>
 import { AGENT_UI } from '@/constants/agentUiText.js'
 import { enrichToolStep } from '@/utils/agentPlanUtils.js'
+import { buildRunningSubagentStep } from '@/utils/agentSubagent.js'
 import { pickPrimaryModifyRun, processTimelineStats } from '@/utils/agentTimeline.js'
 import AgentMarkdown from '@/components/agent/AgentMarkdown.vue'
 import AgentToolBubbles from '@/components/agent/AgentToolBubbles.vue'
+import AgentSubagentStepCard from '@/components/agent/AgentSubagentStepCard.vue'
 
 export default {
   name: 'AgentProcessTimeline',
-  components: { AgentMarkdown, AgentToolBubbles },
+  components: { AgentMarkdown, AgentToolBubbles, AgentSubagentStepCard },
   props: {
     items: { type: Array, default: () => [] },
     runningTool: { type: Object, default: null },
+    runningSubagent: { type: Object, default: null },
     streaming: { type: Boolean, default: false },
     defaultExpanded: { type: Boolean, default: false },
     runActionsEnabled: { type: Boolean, default: true },
@@ -78,7 +95,7 @@ export default {
   computed: {
     metaLabel() {
       const { total, failed } = processTimelineStats(this.items)
-      const running = this.runningStep ? 1 : 0
+      const running = this.runningStep ? 1 : this.runningSubagentStep ? 1 : 0
       const n = total + running
       if (!n) return this.streaming ? '执行中…' : '无步骤'
       if (failed) return `${n} 步 · ${failed} 失败`
@@ -88,6 +105,9 @@ export default {
       const rt = this.runningTool
       if (!rt || !rt.tool) return null
       const tool = rt.tool
+      if (tool === 'run_subagent' && this.runningSubagent) {
+        return buildRunningSubagentStep(rt, this.runningSubagent)
+      }
       return enrichToolStep({
         call_id: rt.call_id,
         run_id: rt.run_id,
@@ -100,6 +120,15 @@ export default {
         status: 'running',
         run_status: 'executing',
       })
+    },
+    runningStepKind() {
+      return this.runningStep?.kind || this.runningStep?.tool || ''
+    },
+    runningSubagentStep() {
+      if (this.runningStep) return null
+      const sub = this.runningSubagent
+      if (!sub || !sub.kind) return null
+      return buildRunningSubagentStep({ tool: 'run_subagent', params: { kind: sub.kind, task: sub.task_preview } }, sub)
     },
     allToolSteps() {
       const steps = (this.items || [])
@@ -132,6 +161,9 @@ export default {
       },
     },
     runningTool(val) {
+      if (val) this.expanded = true
+    },
+    runningSubagent(val) {
       if (val) this.expanded = true
     },
   },

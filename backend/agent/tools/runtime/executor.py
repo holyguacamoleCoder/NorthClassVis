@@ -95,6 +95,7 @@ def execute_tool_calls(
     loaded_skills: set[str] | None = None,
     loaded_references: set[str] | None = None,
     llm_client: Any | None = None,
+    llm_router: Any | None = None,
     filter_context: Any | None = None,
     on_tool_event: Callable[[dict[str, Any]], None] | None = None,
     run_registry: "RunRegistry | None" = None,
@@ -401,6 +402,27 @@ def execute_tool_calls(
             batch_snapshots=batch_snapshots,
             llm_client=llm_client,
             filter_context=filter_context,
+        )
+        from subagent.inject import inject_subagent_dispatch_args
+
+        dispatch_args = inject_subagent_dispatch_args(
+            tool_name,
+            dispatch_args,
+            analysis_context=analysis_context,
+            permission=permission,
+            hooks=hooks,
+            llm_router=llm_router,
+            filter_context=filter_context,
+            loaded_skills=loaded_skills,
+            loaded_references=loaded_references,
+            on_tool_event=on_tool_event,
+            run_registry=run_registry,
+            job_id=job_id,
+            parent_mode=(
+                permission.mode.value
+                if permission is not None and hasattr(permission.mode, "value")
+                else str(getattr(permission, "mode", "analyze"))
+            ),
         )
         if tool_name == "load_skill" and loaded_skills is not None:
             dispatch_args = {**dispatch_args, "_loaded_skills": loaded_skills}

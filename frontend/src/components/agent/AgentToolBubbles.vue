@@ -12,6 +12,12 @@
       :step="step"
       :style="{ animationDelay: Math.min(i * 0.05, 0.25) + 's' }"
     />
+    <AgentSubagentStepCard
+      v-else-if="stepKind(step) === 'subagent'"
+      :step="step"
+      :default-expanded="defaultExpanded"
+      :style="{ animationDelay: Math.min(i * 0.05, 0.25) + 's' }"
+    />
     <div
       v-else
       class="agent-tool-bubble"
@@ -64,10 +70,11 @@ import { AGENT_UI } from '@/constants/agentUiText.js'
 import { isModifiableRunStep } from '@/utils/agentTimeline.js'
 import AgentTodoStepCard from '@/components/agent/AgentTodoStepCard.vue'
 import AgentSkillStepChip from '@/components/agent/AgentSkillStepChip.vue'
+import AgentSubagentStepCard from '@/components/agent/AgentSubagentStepCard.vue'
 
 export default {
   name: 'AgentToolBubbles',
-  components: { AgentTodoStepCard, AgentSkillStepChip },
+  components: { AgentTodoStepCard, AgentSkillStepChip, AgentSubagentStepCard },
   props: {
     steps: { type: Array, default: () => [] },
     defaultExpanded: { type: Boolean, default: false },
@@ -109,6 +116,7 @@ export default {
       if (!step) return 'default'
       if (step.kind === 'todo' || step.tool === 'todo_write') return 'todo'
       if (step.kind === 'skill' || step.tool === 'load_skill') return 'skill'
+      if (step.kind === 'subagent' || step.tool === 'run_subagent') return 'subagent'
       if (
         step.kind === 'data' ||
         step.tool === 'query_data' ||

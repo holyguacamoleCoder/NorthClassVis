@@ -13,6 +13,7 @@ from common.paths import SESSIONS_DIR, bootstrap_agent_paths
 from context.state import CompactState
 
 from .models import ChatSession, SessionMeta
+from .turn_trace import append_turn_trace, load_turn_traces
 
 INDEX_FILE = "index.json"
 ACTIVE_FILE = "active.json"
@@ -192,6 +193,12 @@ class FileSessionStore:
         index = {m.id: m for m in self.list_meta()}
         index[session.id] = session.meta
         self._write_index(list(index.values()))
+
+    def load_turn_traces(self, session_id: str) -> list[dict[str, Any]]:
+        return load_turn_traces(self._session_dir(session_id))
+
+    def append_turn_trace(self, session_id: str, record: dict[str, Any]) -> None:
+        append_turn_trace(self._session_dir(session_id), record)
 
     def delete(self, session_id: str) -> bool:
         sdir = self._session_dir(session_id)

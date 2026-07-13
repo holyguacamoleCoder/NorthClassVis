@@ -23,6 +23,25 @@ def make_job_progress_handler(
     report_links_accum: list[dict[str, Any]] = []
     memory_saved_accum: list[dict[str, Any]] = []
     plan_state = {"sent": False}
+    subagent_state: dict[str, Any] = {
+        "active": False,
+        "kind": "",
+        "task_preview": "",
+        "inner_steps": [],
+        "status": "",
+        "turns": 0,
+    }
+
+    def _snapshot_subagent() -> dict[str, Any] | None:
+        if not subagent_state.get("active"):
+            return None
+        return {
+            "kind": subagent_state.get("kind") or "",
+            "task_preview": subagent_state.get("task_preview") or "",
+            "inner_steps": list(subagent_state.get("inner_steps") or []),
+            "status": subagent_state.get("status") or "running",
+            "turns": int(subagent_state.get("turns") or 0),
+        }
 
     def handler(event: dict[str, Any]) -> None:
         et = event.get("type")
@@ -39,6 +58,20 @@ def make_job_progress_handler(
             for key in ("run_id", "parent_run_id", "patch", "derive_strategy"):
                 if event.get(key) is not None:
                     running[key] = event.get(key)
+            tool_name = str(event.get("tool") or "")
+            if tool_name == "run_subagent":
+                params = running.get("params") if isinstance(running.get("params"), dict) else {}
+                subagent_state.update({
+                    "active": True,
+                    "kind": str(params.get("kind") or ""),
+                    "task_preview": str(params.get("task") or "")[:240],
+                    "inner_steps": [],
+                    "status": "running",
+                    "turns": 0,
+                })
+                snap = _snapshot_subagent()
+                if snap is not None:
+                    patch["running_subagent"] = snap
             patch.update({
                 "phase": "tools",
                 "hint": f"正在执行 {event.get('tool', 'tool')}…",
@@ -59,12 +92,36 @@ def make_job_progress_handler(
                 derive_strategy=event.get("derive_strategy"),
                 run_status=str(event.get("run_status") or "") or None,
             )
+            timeline_item: dict[str, Any] = {"kind": "tool", "phase": "process", "step": step}
+            if tool_name == "run_subagent":
+                from subagent.result_parse import parse_subagent_tool_result
+
+                parsed = parse_subagent_tool_result(content)
+                step["kind"] = "subagent"
+                step["subagent"] = {
+                    "kind": parsed.get("kind") or subagent_state.get("kind") or params.get("kind"),
+                    "task_preview": subagent_state.get("task_preview")
+                    or str(params.get("task") or "")[:240],
+                    "turns": parsed.get("turns") or subagent_state.get("turns") or 0,
+                    "refs": parsed.get("refs") or [],
+                    "dataset_ids": parsed.get("dataset_ids") or [],
+                    "summary": parsed.get("summary") or "",
+                    "error": parsed.get("error"),
+                    "inner_steps": list(subagent_state.get("inner_steps") or []),
+                    "status": "ok" if parsed.get("ok") else "fail",
+                }
+                if parsed.get("error") and step.get("status") == "ok":
+                    step["status"] = "fail"
+                    step["error"] = parsed.get("error")
+                timeline_item = {"kind": "subagent", "phase": "process", "step": step}
+                subagent_state["active"] = False
+                patch["running_subagent"] = None
             patch.update({
                 "phase": "tools",
                 "hint": "工具执行完成，继续分析…",
                 "running_tool": None,
                 "append_step": step,
-                "append_timeline": {"kind": "tool", "phase": "process", "step": step},
+                "append_timeline": timeline_item,
             })
             if tool_name == "todo_write":
                 from tools.handlers.todo_write import export_todo_snapshot
@@ -159,6 +216,81 @@ def make_job_progress_handler(
                 "append_thinking": str(event.get("delta") or ""),
                 "running_tool": None,
             })
+        elif et == "subagent_start":
+            kind = str(event.get("kind") or "subagent")
+            if subagent_state.get("active"):
+                subagent_state["kind"] = kind
+                subagent_state["status"] = "running"
+            snap = _snapshot_subagent()
+            patch.update({
+                "phase": "subagent",
+                "hint": f"子 Agent（{kind}）执行中…",
+                "running_tool": None,
+            })
+            if snap is not None:
+                patch["running_subagent"] = snap
+        elif et == "subagent_tool_start":
+            if subagent_state.get("active"):
+                inner = {
+                    "call_id": event.get("call_id"),
+                    "tool": event.get("tool"),
+                    "params": event.get("params") or {},
+                    "status": "running",
+                    "summary": "执行中…",
+                }
+                subagent_state.setdefault("inner_steps", []).append(inner)
+            snap = _snapshot_subagent()
+            if snap is not None:
+                patch["running_subagent"] = snap
+                patch["phase"] = "subagent"
+                tool = str(event.get("tool") or "tool")
+                patch["hint"] = f"子 Agent · {tool}…"
+        elif et == "subagent_tool_end":
+            if subagent_state.get("active"):
+                call_id = str(event.get("call_id") or "")
+                steps = subagent_state.setdefault("inner_steps", [])
+                target = None
+                for item in reversed(steps):
+                    if call_id and item.get("call_id") == call_id:
+                        target = item
+                        break
+                if target is None and steps:
+                    target = steps[-1]
+                if target is not None:
+                    built = build_tool_step(
+                        str(event.get("tool") or target.get("tool") or "tool"),
+                        event.get("params")
+                        if isinstance(event.get("params"), dict)
+                        else target.get("params")
+                        or {},
+                        str(event.get("content") or ""),
+                        call_id=call_id or target.get("call_id"),
+                    )
+                    target.update({
+                        "tool": built.get("tool") or target.get("tool"),
+                        "params": built.get("params") or target.get("params") or {},
+                        "summary": built.get("summary") or "",
+                        "status": built.get("status") or "ok",
+                        "resource": built.get("resource"),
+                    })
+            snap = _snapshot_subagent()
+            if snap is not None:
+                patch["running_subagent"] = snap
+                patch["phase"] = "subagent"
+        elif et == "subagent_end":
+            kind = str(event.get("kind") or "subagent")
+            status = str(event.get("status") or "ok")
+            if subagent_state.get("active"):
+                subagent_state["kind"] = kind
+                subagent_state["status"] = status
+                subagent_state["turns"] = int(event.get("turns") or subagent_state.get("turns") or 0)
+            snap = _snapshot_subagent()
+            patch.update({
+                "phase": "subagent",
+                "hint": f"子 Agent（{kind}）完成：{status}",
+            })
+            if snap is not None:
+                patch["running_subagent"] = snap
         elif et == "answer_delta":
             patch.update({
                 "phase": "answer",
@@ -186,6 +318,7 @@ def empty_job_progress(
         "tool_steps": [],
         "timeline": [],
         "running_tool": None,
+        "running_subagent": None,
         "thinking": "",
         "answer": "",
         "todo_items": list(todo_items or []),

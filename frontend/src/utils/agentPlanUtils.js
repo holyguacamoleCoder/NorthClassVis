@@ -1,5 +1,7 @@
 /** Shared helpers for agent todo plan display. */
 
+import { enrichSubagentStep, summarizeSubagentStep } from '@/utils/agentSubagent.js'
+
 export function todoIcon(status) {
   if (status === 'completed') return '\u2713'
   if (status === 'in_progress') return '\u25D0'
@@ -72,6 +74,9 @@ export function summarizeToolContent(name, content) {
     const loaded = text.match(/\[Skill loaded:\s*([^\]]+)\]/)
     if (loaded) return `已加载技能 ${loaded[1].trim()}`
     if (/already loaded/i.test(text)) return '技能已在本会话加载'
+  }
+  if (tool === 'run_subagent') {
+    return summarizeSubagentStep({ raw_content: text, status: text.includes('FAIL') ? 'fail' : 'ok' })
   }
   if (tool === 'query_data' || tool === 'aggregate_data' || tool === 'inspect_schema') {
     try {
@@ -166,6 +171,8 @@ export function enrichToolStep(step) {
         next.summary = '报告已写入（有警告）'
       }
     }
+  } else if (tool === 'run_subagent') {
+    return enrichSubagentStep(next)
   }
   return next
 }

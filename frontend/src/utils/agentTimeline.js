@@ -77,7 +77,12 @@ export function buildTurnTimeline(turnMsgs) {
 export function processTimelineItems(msg) {
   const tl = msg?.timeline
   if (Array.isArray(tl) && tl.length) {
-    return tl.filter((item) => item.kind === 'tool' || item.phase === 'process')
+    return tl.filter(
+      (item) =>
+        item.kind === 'tool'
+        || item.kind === 'subagent'
+        || item.phase === 'process',
+    )
   }
   const steps = msg?.trace?.steps || []
   return steps.map((step) => ({ kind: 'tool', phase: 'process', step }))
@@ -85,7 +90,7 @@ export function processTimelineItems(msg) {
 
 export function processTimelineStats(items) {
   const list = items || []
-  const tools = list.filter((i) => i.kind === 'tool')
+  const tools = list.filter((i) => i.kind === 'tool' || i.kind === 'subagent')
   const failed = tools.filter((i) => ['fail', 'denied', 'blocked'].includes(i.step?.status))
   return { total: tools.length, failed: failed.length }
 }

@@ -1,6 +1,6 @@
 # Dataset Binding 准确率评测
 
-> 生成时间：2026-06-11 07:49 UTC  
+> 生成时间：2026-07-13 00:41 UTC  
 > 脚本：`backend/agent/eval/binding_accuracy.py`
 
 ## 指标定义

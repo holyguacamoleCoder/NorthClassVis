@@ -10,6 +10,7 @@ from data.registry import get_registry_defaults, list_agent_resource_ids
 
 from ..handlers.base_tool import run_edit_file, run_list_files, run_read_file, run_write_file
 from ..handlers.report_tools import run_review_report
+from ..handlers.subagent_tool import run_subagent
 from ..handlers.compact import run_compact
 from ..handlers.context_tools import run_build_visual_links, run_get_current_filter_context
 from ..handlers.data_tools import (
@@ -194,7 +195,7 @@ CONCURRENCY_SAFE_TOOL = frozenset({
     "load_reference",
     "review_report",
 })
-CONCURRENCY_UNSAFE_TOOL = frozenset({"write_file", "edit_file"})
+CONCURRENCY_UNSAFE_TOOL = frozenset({"write_file", "edit_file", "run_subagent"})
 
 
 @dataclass(frozen=True)
@@ -327,6 +328,28 @@ _REVIEW_REPORT_PARAMS = {
         },
     },
     "required": ["path"],
+}
+
+_RUN_SUBAGENT_PARAMS = {
+    "type": "object",
+    "properties": {
+        "kind": {
+            "type": "string",
+            "enum": ["data_analyst", "report_writer", "report_reviewer"],
+            "description": (
+                "Sub-agent role: data_analyst (query+aggregate brief), "
+                "report_writer (sectioned reports/), report_reviewer (review+patch)."
+            ),
+        },
+        "task": {
+            "type": "string",
+            "description": (
+                "Delegated task for the sub-agent: scope, deliverable path, acceptance criteria. "
+                "For data_analyst include class/student/week_range; for writers include report path + brief."
+            ),
+        },
+    },
+    "required": ["kind", "task"],
 }
 
 _TODO_WRITE_PARAMS = {
@@ -735,6 +758,21 @@ MANIFEST: tuple[ToolDefinition, ...] = (
         ),
         parameters=_REVIEW_REPORT_PARAMS,
         handler=run_review_report,
+    ),
+    ToolDefinition(
+        name="run_subagent",
+        description=(
+            "Delegate an isolated sub-agent run (analyze/produce). "
+            "Use when: long report workflow should split context — "
+            "data_analyst for query/aggregate brief, report_writer for sectioned reports/, "
+            "report_reviewer for cross-section revision. "
+            "Shares parent session_id and dataset_registry; returns summary + refs only. "
+            "Do NOT use for: simple one-query answers; nested subagent calls. "
+            "Typical pipeline: data_analyst → parent synthesizes → report_writer → report_reviewer."
+        ),
+        parameters=_RUN_SUBAGENT_PARAMS,
+        handler=run_subagent,
+        pass_through_kwargs=True,
     ),
 
     # Session Tools

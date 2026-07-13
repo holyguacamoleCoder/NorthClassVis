@@ -13,6 +13,7 @@ import {
   stripReportLinkMarkdown,
 } from '@/utils/reportLinks.js'
 import { enrichToolStep, summarizeToolContent } from '@/utils/agentPlanUtils.js'
+import { buildRunningSubagentStep } from '@/utils/agentSubagent.js'
 import { buildTurnTimeline } from '@/utils/agentTimeline.js'
 
 const MODE_LABELS = {
@@ -216,25 +217,42 @@ export function userMessage(text) {
   return { role: 'user', text: stripRunModifyBlock(text) }
 }
 
-export function sessionMessagesToUi(messages) {
+export function sessionMessagesToUi(messages, turnTraces) {
   if (!Array.isArray(messages)) return []
+  const traceByTurn = new Map()
+  if (Array.isArray(turnTraces)) {
+    for (const row of turnTraces) {
+      const idx = Number(row?.turn_index || 0)
+      if (idx > 0) traceByTurn.set(idx, row)
+    }
+  }
   const ui = []
   let turn = []
+  let turnIndex = 0
 
   const flushTurn = () => {
     if (!turn.length) return
+    turnIndex += 1
     const firstUser = turn.find((m) => m.role === 'user')
     if (firstUser) ui.push(userMessage(firstUser.content))
-    const rest = turn.filter((m) => m.role !== 'user')
-    if (rest.length) {
-      const assistant = buildAssistantUiFromTurn(rest)
-      if (
-        assistant.thinking ||
-        assistant.answer ||
-        assistant.closing ||
-        (assistant.trace?.steps?.length)
-      ) {
-        ui.push(assistant)
+    const stored = traceByTurn.get(turnIndex)
+    if (stored) {
+      const assistant = legacyToAssistantMessage(stored)
+      assistant.revealPhase = 5
+      assistant.isHistory = true
+      ui.push(assistant)
+    } else {
+      const rest = turn.filter((m) => m.role !== 'user')
+      if (rest.length) {
+        const assistant = buildAssistantUiFromTurn(rest)
+        if (
+          assistant.thinking ||
+          assistant.answer ||
+          assistant.closing ||
+          (assistant.trace?.steps?.length)
+        ) {
+          ui.push(assistant)
+        }
       }
     }
     turn = []
@@ -383,20 +401,24 @@ export function progressToTraceSteps(progress) {
   if (progress.running_tool) {
     const rt = progress.running_tool
     const tool = rt.tool || 'tool'
-    steps.push(
-      enrichToolStep({
-        call_id: rt.call_id,
-        run_id: rt.run_id,
-        parent_run_id: rt.parent_run_id,
-        patch: rt.patch,
-        derive_strategy: rt.derive_strategy,
-        tool,
-        params: rt.params || {},
-        summary: tool === 'todo_write' ? '更新计划中…' : tool === 'load_skill' ? '加载技能中…' : '执行中…',
-        status: 'running',
-        run_status: 'executing',
-      }),
-    )
+    if (tool === 'run_subagent' && progress.running_subagent) {
+      steps.push(buildRunningSubagentStep(rt, progress.running_subagent))
+    } else {
+      steps.push(
+        enrichToolStep({
+          call_id: rt.call_id,
+          run_id: rt.run_id,
+          parent_run_id: rt.parent_run_id,
+          patch: rt.patch,
+          derive_strategy: rt.derive_strategy,
+          tool,
+          params: rt.params || {},
+          summary: tool === 'todo_write' ? '更新计划中…' : tool === 'load_skill' ? '加载技能中…' : '执行中…',
+          status: 'running',
+          run_status: 'executing',
+        }),
+      )
+    }
   }
   return steps
 }
@@ -418,11 +440,18 @@ export function applyProgressToMessage(msg, job) {
   msg.statusHint = progress.hint || msg.statusHint
   msg.trace = { steps: progressToTraceSteps(progress) }
   if (Array.isArray(progress.timeline)) {
-    msg.timeline = progress.timeline.map((item) =>
-      item.kind === 'tool' && item.step ? { ...item, step: enrichToolStep(item.step) } : item,
-    )
+    msg.timeline = progress.timeline.map((item) => {
+      if (item.kind === 'tool' && item.step) {
+        return { ...item, step: enrichToolStep(item.step) }
+      }
+      if (item.kind === 'subagent' && item.step) {
+        return { ...item, step: enrichToolStep(item.step) }
+      }
+      return item
+    })
   }
   msg._runningTool = progress.running_tool || null
+  msg._runningSubagent = progress.running_subagent || null
   if (Array.isArray(progress.thinking_updates) && progress.thinking_updates.length) {
     msg.thinking_updates = progress.thinking_updates.map((t) => String(t || '').trim()).filter(Boolean)
   }
