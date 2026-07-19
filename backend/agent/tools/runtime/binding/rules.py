@@ -53,7 +53,8 @@ def cross_turn_reject_message(session_id: str | None) -> str:
     hint = format_catalog_hint(session_id)
     base = (
         "Error: result_ref 来自上一轮提问，不能自动续用。"
-        "请使用 input.dataset_id 显式引用，或对本题重新 query_data。"
+        "请先 list_datasets，再在 aggregate_data 的 input.dataset_id 中显式引用本会话已有数据集。"
+        "仅当口径确实变化（班级/周次/过滤条件不同）时才重新 query_data。"
     )
     return base + (f"\n{hint}" if hint else "")
 
@@ -63,9 +64,9 @@ def missing_turn_query_message(session_id: str | None) -> str:
 
     hint = format_catalog_hint(session_id)
     base = (
-        "Error: result_ref 来自上一轮提问，不能自动续用。"
-        "本回合尚无 query 结果，不能从 catalog 静默绑定。"
-        "跨轮统计请传 input.dataset_id；本题请先 query_data 再 aggregate。"
+        "Error: 本回合尚无可用的 query 工作集，且禁止静默绑定上一轮 result_ref。"
+        "跨轮续算：list_datasets → aggregate_data(input.dataset_id=…)。"
+        "仅当教师要求新口径（不同班级/周次/条件）时才 query_data。"
     )
     return base + (f"\n{hint}" if hint else "")
 

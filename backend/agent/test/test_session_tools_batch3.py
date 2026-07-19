@@ -97,23 +97,31 @@ def test_format_compact_applied_result():
     assert "40" in text and "5" in text
 
 
-def test_todo_only_loop_guard():
-    perm = PermissionManager(mode=CapabilityMode.ANALYZE)
-    loop = AgentLoop(LoopState(messages=[]), permission=perm)
-    calls = [
-        {"id": "1", "name": "todo_write", "arguments": json.dumps({"items": []})},
-    ]
-    assert loop._should_break_todo_only_loop(calls) is False
-    for _ in range(3):
-        loop._should_break_todo_only_loop(calls)
-    assert loop._should_break_todo_only_loop(calls) is True
+def test_todo_only_folded_into_exploration_thrash():
+    """todo_write-only batches are exploration_thrash (soft→hard), not a separate hard guard."""
+    from loop_limits import EXPLORATION_THRASH_WINDOW
+
+    loop = AgentLoop(LoopState(messages=[]))
+    calls = [{"id": "1", "name": "todo_write", "arguments": json.dumps({"items": []})}]
+    soft_ev = None
+    for _ in range(EXPLORATION_THRASH_WINDOW):
+        soft_ev = loop._detect_data_chain_oscillation(calls, [])
+        if soft_ev is not None:
+            break
+    assert soft_ev is not None
+    assert soft_ev.kind == "exploration_thrash"
+    assert soft_ev.soft is True
 
     mixed = [
         {"id": "1", "name": "todo_write", "arguments": "{}"},
-        {"id": "2", "name": "query_data", "arguments": "{}"},
+        {
+            "id": "2",
+            "name": "query_data",
+            "arguments": json.dumps({"resource": "submit_record", "class": "Class1"}),
+        },
     ]
-    loop2 = AgentLoop(LoopState(messages=[]), permission=perm)
-    assert loop2._should_break_todo_only_loop(mixed) is False
+    loop2 = AgentLoop(LoopState(messages=[]))
+    assert loop2._detect_data_chain_oscillation(mixed, []) is None
 
 
 def test_run_compact_placeholder():

@@ -117,6 +117,8 @@ def _build_tabular_from_df(
 
     if len(full["rows"]) <= preview_limit:
         full["meta"]["truncated"] = False
+        full["meta"]["full_row_count"] = len(full["rows"])
+        full["meta"]["preview_row_count"] = len(full["rows"])
         return full
 
     preview_df = df.iloc[:preview_limit].copy()
@@ -127,6 +129,21 @@ def _build_tabular_from_df(
     )
     preview["meta"]["rows_scanned"] = rows_scanned
     preview["meta"]["truncated"] = True
+    preview["meta"]["full_row_count"] = len(full["rows"])
+    preview["meta"]["preview_row_count"] = len(preview["rows"])
+    preview["meta"]["truncation_kind"] = "preview_only"
+    preview["meta"]["next_actions"] = [
+        {
+            "action": "rank_topk",
+            "tool": "aggregate_data",
+            "note": "全量在 result_ref；排名用 order_by+limit，勿因预览再全量 query。",
+        },
+        {
+            "action": "reuse_dataset",
+            "tool": "list_datasets",
+            "note": "继续分析同一批数据时复用 dataset_id。",
+        },
+    ]
     if result_ref:
         preview["meta"]["result_ref"] = result_ref
     return preview

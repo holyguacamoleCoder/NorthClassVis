@@ -14,6 +14,7 @@ from ..handlers.compact import run_compact
 from ..handlers.context_tools import run_build_visual_links, run_get_current_filter_context
 from ..handlers.data_tools import (
     run_aggregate_data,
+    run_enrich_data,
     run_inspect_schema,
     run_list_datasets,
     run_query_data,
@@ -188,6 +189,7 @@ CONCURRENCY_SAFE_TOOL = frozenset({
     "list_datasets",
     "resolve_dataset_binding",
     "query_data",
+    "enrich_data",
     "aggregate_data",
     "get_current_filter_context",
     "build_visual_links",
@@ -629,6 +631,32 @@ _AGGREGATE_DATA_PARAMS = {
             ),
         },
         "dimensions": {"type": "array", "items": {"type": "string"}},
+        "order_by": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "field": {
+                        "type": "string",
+                        "description": "Metric alias or dimension column to sort (e.g. avg, n).",
+                    },
+                    "dir": {"type": "string", "enum": ["asc", "desc"]},
+                },
+                "required": ["field"],
+            },
+            "description": (
+                "Sort aggregated rows before preview. For lowest-K / highest-K, combine with limit."
+            ),
+        },
+        "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "description": (
+                "Keep only the first N aggregated rows after order_by (TopK/BottomK). "
+                "Prefer this over re-querying when preview is truncated."
+            ),
+        },
         "window": {
             "type": "object",
             "properties": {
@@ -906,6 +934,8 @@ MANIFEST: tuple[ToolDefinition, ...] = (
             "Primary analysis tool: filter, project, group, sort, and limit logical resources. "
             "Use when: class comparisons, student filters, sorted previews, or sampling before export. "
             "Example: submit_record with class='Class1' or classes=['Class1']; majors=['J23517'] for major filter. "
+            "submit_record already left-joins title_info: columns include score (earned), full_score (title max), "
+            "score_rate (=score/full_score). For other lookups use enrich_data. "
             "Returns TabularResult JSON (preview rows ~50; full data in meta.result_ref when truncated). "
             "Do NOT use for: column discovery only (inspect_schema); consult mode (tool unavailable); "
             "repeating the same query; filtering student_ID with major codes like J23517 (use majors or where.major); "
@@ -918,14 +948,84 @@ MANIFEST: tuple[ToolDefinition, ...] = (
         pass_through_kwargs=True,
     ),
     ToolDefinition(
+        name="enrich_data",
+        description=(
+            "Left-join columns from a lookup resource onto a prior dataset (safe enrich, not free SQL). "
+            "Use when: you need fields from another table (e.g. attach title_info.score as full_score, "
+            "or student_info.major onto a slice that lacks it). "
+            "Always how=left; lookup rows are de-duplicated on join keys to avoid row explosion. "
+            "Example: enrich_data(input={dataset_id}, lookup=title_info, on=title_ID, "
+            "columns=[score], rename={score: full_score}). "
+            "Then aggregate_data on the enriched dataset_id. "
+            "Do NOT use for: inventing cross joins; replacing query_data filters; aggregations "
+            "(use aggregate_data). Prefer submit_record's built-in full_score when analyzing submissions."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "input": _AGGREGATE_INPUT_SCHEMA,
+                "lookup": {
+                    **_resource_property(),
+                    "description": "Lookup resource to join (e.g. title_info, student_info).",
+                },
+                "on": {
+                    "description": (
+                        "Join key(s): string 'title_ID', map {left:right}, or list of those."
+                    ),
+                    "oneOf": [
+                        {"type": "string"},
+                        {
+                            "type": "object",
+                            "additionalProperties": {"type": "string"},
+                        },
+                        {
+                            "type": "array",
+                            "items": {
+                                "oneOf": [
+                                    {"type": "string"},
+                                    {
+                                        "type": "object",
+                                        "additionalProperties": {"type": "string"},
+                                    },
+                                ]
+                            },
+                        },
+                    ],
+                },
+                "columns": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Columns to bring from lookup (excluding join keys).",
+                },
+                "rename": {
+                    "type": "object",
+                    "additionalProperties": {"type": "string"},
+                    "description": 'Rename lookup columns, e.g. {"score":"full_score"}.',
+                },
+                "compute_score_rate": {
+                    "type": "boolean",
+                    "description": "If score+full_score present, also add score_rate.",
+                },
+            },
+            "required": ["input", "lookup", "on"],
+            "additionalProperties": False,
+        },
+        handler=run_enrich_data,
+        pass_through_kwargs=True,
+    ),
+    ToolDefinition(
         name="aggregate_data",
         description=(
-            "Aggregate metrics on a prior query result (count, mean, min, max, sum) with optional "
-            "grouping by dimensions. Use after query_data when you need rollups, not instead of query. "
+            "Aggregate metrics on a prior query/enrich result (count, mean, min, max, sum) with optional "
+            "grouping by dimensions. Use after query_data (or enrich_data) when you need rollups. "
+            "Accuracy on submit_record: sum(score)+sum(full_score) by student_ID, then ratio; "
+            "or mean(score_rate). Prefer order_by+limit for top/bottom-K. "
             "Returns TabularResult JSON; meta.auto_input when runtime bound input; "
             "use bind=chain|fresh or input.dataset_id for explicit chaining. "
-            "Do NOT use for: raw CSV; replacing query_data; calling with only resource+metrics unless "
-            "you accept an implicit preparatory query (prefer explicit query_data first). "
+            "Do NOT use for: raw CSV; replacing query_data; free-form multi-table join "
+            "(use enrich_data, or submit_record's built-in full_score); "
+            "calling with only resource+metrics unless you accept an implicit preparatory query "
+            "(prefer explicit query_data first). "
             "Required: input (result_ref or small inline rows) and metrics."
         ),
         parameters=_AGGREGATE_DATA_PARAMS,

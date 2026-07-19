@@ -31,7 +31,7 @@ def inject_data_tool_context(
     if tool_name not in DATA_CHAIN_TOOLS:
         return args
 
-    if tool_name in ("query_data", "inspect_schema", "aggregate_data") and filter_context is not None:
+    if tool_name in ("query_data", "inspect_schema", "aggregate_data", "enrich_data") and filter_context is not None:
         args["_filter_context"] = filter_context
 
     if analysis_context:

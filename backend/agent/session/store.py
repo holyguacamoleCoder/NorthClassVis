@@ -22,6 +22,7 @@ COMPACT_FILE = "compact.json"
 TODO_FILE = "todo.json"
 CONTEXT_FILE = "session_context.json"
 FILTER_CONTEXT_FILE = "filter_context.json"
+VISUAL_LINKS_FILE = "visual_links.json"
 
 
 class FileSessionStore:
@@ -110,6 +111,7 @@ class FileSessionStore:
         session_context = self._load_context(sdir / CONTEXT_FILE)
         todo_items, todo_round = self._load_todo(sdir / TODO_FILE)
         filter_context = self._load_filter_context(sdir / FILTER_CONTEXT_FILE)
+        visual_links = self._load_visual_links(sdir / VISUAL_LINKS_FILE)
 
         return ChatSession(
             id=str(meta["id"]),
@@ -129,6 +131,7 @@ class FileSessionStore:
                 str(s) for s in (meta.get("loaded_references") or []) if str(s).strip()
             ],
             filter_context=filter_context,
+            visual_links=visual_links,
             user_turn_count=int(meta.get("user_turn_count") or 0),
             messages_count=int(meta.get("messages_count") or 1),
         )
@@ -188,6 +191,14 @@ class FileSessionStore:
             )
         else:
             (sdir / FILTER_CONTEXT_FILE).unlink(missing_ok=True)
+
+        if session.visual_links:
+            (sdir / VISUAL_LINKS_FILE).write_text(
+                json.dumps(session.visual_links, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        else:
+            (sdir / VISUAL_LINKS_FILE).unlink(missing_ok=True)
 
         index = {m.id: m for m in self.list_meta()}
         index[session.id] = session.meta
@@ -270,6 +281,18 @@ class FileSessionStore:
         except (json.JSONDecodeError, OSError):
             return None
         return data if isinstance(data, dict) else None
+
+    @staticmethod
+    def _load_visual_links(path: Path) -> list[dict[str, Any]]:
+        if not path.is_file():
+            return []
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return []
+        if not isinstance(data, list):
+            return []
+        return [x for x in data if isinstance(x, dict) and x.get("view")]
 
     @staticmethod
     def _load_todo(path: Path) -> tuple[list[dict[str, str]], int]:

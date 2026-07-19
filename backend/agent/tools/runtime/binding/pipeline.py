@@ -31,6 +31,55 @@ from .types import BindMode, DatasetBindingDecision
 from .validate import validate_decision
 
 
+def _finalize_binding(
+    ctx,
+    *,
+    dataset_id: str | None,
+    result_ref: str | None,
+    decision: str,
+    trace: dict[str, Any],
+    scope: str = "explicit_dataset",
+    corrected: bool = False,
+    corrected_from: str | None = None,
+    auto_input: bool = False,
+) -> AggregateBinding:
+    """Run column/lineage validate before accepting any successful bind."""
+    if not dataset_id or not result_ref:
+        hint = format_catalog_hint(ctx.session_id)
+        return AggregateBinding(
+            error=(
+                "Error: 无法确定 aggregate 绑定的 dataset_id/result_ref。"
+                "请 list_datasets 后显式传入 input.dataset_id。"
+                + (f"\n{hint}" if hint else "")
+            ),
+            trace={**trace, "resolver": decision},
+        )
+    dec = DatasetBindingDecision(
+        scope=scope,
+        dataset_id=str(dataset_id),
+        result_ref=str(result_ref),
+        rationale=decision,
+        resolver=decision,
+        overrides_model_ref=corrected,
+    )
+    err = validate_decision(dec, ctx)
+    if err:
+        hint = format_catalog_hint(ctx.session_id)
+        return AggregateBinding(
+            error=err + (f"\n{hint}" if hint else ""),
+            trace={**trace, "resolver": decision, "validate_failed": True},
+        )
+    return AggregateBinding(
+        result_ref=dec.result_ref,
+        dataset_id=dec.dataset_id,
+        decision=decision,
+        corrected=corrected,
+        corrected_from=corrected_from,
+        auto_input=auto_input,
+        trace={**trace, "resolver": decision, "bound_result_ref": dec.result_ref, "bound_dataset_id": dec.dataset_id},
+    )
+
+
 def resolve_aggregate_binding(
     inp: dict[str, Any],
     *,
@@ -145,8 +194,8 @@ def resolve_aggregate_binding(
                 return AggregateBinding(
                     error=(
                         "Error: result_ref 来自上一轮提问，不能自动续用。"
-                        "若需基于该数据集统计，请在 input 中显式传入 dataset_id；"
-                        "若为本题新口径，请先 query_data（省略 limit 做全量）再 aggregate。"
+                        "请 list_datasets，再在 input.dataset_id 中显式引用；"
+                        "仅当班级/周次/过滤条件变化时才重新 query_data。"
                         + (f"\n{hint}" if hint else "")
                     ),
                     trace=trace,
@@ -159,14 +208,14 @@ def resolve_aggregate_binding(
                 current_user_turn=ctx.current_user_turn,
             )
             if best and bind is not BindMode.FRESH:
-                trace["resolver"] = "stale_ref_turn_mismatch"
-                return AggregateBinding(
-                    result_ref=best.result_ref,
+                return _finalize_binding(
+                    ctx,
                     dataset_id=best.dataset_id,
+                    result_ref=best.result_ref,
                     decision="turn_mismatch",
+                    trace=trace,
                     corrected=True,
                     corrected_from=str(given_ref),
-                    trace=trace,
                 )
 
     bind_value = bind.value if isinstance(bind, BindMode) else str(bind)
@@ -194,15 +243,15 @@ def resolve_aggregate_binding(
         ):
             corrected = True
             corrected_from = str(given_ref)
-        trace["resolver"] = "single_candidate"
-        return AggregateBinding(
-            result_ref=c.result_ref,
+        return _finalize_binding(
+            ctx,
             dataset_id=c.dataset_id,
+            result_ref=c.result_ref,
             decision="single_candidate",
+            trace=trace,
             corrected=corrected,
             corrected_from=corrected_from,
             auto_input=not bool(given_ref),
-            trace=trace,
         )
 
     if not gate.triggered and not inp.get("result_ref") and not inp.get("dataset_id"):
@@ -214,13 +263,14 @@ def resolve_aggregate_binding(
             current_user_turn=ctx.current_user_turn,
         )
         if best:
-            trace["resolver"] = "rule_pick_best"
-            return AggregateBinding(
-                result_ref=best.result_ref,
+            return _finalize_binding(
+                ctx,
                 dataset_id=best.dataset_id,
-                decision=bind.value,
-                auto_input=True,
+                result_ref=best.result_ref,
+                decision="rule_pick_best",
                 trace=trace,
+                scope=bind.value if isinstance(bind, BindMode) else str(bind) or "explicit_dataset",
+                auto_input=True,
             )
 
     if "CROSS_TURN_REF" in gate.reasons and not explicit_id:
@@ -265,7 +315,8 @@ def resolve_aggregate_binding(
             return AggregateBinding(
                 error=(
                     "Error: result_ref 来自上一轮提问，不能自动续用。"
-                    "请使用 input.dataset_id 或对本题重新 query_data。"
+                    "请 list_datasets，再传 input.dataset_id；"
+                    "仅当口径变化时才重新 query_data。"
                     + (f"\n{hint}" if hint else "")
                 ),
                 trace=trace,
@@ -274,7 +325,8 @@ def resolve_aggregate_binding(
         return AggregateBinding(
             error=(
                 "Error: 无法解析 aggregate 应绑定的数据集（语义 resolver 未决）。"
-                "请 list_datasets 后使用 input.dataset_id，或 bind=chain|fresh 并先 query_data。"
+                "请 list_datasets 后使用 input.dataset_id；"
+                "仅当本回合尚无合适数据集且口径变化时再 query_data。"
                 + (f"\n{hint}" if hint else "")
             ),
             trace=trace,
@@ -283,11 +335,11 @@ def resolve_aggregate_binding(
     if inp.get("dataset_id"):
         ref = resolve_dataset_id(session_id, str(inp["dataset_id"]))
         if ref:
-            trace["resolver"] = "dataset_id_fallback"
-            return AggregateBinding(
-                result_ref=ref,
+            return _finalize_binding(
+                ctx,
                 dataset_id=str(inp["dataset_id"]),
-                decision="explicit",
+                result_ref=ref,
+                decision="dataset_id_fallback",
                 trace=trace,
             )
 
@@ -295,8 +347,8 @@ def resolve_aggregate_binding(
     return AggregateBinding(
         error=(
             "Error: aggregate_data 缺少可用的本回合 query 结果。"
-            "请先 query_data（省略 limit 做全量），再 aggregate；"
-            "或 list_datasets 后传 input.dataset_id。"
+            "优先：list_datasets → input.dataset_id；"
+            "仅当会话中还没有匹配口径的数据时再 query_data（省略 limit 做全量）。"
             "列名不确定时先 inspect_schema。"
             + (f"\n{hint}" if hint else "")
         ),

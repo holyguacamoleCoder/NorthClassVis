@@ -15,7 +15,7 @@ from .limits import QueryLimits
 from .registry import default_limits
 from .result_store import load_result
 from .tabular import dataframe_to_tabular, validate_tabular_result
-from .query import PREVIEW_ROW_LIMIT, _build_tabular_from_df
+from .query import PREVIEW_ROW_LIMIT, _apply_order_by, _build_tabular_from_df
 
 _ALLOWED_METRICS = frozenset({"count", "count_distinct", "sum", "mean", "min", "max"})
 
@@ -27,6 +27,8 @@ class AggregateSpec:
     dimensions: list[str] | None = None
     window: dict[str, Any] | None = None
     resource: str | None = None
+    order_by: list[dict[str, str]] | None = None
+    limit: int | None = None
 
 
 def _tabular_to_dataframe(payload: dict) -> tuple[pd.DataFrame, str]:
@@ -99,6 +101,8 @@ def execute_aggregate(
         dimensions=dimensions or None,
         window=spec.window,
         resource=spec.resource or resource,
+        order_by=spec.order_by,
+        limit=spec.limit,
     )
 
     if spec.window:
@@ -183,6 +187,19 @@ def execute_aggregate(
         result_df = pd.DataFrame([row])
 
     resource_id = spec.resource or resource
+    # Optional rank/TopK on the aggregated table (keeps LLM preview small).
+    result_df = _apply_order_by(result_df, spec.order_by)
+    limited = False
+    if spec.limit is not None:
+        try:
+            lim = int(spec.limit)
+        except (TypeError, ValueError):
+            lim = None
+        if lim is not None and lim > 0:
+            result_df = result_df.head(lim)
+            limited = True
+
+    n_out = len(result_df)
     result = _build_tabular_from_df(
         result_df,
         resource_id,
@@ -190,5 +207,40 @@ def execute_aggregate(
         limits=limits,
         preview_limit=preview_limit,
     )
+    meta = result.setdefault("meta", {})
+    meta["full_row_count"] = n_out
+    meta["preview_row_count"] = len(result.get("rows") or [])
+    if limited:
+        meta["aggregate_limit"] = int(spec.limit)  # type: ignore[arg-type]
+    if spec.order_by:
+        meta["aggregate_order_by"] = spec.order_by
+    if meta.get("truncated"):
+        meta["truncation_kind"] = "preview_only"
+        meta["next_actions"] = [
+            {
+                "action": "rank_topk",
+                "tool": "aggregate_data",
+                "note": (
+                    f"全量聚合共 {n_out} 行在 result_ref；预览仅 "
+                    f"{meta['preview_row_count']} 行属工具预算，不是数据缺失。"
+                    "要最低/最高 K 人：对同一 input.dataset_id 再调 aggregate_data，"
+                    "加 order_by（按均值等指标）+ limit=K。"
+                ),
+            },
+            {
+                "action": "keep_ref",
+                "note": "勿为预览截断再次 query_data 全表；换方法而不是重扫。",
+            },
+        ]
+    elif limited:
+        meta["next_actions"] = [
+            {
+                "action": "done_or_widen",
+                "note": (
+                    f"已按 order_by 取前 {n_out} 行（limit）。"
+                    "若还要更多，增大 limit；若要全班表，省略 limit（仍可能预览截断，全量在 result_ref）。"
+                ),
+            }
+        ]
     validate_tabular_result(result)
     return result

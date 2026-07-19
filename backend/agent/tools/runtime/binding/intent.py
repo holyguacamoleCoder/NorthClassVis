@@ -43,7 +43,9 @@ _DEFAULT_SYSTEM_PROMPT = """你是 aggregate_data 的数据集绑定器。每次
 3. 自然语言歧义指代（仅当 1、2 无法确定时作主信号）：
    - 「这些/上述/刚查的/前N条/最低N条/汇总这」→ chain_slice，选 limit 小、行数少的切片。
    - 「全班/整体/规模/偏科/概况/水平/整体情况」→ class_wide，选无 limit、行数大的 broad。
-4. metrics 仅作辅助：count_distinct(student_ID) 等全班指标倾向 broad；不得单独推翻 1 且 ref 与步骤一致的情况。
+4. metrics 仅作辅助：count_distinct(student_ID) 等全班指标倾向 broad grain=row；
+   禁止选 grain=agg 且 cols 无 student_ID 的表；若 catalog 行有 parent=，学生级指标应选 parent。
+5. grain=agg 只能在其 dimensions/已有指标列上再分析；缺列时选 parent 或 grain=row，勿建议重新 query。
 
 scope 使用边界：
 - explicit_dataset：模型 ref 正确或 dataset 与步骤一致。
@@ -138,11 +140,18 @@ def build_llm_user_body(ctx: BindingContext) -> str:
     """Assemble user message for binding intent LLM (exported for tests)."""
     catalog_lines = []
     for item in ctx.catalog_datasets[-15:]:
+        parent = item.get("parent_dataset_id")
+        parent_bit = f", parent={parent}" if parent else ""
+        grain = item.get("grain") or "?"
+        cols = item.get("columns") or []
+        col_bit = ",".join(str(c) for c in cols[:5])
+        if len(cols) > 5:
+            col_bit += "…"
         catalog_lines.append(
-            f"- {item.get('dataset_id')}: rows={item.get('result_rows')}, "
+            f"- {item.get('dataset_id')}: grain={grain}, rows={item.get('result_rows')}, "
             f"limit={item.get('query_limit')}, resource={item.get('resource')}, "
             f"user_turn={item.get('user_turn')}, current={item.get('is_current_turn')}, "
-            f"ref={item.get('result_ref')}"
+            f"cols=[{col_bit}], ref={item.get('result_ref')}{parent_bit}"
         )
     query_lines = []
     for q in ctx.query_summaries:

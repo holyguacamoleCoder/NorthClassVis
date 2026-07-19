@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 _ERROR_PREFIXES = ("Error:", "Permission denied", "Tool blocked")
-_DATA_RESULT_TOOLS = frozenset({"query_data", "aggregate_data"})
+_DATA_RESULT_TOOLS = frozenset({"query_data", "enrich_data", "aggregate_data"})
 _COMPACTED_RESULT_REF_RE = re.compile(
     r"result_ref=(query-results/[0-9a-f]{32}\.json)",
     re.IGNORECASE,
@@ -139,8 +139,8 @@ def _enrich_tool_step(step: dict[str, Any]) -> dict[str, Any]:
                 step["summary"] = "报告已写入并通过校验"
             elif "status: OK with warnings" in raw:
                 step["summary"] = "报告已写入（有警告）"
-    elif tool_name in ("query_data", "aggregate_data", "inspect_schema"):
-        resource = str(params.get("resource") or "").strip()
+    elif tool_name in ("query_data", "enrich_data", "aggregate_data", "inspect_schema"):
+        resource = str(params.get("resource") or params.get("lookup") or "").strip()
         if resource:
             step["kind"] = "data"
             step["resource"] = resource
@@ -213,7 +213,7 @@ def _summarize_tool_content(tool_name: str, content: str, max_len: int = 160) ->
         if event and not text.startswith("Error:"):
             label = event.get("label") or event.get("name") or event.get("target") or "memory"
             return f"已记住：{label}"
-    if tool_name in ("query_data", "aggregate_data", "inspect_schema"):
+    if tool_name in ("query_data", "enrich_data", "aggregate_data", "inspect_schema"):
         if text.startswith("Error:"):
             return _summarize_tool_error(text, max_len=max_len)
         try:
@@ -734,6 +734,12 @@ def adapt_legacy_query_response(
         "report_validate_loop_guard",
         "report_polish_loop_guard",
         "data_chain_oscillation_guard",
+    ) or (
+        continue_reason
+        and (
+            continue_reason.startswith("data_chain_fuse:")
+            or continue_reason.startswith("data_chain_redirect:")
+        )
     ):
         actions.append("可切换到「分析」模式后重新提问")
 

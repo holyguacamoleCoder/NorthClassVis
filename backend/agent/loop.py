@@ -49,10 +49,22 @@ from hints.plan_checks import append_data_tool_checks
 from hints.report_checks import append_report_write_checks
 from hints.report_revision import append_report_revision_hint
 from hints.data_chain_guard import (
+    KIND_AGG_ERROR_RETRY,
+    KIND_EXPLORATION_THRASH,
+    KIND_PREVIEW_THRASH,
+    KIND_REPEATED_QUERY,
+    OscillationEvent,
     aggregate_errors_in_batch,
+    build_oscillation_event,
+    format_oscillation_hint,
+    is_exploration_only_batch,
+    normalize_success_agg_signature,
     query_signatures_in_batch,
     should_break_aggregate_retry_loop,
+    should_break_exploration_thrash,
+    should_break_preview_requery_oscillation,
     should_break_repeated_query_loop,
+    batch_has_productive_progress,
 )
 from hints.turn_stop_summary import build_turn_stop_summary
 from hints.report_validate_guard import collect_report_tool_signatures
@@ -66,6 +78,8 @@ from hints.report_continue import (
 
 from loop_limits import (
     AGGREGATE_RETRY_LOOP_WINDOW,
+    EXPLORATION_PEEK_LIMIT,
+    EXPLORATION_THRASH_WINDOW,
     MAX_TURNS_PER_USER_ROUND,
     REPEATED_QUERY_LOOP_WINDOW,
     REPEATED_QUERY_THRESHOLD,
@@ -74,11 +88,7 @@ from loop_limits import (
 )
 
 MAX_TOKENS = 8192
-TOOL_LOOP_WINDOW = 6
 _CONSULT_LIST_LOOP_WINDOW = 4
-_TODO_ONLY_LOOP_WINDOW = 4
-_LOOPING_TOOLS = frozenset({"inspect_schema", "load_skill"})
-_PRODUCTIVE_DATA_TOOLS = frozenset({"query_data", "aggregate_data"})
 ERROR_LOOP_WINDOW = 4
 _AGGREGATE_INPUT_ERROR_MARKERS = (
     "aggregate_data 需要 input",
@@ -123,15 +133,18 @@ class AgentLoop:
             config=recovery_config,
             state=self.loop_state.recovery,
         )
-        self._recent_tool_batches: deque[tuple[str, ...]] = deque(maxlen=TOOL_LOOP_WINDOW)
         self._recent_consult_list_signatures: deque[tuple[str, ...]] = deque(
             maxlen=_CONSULT_LIST_LOOP_WINDOW
         )
-        self._recent_todo_only_batches: deque[bool] = deque(maxlen=_TODO_ONLY_LOOP_WINDOW)
         self._recent_tool_error_signatures: deque[tuple[str, ...]] = deque(maxlen=ERROR_LOOP_WINDOW)
         self._recent_aggregate_input_errors: deque[bool] = deque(maxlen=ERROR_LOOP_WINDOW)
         self._recent_aggregate_retry_signatures: list[str] = []
         self._recent_query_data_signatures: list[str] = []
+        self._recent_preview_oscillation_signatures: list[str] = []
+        # After a soft redirect: consecutive exploration-only batches (2nd-order thrash)
+        self._recent_exploration_flags: list[bool] = []
+        # kind -> how many soft redirects already issued this user round
+        self._oscillation_soft_hits: dict[str, int] = {}
         self._recent_report_blocker_signatures: deque[str] = deque(
             maxlen=REPORT_VALIDATE_LOOP_WINDOW
         )
@@ -453,28 +466,7 @@ class AgentLoop:
             return False
 
         # 如果LLM有工具调用，则执行工具调用（tool_calls 已在上方 dedupe 并写入 assistant）
-        if self._should_break_tool_loop(tool_calls):
-            self.loop_state.continue_reason = "tool_loop_guard"
-            guard_hint = (
-                "检测到工具调用在 inspect_schema/load_skill 上反复循环，已自动停止本轮。"
-                "若你要做统计（计数/均值/分组），请切换到 /mode analyze 并使用 "
-                "query_data / aggregate_data。"
-            )
-            _sync_tool_results_to_messages(
-                self.loop_state.messages,
-                tool_calls,
-                missing_content="Cancelled: tool loop guard",
-            )
-            self.loop_state.messages.append({"role": "assistant", "content": guard_hint})
-            log_event(
-                _log,
-                logging.WARNING,
-                "tool_loop_guard_triggered",
-                turn=self.loop_state.turn_count,
-                mode=self.permission.mode.value,
-                batches=list(self._recent_tool_batches),
-            )
-            return False
+        # 探索空转（inspect/list/peek/todo）并入 data_chain soft→hard，不再在此硬切。
         if self._should_break_consult_list_loop(tool_calls):
             self.loop_state.continue_reason = "consult_list_loop_guard"
             guard_hint = (
@@ -495,27 +487,6 @@ class AgentLoop:
                 turn=self.loop_state.turn_count,
                 mode=self.permission.mode.value,
                 signatures=list(self._recent_consult_list_signatures),
-            )
-            return False
-        if self._should_break_todo_only_loop(tool_calls):
-            self.loop_state.continue_reason = "todo_only_loop_guard"
-            guard_hint = (
-                "检测到连续多轮仅更新 todo_write 而无数据分析，已自动停止本轮。"
-                "若已有明确查询目标，请直接 query_data / aggregate_data；"
-                "多步任务也应在 todo 之外调用 inspect_schema 等工具。"
-            )
-            _sync_tool_results_to_messages(
-                self.loop_state.messages,
-                tool_calls,
-                missing_content="Cancelled: todo-only loop guard",
-            )
-            self.loop_state.messages.append({"role": "assistant", "content": guard_hint})
-            log_event(
-                _log,
-                logging.WARNING,
-                "todo_only_loop_guard_triggered",
-                turn=self.loop_state.turn_count,
-                mode=self.permission.mode.value,
             )
             return False
         log_event(
@@ -544,33 +515,40 @@ class AgentLoop:
         )
         self._check_cancelled()
 
-        if self._should_break_data_chain_oscillation(tool_calls, tool_results):
-            self.loop_state.continue_reason = "data_chain_oscillation_guard"
-            guard_hint = build_turn_stop_summary(
-                self.loop_state.messages,
-                reason_title="数据链震荡停止摘要",
-                extra_lines=[
-                    "query_data 与 aggregate_data 反复失败或重复查询，已自动停止。",
-                    "请换 resource/参数后一次 query（省略 limit）再 aggregate，勿重复同一查询。",
-                ],
-            )
+        osc = self._detect_data_chain_oscillation(tool_calls, tool_results)
+        if osc is not None:
+            hint = format_oscillation_hint(osc)
             _sync_tool_results_to_messages(
                 self.loop_state.messages,
                 tool_calls,
                 tool_results,
             )
-            self.loop_state.messages.append({"role": "assistant", "content": guard_hint})
+            self.loop_state.messages.append({"role": "assistant", "content": hint})
             self._emit_progress(
-                {"type": "answer", "content": guard_hint, "clear_thinking": True}
+                {"type": "answer", "content": hint, "clear_thinking": True}
             )
             log_event(
                 _log,
                 logging.WARNING,
                 "data_chain_oscillation_guard_triggered",
                 turn=self.loop_state.turn_count,
+                kind=osc.kind,
+                soft=osc.soft,
                 aggregate_retries=list(self._recent_aggregate_retry_signatures)[-3:],
                 query_sigs=list(self._recent_query_data_signatures)[-5:],
             )
+            if osc.soft:
+                # Redirect to a new method; keep the agent loop alive.
+                self.loop_state.continue_reason = f"data_chain_redirect:{osc.kind}"
+                self._oscillation_soft_hits[osc.kind] = (
+                    self._oscillation_soft_hits.get(osc.kind, 0) + 1
+                )
+                self._clear_oscillation_fingerprints(osc.kind)
+                # Soft = enter exploration phase; reset streak so short探 can start clean.
+                if osc.kind != KIND_EXPLORATION_THRASH:
+                    self._recent_exploration_flags.clear()
+                return True
+            self.loop_state.continue_reason = f"data_chain_fuse:{osc.kind}"
             return False
 
         # 错误响应防护
@@ -700,29 +678,6 @@ class AgentLoop:
         )
         return True
 
-    def _should_break_tool_loop(self, tool_calls: list[dict[str, Any]]) -> bool:
-        names = tuple(sorted(str(c.get("name") or "") for c in tool_calls if c.get("name")))
-        if not names:
-            self._recent_tool_batches.clear()
-            return False
-
-        name_set = set(names)
-        if name_set & _PRODUCTIVE_DATA_TOOLS:
-            self._recent_tool_batches.clear()
-            return False
-
-        if name_set.issubset(_LOOPING_TOOLS):
-            self._recent_tool_batches.append(names)
-        else:
-            self._recent_tool_batches.clear()
-            return False
-
-        if len(self._recent_tool_batches) < TOOL_LOOP_WINDOW:
-            return False
-
-        # Break only when all recent batches are low-value inspection loops.
-        return all(set(batch).issubset(_LOOPING_TOOLS) for batch in self._recent_tool_batches)
-
     def _list_files_batch_signature(self, tool_calls: list[dict[str, Any]]) -> tuple[str, ...] | None:
         paths: list[str] = []
         for call in tool_calls:
@@ -749,19 +704,6 @@ class AgentLoop:
 
         first = self._recent_consult_list_signatures[0]
         return all(sig == first for sig in self._recent_consult_list_signatures)
-
-    def _should_break_todo_only_loop(self, tool_calls: list[dict[str, Any]]) -> bool:
-        names = {str(c.get("name") or "") for c in tool_calls if c.get("name")}
-        if names != {"todo_write"}:
-            self._recent_todo_only_batches.clear()
-            return False
-        if names & _PRODUCTIVE_DATA_TOOLS:
-            self._recent_todo_only_batches.clear()
-            return False
-        self._recent_todo_only_batches.append(True)
-        if len(self._recent_todo_only_batches) < _TODO_ONLY_LOOP_WINDOW:
-            return False
-        return True
 
     def _tool_args_preview(self, tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
         preview: list[dict[str, Any]] = []
@@ -850,16 +792,58 @@ class AgentLoop:
             return False
         return all(self._recent_aggregate_input_errors)
 
-    def _should_break_data_chain_oscillation(
+    def _clear_oscillation_fingerprints(self, kind: str) -> None:
+        if kind == KIND_AGG_ERROR_RETRY:
+            self._recent_aggregate_retry_signatures.clear()
+        elif kind == KIND_REPEATED_QUERY:
+            self._recent_query_data_signatures.clear()
+        elif kind == KIND_PREVIEW_THRASH:
+            self._recent_preview_oscillation_signatures.clear()
+        elif kind == KIND_EXPLORATION_THRASH:
+            self._recent_exploration_flags.clear()
+
+    def _detect_data_chain_oscillation(
         self,
         tool_calls: list[dict[str, Any]],
         tool_results: list[dict[str, Any]],
-    ) -> bool:
-        """
-        Stop query ↔ aggregate ping-pong (batch dedupe alone cannot catch this).
+    ) -> OscillationEvent | None:
+        """Classify oscillation; soft redirect first, hard fuse if soft already used.
+
+        Pipeline (user intent):
+          error → LLM retries → oscillation → soft「请探索新方法」
+          → exploration thrash again → hard fuse.
         """
         names = {str(c.get("name") or "") for c in tool_calls if c.get("name")}
         agg_errors = aggregate_errors_in_batch(tool_calls, tool_results)
+
+        success_agg = normalize_success_agg_signature(tool_calls, tool_results)
+        if success_agg:
+            self._recent_preview_oscillation_signatures.append(success_agg)
+            try:
+                parsed = json.loads(success_agg)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                parsed = {}
+            is_topk = bool(parsed.get("ordered") and parsed.get("limited"))
+            if (
+                not is_topk
+                and should_break_preview_requery_oscillation(
+                    self._recent_preview_oscillation_signatures,
+                    threshold=REPEATED_QUERY_THRESHOLD,
+                )
+            ):
+                soft = self._oscillation_soft_hits.get(KIND_PREVIEW_THRASH, 0) < 1
+                return build_oscillation_event(KIND_PREVIEW_THRASH, soft=soft)
+        elif "query_data" in names and self._recent_preview_oscillation_signatures:
+            last = self._recent_preview_oscillation_signatures[-1]
+            if '"truncated_preview": true' in last:
+                for _sig in query_signatures_in_batch(tool_calls):
+                    self._recent_preview_oscillation_signatures.append(last)
+                if should_break_preview_requery_oscillation(
+                    self._recent_preview_oscillation_signatures,
+                    threshold=REPEATED_QUERY_THRESHOLD,
+                ):
+                    soft = self._oscillation_soft_hits.get(KIND_PREVIEW_THRASH, 0) < 1
+                    return build_oscillation_event(KIND_PREVIEW_THRASH, soft=soft)
 
         if names & {"aggregate_data"}:
             if agg_errors:
@@ -868,7 +852,8 @@ class AgentLoop:
                     self._recent_aggregate_retry_signatures,
                     window=AGGREGATE_RETRY_LOOP_WINDOW,
                 ):
-                    return True
+                    soft = self._oscillation_soft_hits.get(KIND_AGG_ERROR_RETRY, 0) < 1
+                    return build_oscillation_event(KIND_AGG_ERROR_RETRY, soft=soft)
             else:
                 self._recent_aggregate_retry_signatures.clear()
                 self._recent_query_data_signatures.clear()
@@ -877,16 +862,49 @@ class AgentLoop:
             q_sigs = query_signatures_in_batch(tool_calls)
             if q_sigs:
                 self._recent_query_data_signatures.extend(q_sigs)
-                if (
-                    self._recent_aggregate_retry_signatures
-                    and should_break_repeated_query_loop(
-                        self._recent_query_data_signatures,
-                        window=REPEATED_QUERY_LOOP_WINDOW,
-                        repeat_threshold=REPEATED_QUERY_THRESHOLD,
-                    )
+                if should_break_repeated_query_loop(
+                    self._recent_query_data_signatures,
+                    window=REPEATED_QUERY_LOOP_WINDOW,
+                    repeat_threshold=REPEATED_QUERY_THRESHOLD,
                 ):
-                    return True
-        return False
+                    soft = self._oscillation_soft_hits.get(KIND_REPEATED_QUERY, 0) < 1
+                    return build_oscillation_event(KIND_REPEATED_QUERY, soft=soft)
+
+        # Exploration thrash (replaces hard-only tool_loop / todo_only guards).
+        # Always track; if a prior soft already invited exploration, the next
+        # exploration thrash hard-fuses (软提示探索 → 再震荡 → 熔断).
+        if batch_has_productive_progress(tool_calls):
+            self._recent_exploration_flags.clear()
+        elif is_exploration_only_batch(tool_calls, peek_limit=EXPLORATION_PEEK_LIMIT):
+            self._recent_exploration_flags.append(True)
+            if should_break_exploration_thrash(
+                self._recent_exploration_flags,
+                window=EXPLORATION_THRASH_WINDOW,
+            ):
+                prior_method_soft = any(
+                    n > 0
+                    for kind, n in self._oscillation_soft_hits.items()
+                    if kind != KIND_EXPLORATION_THRASH
+                )
+                if prior_method_soft:
+                    soft = False
+                else:
+                    soft = self._oscillation_soft_hits.get(KIND_EXPLORATION_THRASH, 0) < 1
+                return build_oscillation_event(KIND_EXPLORATION_THRASH, soft=soft)
+        elif tool_calls:
+            # Real query/other work attempt — reset exploration streak.
+            self._recent_exploration_flags.clear()
+
+        return None
+
+    def _should_break_data_chain_oscillation(
+        self,
+        tool_calls: list[dict[str, Any]],
+        tool_results: list[dict[str, Any]],
+    ) -> bool:
+        """Backward-compatible bool wrapper (hard fuse only). """
+        ev = self._detect_data_chain_oscillation(tool_calls, tool_results)
+        return ev is not None and not ev.soft
 
     def _align_turn_count_for_user_round(self) -> None:
         """Continue turn index after restart / new user message (not reset to 1)."""
@@ -966,6 +984,8 @@ class AgentLoop:
 
     def run_loop(self):
         self._align_turn_count_for_user_round()
+        self._oscillation_soft_hits.clear()
+        self._recent_exploration_flags.clear()
         start_turn = self.loop_state.turn_count
         log_event(
             _log,

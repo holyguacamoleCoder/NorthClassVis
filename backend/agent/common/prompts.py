@@ -33,7 +33,11 @@ _DATA_DECISIONS = """## 常用决策（IF → THEN）
 |------|------|
 | 统计人数 | `aggregate_data` + `count_distinct` + `field=student_ID`（`count` 仅为提交行数） |
 | 全量统计 | `query_data` **省略** `limit`；禁止 `limit:0` |
-| 聚合 | 先 `query_data`，再 `aggregate_data` 且 `input={"result_ref": "<meta.result_ref>"}` |
+| 聚合 | 先 `query_data`，再 `aggregate_data`（优先 `input.dataset_id` / `result_ref`） |
+| 正确率 | `submit_record` 已含 `full_score`/`score_rate`；或 `enrich_data(lookup=title_info,…)` 后再聚合；按学生：`sum(score)/sum(full_score)` 或 `mean(score_rate)` |
+| 跨表挂列 | `enrich_data`（左连接 lookup，键去重）；**禁止**幻想手工 join / 多 input aggregate |
+| 排名/极值 | 同一 `dataset_id` 上 `aggregate_data(order_by+limit=K)`，勿为看全表重查 |
+| 续算/缺列 | `list_datasets` 看 `grain`/`parent=`；`grain=agg` 缺学号时用 `parent` 原始行，勿盲目 `query_data` |
 | 专业过滤 | `submit_record` 传 `majors` 或 `where` 字段 `major`（勿把专业码写入 `student_ID`） |
 | 选中学生 | 教师说「我选的」→ 用 Nav 选区；**班级总览/消息中指定 ClassN** → `query_data` 用该班，**忽略**面板错位选区 |
 | 图表跳转 | 结论后用 `build_visual_links`（勿手写未校验的 view 名） |
@@ -45,9 +49,9 @@ _MODE_EXTENSIONS: dict[str, str] = {
 - **不可用**：`read_file`、`query_data`、`aggregate_data`、`build_visual_links`
 - 需要计数、均值、图表跳转或读 `meta/`/`reports/` → 请教师切换到 **analyze**；要写交付报告 → **produce**""",
     "analyze": """## 本模式能力（analyze）
-- **在 consult 基础上增加**：`query_data`、`aggregate_data`、`build_visual_links`
+- **在 consult 基础上增加**：`query_data`、`enrich_data`、`aggregate_data`、`build_visual_links`
 - **`read_file` 仅** `meta/`（契约与 catalog）；**禁止**读 `reports/`、`exports/` 下已有产出物
-- 流程：`inspect_schema` → `query_data` → `aggregate_data`；向教师给出结论后 `build_visual_links`""",
+- 流程：`inspect_schema` → `query_data` →（可选 `enrich_data`）→ `aggregate_data`；向教师给出结论后 `build_visual_links`""",
     "produce": """## 本模式能力（produce）
 - **在 analyze 基础上**：可**写入** `reports/`（所有 Markdown 报告）；`exports/` 仅非报告导出
 - **报告写作规范**：produce 下 `report-writing` 自动登记；正文在 load_skill 的 tool result（勿重复 load）
@@ -110,6 +114,7 @@ SECTION_MEMORY_ENTRY = "### {name}：{description}"
 
 SECTION_SESSION = "--- 会话上下文（Hooks / 数据目录摘要）---"
 SECTION_UI_SCOPE = "--- 当前分析范围（可视化面板 / Nav，每轮 HTTP 同步）---"
+SECTION_DATASETS_CATALOG = "--- 本会话数据集目录（compact 后仍可引用；续算用 dataset_id）---"
 SECTION_SKILLS = "--- 可用技能（目录；完整流程见 load_skill 的 tool result）---"
 SECTION_LOADED_NAMES = "--- 本会话已加载（正文在对应 tool result，勿重复 load）---"
 SECTION_LOADED_SKILLS = SECTION_LOADED_NAMES  # legacy alias
@@ -160,6 +165,7 @@ COMPACT_SUMMARY_USER_TEMPLATE = """请压缩以下 NorthClassVision 学业数据
 5. 已加载的技能/参考名称及须遵守的流程要点（非 SKILL 全文；正文在 pin 的 tool result）
 6. 教师约束与偏好（格式、范围、注意事项）
 7. **学业数据仅经 resource 工具（inspect_schema / query_data），禁止 read_file 原始 Data_*.csv**
+8. **已产生的 dataset_id / result_ref**（及 resource、行数/limit）；跨题续算与证据引用必须保留句柄，勿只写「查过数据」
 
 对话记录（JSON）：
 {conversation}
@@ -245,6 +251,14 @@ def format_session_section(blocks: list[str]) -> str:
     """Join hook-injected session blocks under the session section header."""
     body = "\n\n".join(b for b in blocks if b and b.strip())
     return f"{SECTION_SESSION}\n{body}"
+
+
+def format_datasets_catalog_section(catalog_text: str) -> str:
+    """Session dataset catalog for system prompt (survives micro/macro compact)."""
+    body = (catalog_text or "").strip()
+    if not body:
+        return ""
+    return f"{SECTION_DATASETS_CATALOG}\n{body}"
 
 
 def format_filter_context_section(scope: dict) -> str:

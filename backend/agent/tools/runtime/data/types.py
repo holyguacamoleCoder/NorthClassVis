@@ -8,6 +8,7 @@ from typing import Any
 DATA_CHAIN_TOOLS = frozenset(
     {
         "query_data",
+        "enrich_data",
         "aggregate_data",
         "inspect_schema",
         "list_datasets",

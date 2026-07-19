@@ -24,7 +24,7 @@ TERMINAL_RUN_STATUSES = frozenset({
     RunStatus.SUPERSEDED,
 })
 
-DATA_RUN_TOOLS = frozenset({"query_data", "aggregate_data"})
+DATA_RUN_TOOLS = frozenset({"query_data", "enrich_data", "aggregate_data"})
 
 
 @dataclass

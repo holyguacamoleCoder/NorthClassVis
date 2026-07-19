@@ -57,6 +57,8 @@ class ChatSession:
     loaded_skills: list[str] = field(default_factory=list)
     loaded_references: list[str] = field(default_factory=list)
     filter_context: dict[str, Any] | None = None
+    # Persisted build_visual_links evidence for report validate / chart inject.
+    visual_links: list[dict[str, Any]] = field(default_factory=list)
     # High-water user round index for logs / compaction; see count_user_turns().
     user_turn_count: int = 0
     messages_count: int = 1

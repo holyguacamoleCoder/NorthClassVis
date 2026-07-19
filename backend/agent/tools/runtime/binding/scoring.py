@@ -33,15 +33,28 @@ def _resource_field_compatibility(
     metrics: list[dict[str, Any]],
     dimensions: list[str] | None,
 ) -> float:
-    """Bonus when candidate resource owns the requested fields."""
+    """Bonus when candidate actual columns (or resource schema) cover requested fields."""
     needed = _fields_needed(metrics, dimensions)
     if not needed:
         return 0.0
+    # Prefer real result columns over resource defaults (agg drops student_ID).
+    if candidate.columns:
+        allowed = set(candidate.columns)
+        if needed <= allowed:
+            return 4.0
+        overlap = len(needed & allowed)
+        if overlap == 0:
+            return -6.0
+        return -2.0 * (len(needed) - overlap)
     allowed = _resource_column_set(candidate.resource)
     if not allowed:
         return 0.0
     if needed <= allowed:
-        return 3.0
+        # Soft bonus only — may be wrong for grain=agg with same resource label.
+        bonus = 3.0
+        if (candidate.grain or "") == "agg":
+            bonus = 0.5
+        return bonus
     overlap = len(needed & allowed)
     if overlap == 0:
         return -4.0

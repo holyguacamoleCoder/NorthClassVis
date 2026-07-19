@@ -10,7 +10,7 @@ from common.logger import get_logger, log_event
 from context.state import CompactState
 from data.filter_context import FilterContext, merge_defaults, merge_http_context
 from hooks import HookManager
-from loop_state import LoopState
+from loop_state import AnalysisToolContext, LoopState
 from permission import CapabilityMode, PermissionManager
 from tools.handlers.todo_write import apply_todo_snapshot, reset_todo_state
 
@@ -96,6 +96,14 @@ class SessionManager:
         self._activate(session, persist_active=True)
         self.store.save(session)
         log_event(_log, logging.INFO, "session_created", session_id=session.id)
+        try:
+            from common.dream import get_dream_consolidator
+
+            dream = get_dream_consolidator()
+            dream.note_session()
+            dream.consolidate()
+        except Exception as exc:
+            log_event(_log, logging.WARNING, "dream_hook_failed", error=str(exc))
         return session
 
     def switch_session(self, session_id: str) -> ChatSession | None:
@@ -212,6 +220,9 @@ class SessionManager:
             self._active.permission_mode = loop_state.permission.mode.value
         if loop_state.filter_context is not None:
             self._active.filter_context = loop_state.filter_context.to_dict()
+        self._active.visual_links = list(
+            loop_state.analysis_context.session_visual_links or []
+        )
         self._active.loaded_skills = sorted(loop_state.loaded_skills)
         self._active.loaded_references = sorted(loop_state.loaded_references)
 
@@ -222,6 +233,12 @@ class SessionManager:
         permission.mode = CapabilityMode(session.permission_mode)
         fc = FilterContext.from_dict(session.filter_context)
         fc = merge_defaults(fc)
+        analysis = AnalysisToolContext(
+            session_id=session.id,
+            # Seed before begin_user_turn() so catalog user_turn stays monotonic.
+            user_turn=max(0, int(session.user_turn_count or 0)),
+            session_visual_links=list(session.visual_links or []),
+        )
         return LoopState(
             messages=list(session.messages),
             compact=session.compact,
@@ -236,6 +253,7 @@ class SessionManager:
             ),
             messages_count=session.messages_count,
             filter_context=fc,
+            analysis_context=analysis,
             loaded_skills=set(session.loaded_skills or []),
             loaded_references=set(session.loaded_references or []),
         )

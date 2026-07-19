@@ -8,7 +8,7 @@ from core import data_loader
 from domain.features.calculators import FinalFeatureCalculator, PreliminaryFeatureCalculator
 from services import week_service
 
-from .loaders import load_student_info, load_submit_records, project_data_dir, validate_classes
+from .loaders import load_student_info, load_submit_records, load_title_info, project_data_dir, validate_classes
 
 
 def build_submit_record_joined(
@@ -17,7 +17,7 @@ def build_submit_record_joined(
     *,
     data_dir: Path | None = None,
 ) -> pd.DataFrame:
-    """submit + title（left join title_ID）；可选按 major 过滤学生。"""
+    """submit + title（left join title_ID）+ student；题目满分挂为 full_score。"""
     validate_classes(classes, data_dir)
     submit_df = load_submit_records(classes, data_dir)
     if submit_df.empty:
@@ -29,6 +29,21 @@ def build_submit_record_joined(
         right_columns=["title_ID", "knowledge", "sub_knowledge"],
         on="title_ID",
     )
+
+    # title_info.score is the question max; submit.score is earned points — keep both.
+    title_scores = load_title_info(data_dir)
+    if not title_scores.empty and "title_ID" in title_scores.columns and "score" in title_scores.columns:
+        score_map = (
+            title_scores[["title_ID", "score"]]
+            .drop_duplicates(subset=["title_ID"], keep="first")
+            .rename(columns={"score": "full_score"})
+        )
+        merged = merged.merge(score_map, on="title_ID", how="left")
+        earned = pd.to_numeric(merged.get("score"), errors="coerce")
+        full = pd.to_numeric(merged["full_score"], errors="coerce")
+        rate = earned / full
+        rate = rate.where(full.notna() & (full > 0))
+        merged["score_rate"] = rate
 
     student_df = load_student_info(data_dir)
     merged = data_loader.merge_dataframes_or_files(

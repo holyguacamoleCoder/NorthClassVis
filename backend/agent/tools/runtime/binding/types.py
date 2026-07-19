@@ -40,6 +40,9 @@ class BindingCandidate:
     rows_scanned: int | None = None
     dataset_id: str | None = None
     resource: str | None = None
+    grain: str | None = None
+    columns: list[str] | None = None
+    parent_dataset_id: str | None = None
 
     @property
     def is_slice(self) -> bool:

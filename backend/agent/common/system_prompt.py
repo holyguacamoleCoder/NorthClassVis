@@ -9,6 +9,7 @@ from common.memory import MemoryManager, get_memory_manager
 from common.prompts import (
     MEMORY_GUIDANCE,
     build_base_agent_prompt,
+    format_datasets_catalog_section,
     format_filter_context_section,
     format_loaded_skill_names_section,
     format_permission_mode,
@@ -69,6 +70,12 @@ class SystemPromptBuilder:
         if ctx.filter_context is not None:
             parts.append(format_filter_context_section(ctx.filter_context.to_summary_dict()))
 
+        datasets_block = format_datasets_catalog_section(
+            _format_datasets_catalog_prompt(ctx.session_id)
+        )
+        if datasets_block:
+            parts.append(datasets_block)
+
         if ctx.skills is not None:
             parts.append(format_skills_section(ctx.skills.describe_available()))
 
@@ -121,3 +128,11 @@ def _format_deliverables_prompt(session_id: str | None) -> str:
     from session.deliverables_registry import format_deliverables_prompt
 
     return format_deliverables_prompt(session_id)
+
+
+def _format_datasets_catalog_prompt(session_id: str | None) -> str:
+    if not session_id:
+        return ""
+    from data.dataset_registry import format_prompt_catalog
+
+    return format_prompt_catalog(session_id, tail=8)

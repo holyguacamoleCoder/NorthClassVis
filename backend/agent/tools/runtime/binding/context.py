@@ -53,6 +53,7 @@ def collect_turn_candidates(
     batch_snapshots: list[QuerySnapshot],
 ) -> tuple[list[BindingCandidate], list[QuerySummary]]:
     turn = analysis_context.user_turn if analysis_context else 0
+    session_id = analysis_context.session_id if analysis_context else None
     combined = list(analysis_context.turn_snapshots if analysis_context else []) + list(
         batch_snapshots
     )
@@ -66,7 +67,7 @@ def collect_turn_candidates(
             seen.add(key)
         ordered.append(snap)
 
-    candidates = [_snap_to_candidate(s, turn) for s in ordered]
+    candidates = [_enrich_candidate(_snap_to_candidate(s, turn), session_id) for s in ordered]
     summaries = [
         QuerySummary(
             dataset_id=s.dataset_id,
@@ -81,6 +82,34 @@ def collect_turn_candidates(
     ]
     return candidates, summaries
 
+
+def _enrich_candidate(
+    cand: BindingCandidate,
+    session_id: str | None,
+) -> BindingCandidate:
+    if not session_id:
+        return cand
+    rec = None
+    if cand.dataset_id:
+        rec = get_dataset_record(session_id, cand.dataset_id)
+    if rec is None:
+        from data.dataset_registry import find_dataset_by_ref
+
+        rec = find_dataset_by_ref(session_id, cand.result_ref)
+    if rec is None:
+        return cand
+    return BindingCandidate(
+        result_ref=cand.result_ref or rec.result_ref,
+        result_rows=cand.result_rows or rec.result_rows,
+        user_turn=cand.user_turn if cand.user_turn else rec.user_turn,
+        query_limit=cand.query_limit if cand.query_limit is not None else rec.query_limit,
+        rows_scanned=cand.rows_scanned if cand.rows_scanned is not None else rec.rows_scanned,
+        dataset_id=cand.dataset_id or rec.dataset_id,
+        resource=cand.resource or rec.resource,
+        grain=rec.grain,
+        columns=list(rec.columns or rec.select_cols or []) or None,
+        parent_dataset_id=rec.parent_dataset_id,
+    )
 
 def build_binding_context(
     *,
@@ -132,6 +161,9 @@ def candidate_for_dataset_id(
             rows_scanned=rec.rows_scanned,
             dataset_id=rec.dataset_id,
             resource=rec.resource,
+            grain=rec.grain,
+            columns=list(rec.columns or rec.select_cols or []) or None,
+            parent_dataset_id=rec.parent_dataset_id,
         )
     return None
 

@@ -71,6 +71,7 @@ def postprocess_tool_result(
             parsed_args=parsed_args,
             analysis_context=analysis_context,
             batch_snapshots=batch_snapshots,
+            tool_name=tool_name,
         )
         if enriched:
             tool_result = enriched
@@ -82,10 +83,23 @@ def postprocess_tool_result(
             parsed_args=parsed_args,
             analysis_context=analysis_context,
             batch_snapshots=batch_snapshots,
+            tool_name=tool_name,
         )
         if enriched:
             tool_result = enriched
+        tool_result = append_query_summary_to_result(tool_result)
 
+    if tool_name == "enrich_data" and isinstance(tool_result, str):
+        enriched = record_query_result(
+            tool_result,
+            parsed_args=parsed_args,
+            analysis_context=analysis_context,
+            batch_snapshots=batch_snapshots,
+            tool_name=tool_name,
+        )
+        if enriched:
+            tool_result = enriched
+        tool_result = append_query_summary_to_result(tool_result)
     if compact_state and tool_name in PATH_TOOLS:
         path_arg = parsed_args.get("path") or "."
         track_recent_file(

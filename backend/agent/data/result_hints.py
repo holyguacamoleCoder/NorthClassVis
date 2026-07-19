@@ -56,17 +56,37 @@ def enrich_query_payload(
             "GROUP_BY_EMPTY: 已扫描行但分组结果为空；请检查 limit、where，全量统计请省略 limit。"
         )
     if meta.get("truncated"):
+        full_n = meta.get("full_row_count")
+        preview_n = len(rows)
         warnings.append(
-            "TRUNCATED: 结果已截断；需要全量 count/mean 时请省略 limit 后重新 query_data，再 aggregate。"
+            "PREVIEW_ONLY: 预览行数受工具预算限制，不是查询失败或数据缺失。"
+            + (f"全量约 {full_n} 行" if full_n is not None else "全量")
+            + f"已在 meta.result_ref（当前预览 {preview_n} 行）。"
+            "下一步优先：aggregate_data(order_by+limit=K) 取极值；"
+            "或 list_datasets 确认 grain=row 的 dataset_id。勿为看全表再次 query_data。"
+        )
+        meta["truncation_kind"] = "preview_only"
+        meta.setdefault(
+            "next_actions",
+            [
+                {
+                    "action": "rank_topk",
+                    "tool": "aggregate_data",
+                    "note": "同一 dataset_id + order_by + limit=K",
+                },
+                {"action": "avoid", "note": "不要为预览截断重新全量 query_data"},
+            ],
         )
     else:
         meta["limit_hint"] = "全量统计请省略 limit（不要传 limit:0）。"
 
     if resource == "submit_record":
         meta["metric_hint"] = (
-            "count 统计的是行数（提交次数）；各专业「选课人数/学生数」请用 "
-            "aggregate_data 的 count_distinct，field=student_ID，并按 major 分组。"
-            " score/title_ID/knowledge 在本 resource 可用。"
+            "count=提交行数；学生人数用 count_distinct(student_ID)。"
+            "正确率勿跨表 join：本表已含 full_score（题目满分）与 score_rate（score/full_score）。"
+            "按学生正确率：aggregate_data dimensions=[student_ID]，"
+            "metrics=sum(score) 与 sum(full_score)，再用 总分/总满分；"
+            "或 mean(score_rate)。排名用 order_by+limit。"
         )
     elif resource == "week_aggregation":
         meta["metric_hint"] = (
@@ -93,9 +113,14 @@ def enrich_query_payload(
     if warnings:
         meta["warnings"] = warnings
 
-    cols = RESOURCE_COLUMNS.get(resource)
-    if cols:
-        meta["columns"] = list(cols)
+    from data.dataset_identity import column_names_from_payload
+
+    actual_cols = column_names_from_payload(payload)
+    if actual_cols:
+        meta["columns"] = actual_cols
+    resource_cols = RESOURCE_COLUMNS.get(resource)
+    if resource_cols:
+        meta["resource_columns"] = list(resource_cols)
 
 
 def enrich_aggregate_payload(
@@ -126,9 +151,17 @@ def enrich_aggregate_payload(
         warnings.append(msg)
     source_meta = _load_input_meta(input_spec)
 
-    if source_meta.get("truncated"):
+    if source_meta.get("truncated") and source_meta.get("truncation_kind") != "preview_only":
+        # Only when the *input query* was limit-truncated (incomplete rows on disk).
+        if source_meta.get("query_limit") is not None:
+            warnings.append(
+                "AGGREGATE_ON_LIMITED_INPUT: input 来自带 limit 的 query 切片；"
+                "若要全班统计请改用 grain=row 且全量（无 limit）的 dataset_id，勿盲目重查。"
+            )
+    elif source_meta.get("truncated") and source_meta.get("truncation_kind") == "preview_only":
         warnings.append(
-            "AGGREGATE_ON_TRUNCATED_INPUT: input 来自截断的 query；全量统计请省略 limit 重新 query 后再聚合。"
+            "INPUT_PREVIEW_ONLY: 上游预览截断不影响 result_ref 全量；"
+            "继续用该 dataset_id；排名请 order_by+limit，勿重扫全表。"
         )
 
     for metric in metrics:

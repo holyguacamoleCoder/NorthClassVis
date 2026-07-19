@@ -140,7 +140,9 @@ def test_micro_compact_preserves_tabular_summary(compact_config):
             "resource": "submit_record_joined",
             "rows": [],
             "meta": {
+                "dataset_id": "ds_abc123def456",
                 "result_ref": "query-results/abc.json",
+                "query_limit": 100,
                 "rows_scanned": 100,
                 "truncated": True,
             },
@@ -149,6 +151,7 @@ def test_micro_compact_preserves_tabular_summary(compact_config):
     )
     compacted = compact_tool_content(payload)
     assert COMPACTED_TOOL_PLACEHOLDER in compacted
+    assert "dataset_id=ds_abc123def456" in compacted
     assert "result_ref=query-results/abc.json" in compacted
     assert "rows_scanned=100" in compacted
 

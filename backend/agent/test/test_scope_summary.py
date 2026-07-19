@@ -96,3 +96,37 @@ def test_system_prompt_uses_summary_scope():
     )
     assert "30 人" in prompt
     assert "x0, x1, x2, x3, x4" not in prompt
+
+
+def test_format_datasets_catalog_section_and_prompt(tmp_path, monkeypatch):
+    from common.prompts import SECTION_DATASETS_CATALOG, format_datasets_catalog_section
+    from data.dataset_registry import DatasetRecord, append_dataset, format_catalog_hint
+
+    monkeypatch.setattr(
+        "data.dataset_registry.AGENT_STATE_DIR",
+        tmp_path,
+        raising=False,
+    )
+    append_dataset(
+        "sess1",
+        DatasetRecord(
+            dataset_id="ds_aaa111bbb222",
+            result_ref="query-results/x.json",
+            user_turn=2,
+            resource="submit_record",
+            result_rows=40,
+            query_limit=40,
+        ),
+    )
+    hint = format_catalog_hint("sess1", tail=5)
+    assert "ds_aaa111bbb222" in hint
+    assert "result_ref=query-results/x.json" in hint
+    section = format_datasets_catalog_section(hint)
+    assert SECTION_DATASETS_CATALOG in section
+    assert "dataset_id" in section or "ds_aaa111bbb222" in section
+
+    prompt = SystemPromptBuilder().build(
+        SystemPromptContext(permission_mode="analyze", session_id="sess1"),
+    )
+    assert SECTION_DATASETS_CATALOG in prompt
+    assert "ds_aaa111bbb222" in prompt

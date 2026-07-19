@@ -16,7 +16,7 @@ DATA_INSPECT_TOOLS = frozenset({
     "list_datasets",
     "resolve_dataset_binding",
 })
-DATA_QUERY_TOOLS = frozenset({"query_data", "aggregate_data"})
+DATA_QUERY_TOOLS = frozenset({"query_data", "enrich_data", "aggregate_data"})
 ADAPTER_TOOLS = frozenset({"get_current_filter_context", "build_visual_links"})
 SESSION_TOOLS = frozenset({"todo_write", "compact", "memory", "save_memory"})
 WRITE_TOOLS = frozenset({"write_file", "edit_file"})
