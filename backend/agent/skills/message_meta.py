@@ -9,6 +9,7 @@ from .tool_result import (
     CONTENT_KIND_COMPACT_SUMMARY,
     CONTENT_KIND_REFERENCE,
     CONTENT_KIND_SKILL,
+    CONTENT_KIND_UI_SCOPE_HINT,
 )
 
 
@@ -77,6 +78,21 @@ def is_compact_summary_message(msg: dict[str, Any]) -> bool:
     from common.prompts import COMPACT_USER_MESSAGE_PREAMBLE
 
     return str(msg.get("content") or "").lstrip().startswith(COMPACT_USER_MESSAGE_PREAMBLE)
+
+
+def is_ui_scope_hint_message(msg: dict[str, Any]) -> bool:
+    meta = msg.get("_agent_meta")
+    if isinstance(meta, dict) and meta.get("content_kind") == CONTENT_KIND_UI_SCOPE_HINT:
+        return True
+    if msg.get("role") != "user":
+        return False
+    text = str(msg.get("content") or "").lstrip()
+    return text.startswith("[系统·本轮范围]") or text.startswith("[系统·附件上下文]")
+
+
+def drop_previous_ui_scope_hints(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep at most the latest turn's scope hint in LLM context (avoid stacking)."""
+    return [m for m in messages if not is_ui_scope_hint_message(m)]
 
 
 def pin_meta_for_tool(tool_name: str, content: str) -> dict[str, Any] | None:

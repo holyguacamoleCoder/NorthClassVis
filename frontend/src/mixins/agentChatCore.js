@@ -33,10 +33,14 @@ import {
 import { AGENT_UI } from '@/constants/agentUiText.js'
 import { isSkillSlashCommand, skillCommandLoadingText } from '@/utils/agentSlashCommands.js'
 import {
+  buildDatasetAttachmentFromStep,
+  buildReportAttachment,
   buildScopeAttachmentFromContext,
+  buildViewSnapshotAttachment,
   cloneScopeAttachment,
   hasScopeContent,
-  scopeAttachmentKey,
+  scopeAttachmentNavKey,
+  VIEW_FRIENDLY_NAMES,
 } from '@/utils/agentScopeAttachment.js'
 
 export default {
@@ -92,17 +96,49 @@ export default {
       }
       return buildScopeAttachmentFromContext(this.context)
     },
+    latestReportLink() {
+      for (let i = this.messages.length - 1; i >= 0; i -= 1) {
+        const links = this.messages[i]?.report_links
+        if (Array.isArray(links) && links.length) {
+          const md = links.find((l) => /\.md$/i.test(l.path || ''))
+          return md || links[0]
+        }
+      }
+      return null
+    },
+    canAttachCurrentView() {
+      return !this.composerScopeAttachment?.view_snapshot
+    },
+    canAttachLatestReport() {
+      return !!this.latestReportLink && !this.composerScopeAttachment?.report
+    },
   },
   watch: {
     context: {
       deep: true,
       immediate: true,
       handler(ctx) {
-        const next = scopeAttachmentKey(buildScopeAttachmentFromContext(ctx))
-        if (next !== this._scopeAttachmentWatchKey) {
-          this._scopeAttachmentWatchKey = next
+        const fromCtx = buildScopeAttachmentFromContext(ctx)
+        const nextNav = scopeAttachmentNavKey(fromCtx)
+        if (nextNav !== this._scopeAttachmentWatchKey) {
+          this._scopeAttachmentWatchKey = nextNav
           this.scopeAttachmentDismissed = false
           this.scopeAttachmentDraft = null
+          return
+        }
+        // Nav unchanged: keep draft nav edits, sync manual extras from context (Add to chat).
+        if (this.scopeAttachmentDraft && fromCtx) {
+          this.scopeAttachmentDraft = cloneScopeAttachment({
+            ...this.scopeAttachmentDraft,
+            knowledge_ids: fromCtx.knowledge_ids || [],
+            title_ids: fromCtx.title_ids || [],
+            dataset: fromCtx.dataset || null,
+            view_snapshot: fromCtx.view_snapshot || null,
+            report: fromCtx.report || null,
+          })
+          if (this.scopeAttachmentDraft) {
+            this.scopeAttachmentDismissed = false
+          }
         }
       },
     },
@@ -647,12 +683,22 @@ export default {
         } else {
           base.week_range = undefined
         }
+        base.knowledge_ids = [...(scopeAttachment.knowledge_ids || [])]
+        base.title_ids = [...(scopeAttachment.title_ids || [])]
+        base.dataset = scopeAttachment.dataset || null
+        base.view_snapshot = scopeAttachment.view_snapshot || null
+        base.report = scopeAttachment.report || null
         base.ui_scope = { ...scopeAttachment }
       } else {
         base.selected_student_ids = []
         base.classes = []
         base.majors = []
         base.week_range = undefined
+        base.knowledge_ids = []
+        base.title_ids = []
+        base.dataset = null
+        base.view_snapshot = null
+        base.report = null
         base.ui_scope = null
       }
       return base
@@ -673,6 +719,11 @@ export default {
         this.scopeAttachmentDismissed = true
       }
     },
+    syncExtrasToStore(patch) {
+      if (this.$store) {
+        this.$store.commit('patchAgentChatAttachments', patch)
+      }
+    },
     dismissComposerScopeAttachment() {
       this.scopeAttachmentDismissed = true
       this.scopeAttachmentDraft = {
@@ -680,6 +731,7 @@ export default {
         classes: [],
         majors: [],
       }
+      if (this.$store) this.$store.commit('clearAgentChatAttachments')
     },
     removeComposerScopeStudent(studentId) {
       const sid = String(studentId || '').trim()
@@ -720,6 +772,86 @@ export default {
       delete next.week_range
       this.scopeAttachmentDraft = next
       this.pruneScopeAttachmentDraft()
+    },
+    removeComposerScopeKnowledge(name) {
+      const key = String(name || '').trim()
+      if (!key) return
+      this.ensureScopeAttachmentDraft()
+      const ids = (this.scopeAttachmentDraft.knowledge_ids || []).filter((k) => k !== key)
+      this.scopeAttachmentDraft = { ...this.scopeAttachmentDraft, knowledge_ids: ids }
+      this.syncExtrasToStore({ knowledge_ids: ids })
+      this.pruneScopeAttachmentDraft()
+    },
+    removeComposerScopeTitle(titleId) {
+      const tid = String(titleId || '').trim()
+      if (!tid) return
+      this.ensureScopeAttachmentDraft()
+      const ids = (this.scopeAttachmentDraft.title_ids || []).filter((t) => t !== tid)
+      this.scopeAttachmentDraft = { ...this.scopeAttachmentDraft, title_ids: ids }
+      this.syncExtrasToStore({ title_ids: ids })
+      this.pruneScopeAttachmentDraft()
+    },
+    removeComposerScopeDataset() {
+      this.ensureScopeAttachmentDraft()
+      const next = { ...this.scopeAttachmentDraft }
+      delete next.dataset
+      this.scopeAttachmentDraft = next
+      this.syncExtrasToStore({ dataset: null })
+      this.pruneScopeAttachmentDraft()
+    },
+    removeComposerScopeView() {
+      this.ensureScopeAttachmentDraft()
+      const next = { ...this.scopeAttachmentDraft }
+      delete next.view_snapshot
+      this.scopeAttachmentDraft = next
+      this.syncExtrasToStore({ view_snapshot: null })
+      this.pruneScopeAttachmentDraft()
+    },
+    removeComposerScopeReport() {
+      this.ensureScopeAttachmentDraft()
+      const next = { ...this.scopeAttachmentDraft }
+      delete next.report
+      this.scopeAttachmentDraft = next
+      this.syncExtrasToStore({ report: null })
+      this.pruneScopeAttachmentDraft()
+    },
+    onAttachDatasetRun(step) {
+      const dataset = buildDatasetAttachmentFromStep(step)
+      if (!dataset || !this.$store) return
+      this.$store.dispatch('attachDatasetToChat', dataset)
+      this.scopeAttachmentDismissed = false
+    },
+    attachCurrentViewSnapshot() {
+      if (!this.$store) return
+      const link = this.$store.getters.getAgentVisualLink
+      let snapshot = null
+      if (link?.view) {
+        snapshot = buildViewSnapshotAttachment({
+          view: link.view,
+          params: link.params || {},
+          label: `当前 ${VIEW_FRIENDLY_NAMES[link.view] || link.view}`,
+        })
+      } else {
+        const week = this.$store.getters.getNavWeekRange
+        const ids = this.$store.getters.getSelectedIds || []
+        const params = {}
+        if (Array.isArray(week) && week.length >= 2) params.week_range = [...week]
+        if (ids.length) params.student_ids = [...ids]
+        snapshot = buildViewSnapshotAttachment({
+          view: 'WeekView',
+          params,
+          label: `当前 ${VIEW_FRIENDLY_NAMES.WeekView}`,
+        })
+      }
+      this.$store.dispatch('attachViewSnapshotToChat', snapshot)
+      this.scopeAttachmentDismissed = false
+    },
+    attachLatestReport() {
+      const link = this.latestReportLink
+      const report = buildReportAttachment(link)
+      if (!report || !this.$store) return
+      this.$store.dispatch('attachReportToChat', report)
+      this.scopeAttachmentDismissed = false
     },
   },
 }

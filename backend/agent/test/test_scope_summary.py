@@ -85,7 +85,8 @@ def test_get_current_filter_context_full_ids():
     assert payload["selected_student_ids"] == ["a", "b"]
 
 
-def test_system_prompt_uses_summary_scope():
+def test_system_prompt_omits_dynamic_filter_scope():
+    """Changing Nav must not rewrite the system prompt (prefix cache + history)."""
     fc = FilterContext(
         classes=("Class1",),
         selected_student_ids=tuple(f"x{i}" for i in range(30)),
@@ -94,8 +95,34 @@ def test_system_prompt_uses_summary_scope():
     prompt = SystemPromptBuilder().build(
         SystemPromptContext(permission_mode="analyze", filter_context=fc),
     )
-    assert "30 人" in prompt
-    assert "x0, x1, x2, x3, x4" not in prompt
+    assert "30 人" not in prompt
+    assert "本轮分析范围" not in prompt
+    assert "get_current_filter_context" in prompt
+
+
+def test_turn_scope_hint_includes_nav_and_extras():
+    from session.ui_scope import format_turn_scope_hint
+
+    fc = FilterContext(
+        classes=("Class1",),
+        week_range=(10, 12),
+        selected_student_ids=("a", "b", "c"),
+        source="http_body",
+    )
+    hint = format_turn_scope_hint(
+        ui_scope={
+            "knowledge_ids": ["链表"],
+            "dataset": {"run_id": "r1", "label": "基于 query_data"},
+        },
+        filter_context=fc,
+    )
+    assert hint is not None
+    assert "本轮" in hint
+    assert "Class1" in hint
+    assert "10–12" in hint or "10-12" in hint or "10" in hint
+    assert "3 人" in hint
+    assert "链表" in hint
+    assert "run_id=r1" in hint
 
 
 def test_format_datasets_catalog_section_and_prompt(tmp_path, monkeypatch):

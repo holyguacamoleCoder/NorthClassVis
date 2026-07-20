@@ -22,6 +22,7 @@
       class="agent-reveal"
       @cancel-run="$emit('cancel-run', $event)"
       @derive-run="$emit('derive-run', $event)"
+      @attach-run="$emit('attach-run', $event)"
     />
 
     <!-- ③ 结论段 -->
@@ -175,7 +176,7 @@ export default {
     runningTool: { type: Object, default: null },
     loading: { type: Boolean, default: false },
   },
-  emits: ['visual-link-click', 'report-preview', 'report-download', 'cancel-run', 'derive-run'],
+  emits: ['visual-link-click', 'report-preview', 'report-download', 'cancel-run', 'derive-run', 'attach-run'],
   data() {
     return { ui: AGENT_UI }
   },

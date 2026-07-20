@@ -613,14 +613,28 @@ class AgentHttpService:
                 content,
                 loop_state.filter_context,
             )
-            loop_state.messages.append({"role": "user", "content": user_content})
-
             ui_scope = None
             if job_id:
                 with self._jobs_lock:
                     job = self._jobs.get(job_id)
                     if job is not None:
                         ui_scope = job.ui_scope
+            from session.ui_scope import compose_llm_user_content, format_turn_scope_hint
+            from skills.message_meta import drop_previous_ui_scope_hints
+
+            # Drop legacy standalone scope-hint messages (older builds). Do not
+            # rewrite earlier merged user turns — that would bust prefix cache.
+            loop_state.messages = drop_previous_ui_scope_hints(list(loop_state.messages))
+            hint = format_turn_scope_hint(
+                ui_scope=ui_scope,
+                filter_context=loop_state.filter_context,
+            )
+            loop_state.messages.append(
+                {
+                    "role": "user",
+                    "content": compose_llm_user_content(user_content, hint),
+                }
+            )
 
             with user_turn_trace(
                 session_id=session_id,

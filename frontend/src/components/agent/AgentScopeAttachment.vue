@@ -45,7 +45,18 @@ export default {
     dismissible: { type: Boolean, default: false },
     compact: { type: Boolean, default: false },
   },
-  emits: ['dismiss', 'remove-student', 'remove-class', 'remove-major', 'remove-week'],
+  emits: [
+    'dismiss',
+    'remove-student',
+    'remove-class',
+    'remove-major',
+    'remove-week',
+    'remove-knowledge',
+    'remove-title',
+    'remove-dataset',
+    'remove-view',
+    'remove-report',
+  ],
   data() {
     return { ui: AGENT_UI }
   },
@@ -74,6 +85,45 @@ export default {
       majors.forEach((m) => {
         list.push({ key: `major-${m}`, kind: 'major', label: m, value: m })
       })
+      const knowledges = Array.isArray(this.scope?.knowledge_ids)
+        ? this.scope.knowledge_ids.filter(Boolean)
+        : []
+      knowledges.forEach((k) => {
+        list.push({ key: `knowledge-${k}`, kind: 'knowledge', label: k, value: k })
+      })
+      const titles = Array.isArray(this.scope?.title_ids) ? this.scope.title_ids.filter(Boolean) : []
+      titles.forEach((t) => {
+        list.push({
+          key: `title-${t}`,
+          kind: 'title',
+          label: shortStudentId(t, 8, 4),
+          value: t,
+        })
+      })
+      if (this.scope?.dataset?.run_id || this.scope?.dataset?.dataset_id) {
+        const ds = this.scope.dataset
+        list.push({
+          key: `dataset-${ds.run_id || ds.dataset_id}`,
+          kind: 'dataset',
+          label: ds.label || '基于上次查询',
+        })
+      }
+      if (this.scope?.view_snapshot?.view) {
+        const snap = this.scope.view_snapshot
+        list.push({
+          key: `view-${snap.view}`,
+          kind: 'view',
+          label: snap.label || snap.view,
+        })
+      }
+      if (this.scope?.report?.path) {
+        const report = this.scope.report
+        list.push({
+          key: `report-${report.path}`,
+          kind: 'report',
+          label: report.label || report.path.split('/').pop(),
+        })
+      }
       const ids = Array.isArray(this.scope?.selected_student_ids)
         ? this.scope.selected_student_ids.filter(Boolean)
         : []
@@ -90,17 +140,29 @@ export default {
   },
   methods: {
     removeTitle(chip) {
-      if (chip.kind === 'student') return this.ui.scopeAttachRemoveOne
-      if (chip.kind === 'class') return this.ui.scopeAttachRemoveClass
-      if (chip.kind === 'major') return this.ui.scopeAttachRemoveMajor
-      if (chip.kind === 'week') return this.ui.scopeAttachRemoveWeek
-      return this.ui.scopeAttachRemoveOne
+      const map = {
+        student: this.ui.scopeAttachRemoveOne,
+        class: this.ui.scopeAttachRemoveClass,
+        major: this.ui.scopeAttachRemoveMajor,
+        week: this.ui.scopeAttachRemoveWeek,
+        knowledge: this.ui.scopeAttachRemoveKnowledge,
+        title: this.ui.scopeAttachRemoveTitle,
+        dataset: this.ui.scopeAttachRemoveDataset,
+        view: this.ui.scopeAttachRemoveView,
+        report: this.ui.scopeAttachRemoveReport,
+      }
+      return map[chip.kind] || this.ui.scopeAttachRemoveOne
     },
     onRemove(chip) {
       if (chip.kind === 'student') this.$emit('remove-student', chip.value)
       else if (chip.kind === 'class') this.$emit('remove-class', chip.value)
       else if (chip.kind === 'major') this.$emit('remove-major', chip.value)
       else if (chip.kind === 'week') this.$emit('remove-week')
+      else if (chip.kind === 'knowledge') this.$emit('remove-knowledge', chip.value)
+      else if (chip.kind === 'title') this.$emit('remove-title', chip.value)
+      else if (chip.kind === 'dataset') this.$emit('remove-dataset')
+      else if (chip.kind === 'view') this.$emit('remove-view')
+      else if (chip.kind === 'report') this.$emit('remove-report')
     },
   },
 }
@@ -179,6 +241,27 @@ export default {
 .agent-scope-attach-id--major {
   background: #fff3e0;
   color: #e65100;
+}
+
+.agent-scope-attach-id--knowledge,
+.agent-scope-attach-id--title {
+  background: #f3e5f5;
+  color: #6a1b9a;
+}
+
+.agent-scope-attach-id--dataset {
+  background: #e0f2f1;
+  color: #00695c;
+}
+
+.agent-scope-attach-id--view {
+  background: #e8eaf6;
+  color: #3949ab;
+}
+
+.agent-scope-attach-id--report {
+  background: #fce4ec;
+  color: #ad1457;
 }
 
 .agent-scope-attach-id--editable {

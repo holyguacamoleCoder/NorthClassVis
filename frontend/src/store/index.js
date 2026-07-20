@@ -59,6 +59,14 @@ export default createStore({
     navSelectedMajors: [],
     navWeekRange: null,
     navScopeApplying: false,
+    /** Manual composer attachments (knowledge / dataset / view / report). */
+    agentChatAttachments: {
+      knowledge_ids: [],
+      title_ids: [],
+      dataset: null,
+      view_snapshot: null,
+      report: null,
+    },
   },
   mutations: {
     // 更新 configLoaded 状态
@@ -117,8 +125,64 @@ export default createStore({
       if (payload.classesLabel != null) state.navClasses = payload.classesLabel
       if (payload.majorsLabel != null) state.navMajors = payload.majorsLabel
     },
+    patchAgentChatAttachments(state, patch) {
+      if (!patch || typeof patch !== 'object') return
+      const next = { ...state.agentChatAttachments }
+      if ('knowledge_ids' in patch) {
+        next.knowledge_ids = Array.isArray(patch.knowledge_ids)
+          ? patch.knowledge_ids.map(String).filter(Boolean)
+          : []
+      }
+      if ('title_ids' in patch) {
+        next.title_ids = Array.isArray(patch.title_ids)
+          ? patch.title_ids.map(String).filter(Boolean)
+          : []
+      }
+      if ('dataset' in patch) next.dataset = patch.dataset || null
+      if ('view_snapshot' in patch) next.view_snapshot = patch.view_snapshot || null
+      if ('report' in patch) next.report = patch.report || null
+      state.agentChatAttachments = next
+    },
+    clearAgentChatAttachments(state) {
+      state.agentChatAttachments = {
+        knowledge_ids: [],
+        title_ids: [],
+        dataset: null,
+        view_snapshot: null,
+        report: null,
+      }
+    },
   },
   actions: {
+    attachQuestionScopeToChat(context, { knowledge_ids, title_ids } = {}) {
+      context.commit('patchAgentChatAttachments', {
+        knowledge_ids: knowledge_ids || [],
+        title_ids: title_ids || [],
+      })
+      context.commit('setAgentPanelVisible', true)
+      context.commit('setAgentPanelMinimized', false)
+    },
+    attachDatasetToChat(context, dataset) {
+      if (!dataset) return
+      context.commit('patchAgentChatAttachments', { dataset })
+      context.commit('setAgentPanelVisible', true)
+      context.commit('setAgentPanelMinimized', false)
+    },
+    attachViewSnapshotToChat(context, snapshot) {
+      if (!snapshot?.view) return
+      context.commit('patchAgentChatAttachments', { view_snapshot: snapshot })
+      context.commit('setAgentPanelVisible', true)
+      context.commit('setAgentPanelMinimized', false)
+    },
+    attachReportToChat(context, report) {
+      if (!report?.path) return
+      context.commit('patchAgentChatAttachments', { report })
+      context.commit('setAgentPanelVisible', true)
+      context.commit('setAgentPanelMinimized', false)
+    },
+    clearComposerChatAttachments(context) {
+      context.commit('clearAgentChatAttachments')
+    },
     // 后端获取数据:{stu_id: cluster}
     async fetchClusterData(context) {
       const { data } = await getClusterEveryone()
@@ -287,5 +351,6 @@ export default createStore({
     getNavSelectedMajors: state => state.navSelectedMajors,
     getNavWeekRange: state => state.navWeekRange,
     getNavScopeApplying: state => state.navScopeApplying,
+    getAgentChatAttachments: state => state.agentChatAttachments,
   }
 })

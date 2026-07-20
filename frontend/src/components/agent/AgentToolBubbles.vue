@@ -42,6 +42,13 @@
             @click.stop="$emit('derive-run', step)"
           >{{ modifyLabel(step) }}</button>
         </span>
+        <span v-if="showAttach(step)" class="agent-tool-run-inline">
+          <button
+            type="button"
+            class="agent-tool-run-link agent-tool-run-link--attach"
+            @click.stop="$emit('attach-run', step)"
+          >{{ ui.runAttachQuery }}</button>
+        </span>
         <span class="agent-tool-bubble-status">{{ statusLabel(step.status) }}</span>
         <span class="agent-tool-bubble-chevron">{{ expanded[i] ? chevronDown : chevronRight }}</span>
       </button>
@@ -93,7 +100,7 @@ export default {
     headerModifyOnly: { type: Boolean, default: false },
     affiliationLabel: { type: String, default: '' },
   },
-  emits: ['cancel-run', 'derive-run'],
+  emits: ['cancel-run', 'derive-run', 'attach-run'],
   data() {
     return {
       ui: AGENT_UI,
@@ -206,6 +213,12 @@ export default {
       if (!isModifiableRunStep(step)) return false
       const primaryId = this.primaryModifyRunId
       if (primaryId) return step.run_id === primaryId
+      return true
+    },
+    showAttach(step) {
+      if (!this.runActionsEnabled || this.stepKind(step) !== 'data') return false
+      if (!step?.run_id) return false
+      if (['fail', 'denied', 'blocked', 'running', 'pending'].includes(step.status)) return false
       return true
     },
     modifyLabel(step) {

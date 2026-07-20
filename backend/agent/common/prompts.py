@@ -26,7 +26,7 @@ _DATA_CORE = """## 学业数据（逻辑 resource）
 - **禁止** `read_file` 打开上述原始 CSV；结构化分析用 `inspect_schema` → `query_data` → `aggregate_data`
 - 常用 resource：`student_info`、`title_info`、`submit_record`（需 `class` 或 `classes`）、`week_aggregation`
 - 关联键：`student_ID`、`title_ID`、`class`、`major`
-- Nav「当前分析范围」每轮同步 scope（**用户消息 / query 参数优先**；与面板班级或选区冲突时自动忽略面板局部选中；完整学号用 `get_current_filter_context(include_student_ids=true)`）"""
+- Nav「当前分析范围」以**本轮**用户消息前的「本轮范围」提示为准（每轮可变，勿假设与更早历史相同）；工具默认仍绑定会话 `filter_context`；完整学号用 `get_current_filter_context(include_student_ids=true)`）"""
 
 _DATA_DECISIONS = """## 常用决策（IF → THEN）
 | 目标 | 做法 |
@@ -113,7 +113,7 @@ SECTION_MEMORY_TYPE = "## [{mem_type}]"
 SECTION_MEMORY_ENTRY = "### {name}：{description}"
 
 SECTION_SESSION = "--- 会话上下文（Hooks / 数据目录摘要）---"
-SECTION_UI_SCOPE = "--- 当前分析范围（可视化面板 / Nav，每轮 HTTP 同步）---"
+SECTION_UI_SCOPE = "--- 本轮分析范围（仅本轮有效；历史轮次可能不同）---"
 SECTION_DATASETS_CATALOG = "--- 本会话数据集目录（compact 后仍可引用；续算用 dataset_id）---"
 SECTION_SKILLS = "--- 可用技能（目录；完整流程见 load_skill 的 tool result）---"
 SECTION_LOADED_NAMES = "--- 本会话已加载（正文在对应 tool result，勿重复 load）---"

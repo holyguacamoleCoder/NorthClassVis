@@ -130,6 +130,7 @@
                 @report-download="downloadReport"
                 @cancel-run="onCancelToolRun"
                 @derive-run="onDeriveToolRun"
+                @attach-run="onAttachDatasetRun"
               />
             </template>
           </div>
@@ -154,7 +155,26 @@
             @remove-class="removeComposerScopeClass"
             @remove-major="removeComposerScopeMajor"
             @remove-week="removeComposerScopeWeek"
+            @remove-knowledge="removeComposerScopeKnowledge"
+            @remove-title="removeComposerScopeTitle"
+            @remove-dataset="removeComposerScopeDataset"
+            @remove-view="removeComposerScopeView"
+            @remove-report="removeComposerScopeReport"
           />
+          <div v-if="canAttachCurrentView || canAttachLatestReport" class="agent-scope-attach-actions">
+            <button
+              v-if="canAttachCurrentView"
+              type="button"
+              class="agent-scope-attach-action"
+              @click="attachCurrentViewSnapshot"
+            >{{ ui.scopeAttachAddView }}</button>
+            <button
+              v-if="canAttachLatestReport"
+              type="button"
+              class="agent-scope-attach-action"
+              @click="attachLatestReport"
+            >{{ ui.scopeAttachAddReport }}</button>
+          </div>
           <div class="agent-input-row">
             <input
               v-model="inputText"
@@ -906,6 +926,27 @@ export default {
 
 .agent-input-col :deep(.agent-scope-attach) {
   margin-bottom: 4px;
+}
+
+.agent-scope-attach-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 4px;
+}
+
+.agent-scope-attach-action {
+  border: 1px dashed #9bb8d0;
+  background: #f7fbff;
+  color: #1a5a8a;
+  border-radius: 6px;
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.agent-scope-attach-action:hover {
+  background: #eaf3fb;
 }
 
 .agent-msg-user-stack {

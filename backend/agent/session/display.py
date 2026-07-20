@@ -13,6 +13,10 @@ _UI_SCOPE_BLOCK_RE = re.compile(
     r"\n*\s*\[系统[·・.]?UI\s*同步\][\s\S]*$",
     re.IGNORECASE,
 )
+_TURN_SCOPE_PREFIX_RE = re.compile(
+    r"^\s*\[系统[·・.]?(?:本轮范围|附件上下文)\][\s\S]*?\n---\n教师本轮问题：\n",
+    re.IGNORECASE,
+)
 _REMINDER_RE = re.compile(r"<reminder>[\s\S]*?</reminder>", re.IGNORECASE)
 
 
@@ -20,6 +24,7 @@ def clean_user_content_for_display(content: str) -> str:
     """Strip protocol / adapter injections from teacher-visible user text."""
     text = strip_run_modify_from_user_content(content)
     text = _REMINDER_RE.sub("", text)
+    text = _TURN_SCOPE_PREFIX_RE.sub("", text)
     text = _UI_SCOPE_BLOCK_RE.sub("", text)
     return text.strip()
 

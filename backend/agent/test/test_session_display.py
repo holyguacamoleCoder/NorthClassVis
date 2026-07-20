@@ -42,6 +42,14 @@ def test_clean_strips_ui_scope_and_reminder():
     )
     assert clean_user_content_for_display(raw) == "只分析我选中的学生"
 
+    merged = (
+        "[系统·本轮范围] Class1\n\n"
+        "--- 本轮分析范围 ---\n- 班级: Class1\n\n"
+        "---\n教师本轮问题：\n"
+        "继续问链表"
+    )
+    assert clean_user_content_for_display(merged) == "继续问链表"
+
 
 def test_ui_transcript_survives_compaction_replacement():
     session = _session(

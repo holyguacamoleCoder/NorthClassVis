@@ -49,6 +49,7 @@
           :header-modify-only="true"
           @cancel-run="$emit('cancel-run', $event)"
           @derive-run="$emit('derive-run', $event)"
+          @attach-run="$emit('attach-run', $event)"
         />
       </div>
       <div v-if="runningStep" class="agent-step-group-tool">
@@ -61,6 +62,7 @@
           :header-modify-only="true"
           @cancel-run="$emit('cancel-run', $event)"
           @derive-run="$emit('derive-run', $event)"
+          @attach-run="$emit('attach-run', $event)"
         />
       </div>
     </div>
@@ -94,7 +96,7 @@ export default {
     primaryModifyRunId: { type: String, default: '' },
     showModifyButton: { type: Boolean, default: false },
   },
-  emits: ['cancel-run', 'derive-run'],
+  emits: ['cancel-run', 'derive-run', 'attach-run'],
   data() {
     return {
       ui: AGENT_UI,
