@@ -37,6 +37,7 @@ NorthClassVis 在 ChinaVis 2024 数据可视化竞赛作品基础上，扩展为
 - 工具调用去重（`dedupe_tool_calls`）
 - 低价值循环熔断（inspect_schema / load_skill / consult-list / todo-only 等 guard）
 - 会话技能常驻锁定（skill pin）
+- 数据链震荡多级处置（`data_chain_guard`）：对 query↔aggregate 空转、预览反复重查、纯探查空转等，先 soft 重定向（提示换法并清指纹），再 hard 熔断，避免同错误路径无限空转
 
 优化后典型任务交互轮次**中位数由 5 轮降至 3 轮**，整体端到端耗时缩减至优化前的 **79%**。
 
@@ -53,6 +54,25 @@ NorthClassVis 在 ChinaVis 2024 数据可视化竞赛作品基础上，扩展为
 - 精准匹配用户查询口径，缩减上下文开销
 - 针对统计口径变更场景，支持缓存重聚合与条件增量查询
 - 在线 Binding 准确率 **93.75%**（详见 `docs/eval/binding-accuracy-online.md`）
+- 会话数据集血缘：`query_data` / `aggregate_data` 结果登记为带 `dataset_id`、`grain`（row / agg）、`parent_dataset_id` 的目录；跨轮续算须显式 `list_datasets` 或传入 `dataset_id`（禁止静默复用上一轮 `result_ref`），系统侧持久化目录供绑定与溯源
+
+### Prompt Cache（前缀缓存）优化
+
+针对同会话多轮 tool call 反复改写 system、回写历史导致 DeepSeek prefix cache 失效的问题：
+
+- 冻结同 mode 下 system 前缀；todo / datasets / deliverables / modify / 本轮 reminder 迁入本轮 user hint 或 tool result 快照，禁止回写更早消息
+- `micro_compact` 跳过上一轮已送入 LLM 的消息前缀，避免改写已缓存中段
+
+在 `deepseek-v4-flash` 标价下，input cache miss 为 $0.14 / 1M tokens，cache hit 为 $0.0028 / 1M tokens（约为 miss 单价的 1/50）。代表性 scope 场景对照（优化前基线 vs 优化后，同任务口径）：
+
+| 指标 | 基线 | 优化后 | 变化 |
+| ------ | ------ | ------ | ------ |
+| 全价 miss tokens（input−cached） | 454,304 | 48,416 | 约少 89.3% |
+| 等效计费 tokens（miss + cache×0.02） | 462,353 | 57,939 | 约少 87.5% |
+| raw input | 856,736 | 524,576 | 少 38.8% |
+| cache hit rate | 47.0% | 90.8% | +43.8 pp |
+
+上述「等效计费 tokens」按 hit/miss 单价比 0.0028/0.14≈0.02 折算，近似反映账单侧投入。全量 Agent Benchmark（37 场景 × 3 runs）中，正确性相对优化前不降反升（pass@1 约 51%→59%，binding 约 61%→67%），单 turn / 整场景中位延迟基本持平，未见因 cache 改造导致能力回退。详见 `docs/eval/prompt-cache-ship-gate-2026-07-20.md`（落地提交：`c001b76`）。
 
 ### 智能报告工作流
 
@@ -209,6 +229,8 @@ python -m agent.eval.run_binding_online_eval   # 需配置 LLM
 | `docs/plans/agentic-analysis-roadmap.md` | Agent 分阶段路线图      |
 | `docs/eval/binding-accuracy-online.md`   | 在线 Binding 准确率评测 |
 | `docs/eval/binding-accuracy.md`          | Binding 离线评测        |
+| `docs/eval/agent-benchmark.md`           | 通用 Agent Benchmark    |
+| `docs/eval/prompt-cache-ship-gate-2026-07-20.md` | Prompt Cache 上线闸门与成本对照 |
 | `data/meta/visual_link_contract.yaml`    | 五视图联动契约          |
 | `data/meta/analysis_ontology.yaml`       | 分析粒度与 Lens 矩阵    |
 | `skills/README.md`                       | 技能目录说明            |
