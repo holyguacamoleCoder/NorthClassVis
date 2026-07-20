@@ -1,0 +1,39 @@
+[
+  {
+    "id": "efficiency_short_query",
+    "tags": ["efficiency"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 分数最低的 5 条提交，帮我快速看一下。",
+      "就查这 5 条，越快越好。",
+      "简单告诉我结果就行，不用额外整理。"
+    ],
+    "expect_tools": [{"turn_index": 0, "names": ["query_data"]}],
+    "forbid_tools": ["compact", "write_report"],
+    "expect_args": [{"tool": "query_data", "path": "limit", "eq": 5, "turn_index": 0}],
+    "expect_max_tool_calls": 5,
+    "expect_max_turns": 3
+  },
+  {
+    "id": "efficiency_query_agg_budget",
+    "tags": ["efficiency", "task"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 全班平均得分是多少？",
+      "全班所有人的提交都查一遍，然后算平均分。",
+      "尽量一步到位，别绕太多弯。"
+    ],
+    "expect_tools": [{"turn_index": 1, "names": ["query_data", "aggregate_data"]}],
+    "expect_aggregates": [{"turn_index": 1, "expect": "broad"}],
+    "expect_task": {
+      "asserts": [
+        {"kind": "tool_succeeded", "tool": "aggregate_data", "turn_index": 1},
+        {"kind": "aggregate_has_metric", "metric_op": "mean", "field": "score", "turn_index": 1}
+      ]
+    },
+    "expect_max_tool_calls": 6,
+    "expect_max_turns": 3
+  }
+]

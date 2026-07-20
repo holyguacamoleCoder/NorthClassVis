@@ -63,7 +63,35 @@ def dig_usage(obj: dict) -> dict:
 
 
 def main() -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Langfuse cache / usage probe")
+    parser.add_argument(
+        "--benchmark-run-id",
+        type=str,
+        default=None,
+        help="Filter generations by metadata.benchmark_run_id (agent benchmark)",
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=Path(__file__).resolve().parents[3] / "data" / "eval" / "agent_benchmark.manifest.json",
+        help="Read benchmark_run_id from manifest if --benchmark-run-id omitted",
+    )
+    parser.add_argument("--limit", type=int, default=100)
+    args = parser.parse_args()
+
     load_env(ENV)
+    benchmark_run_id = args.benchmark_run_id
+    if not benchmark_run_id and args.manifest.is_file():
+        try:
+            manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+            benchmark_run_id = manifest.get("benchmark_run_id")
+            if benchmark_run_id:
+                print(f"manifest benchmark_run_id={benchmark_run_id}")
+        except Exception:
+            pass
+
     if os.environ.get("LANGFUSE_ENABLED", "true").lower() in ("0", "false", "no"):
         print("LANGFUSE_ENABLED is false")
         return 1
@@ -85,7 +113,7 @@ def main() -> int:
             "/api/public/observations",
             pub,
             sec,
-            {"type": "GENERATION", "limit": 30},
+            {"type": "GENERATION", "limit": max(1, min(args.limit, 200))},
         )
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
@@ -93,6 +121,18 @@ def main() -> int:
         return 1
 
     rows = data.get("data") or data.get("observations") or []
+    if benchmark_run_id:
+        def _run_id(obs: dict) -> str | None:
+            meta = obs.get("metadata") if isinstance(obs.get("metadata"), dict) else {}
+            trace_meta = obs.get("traceMetadata") if isinstance(obs.get("traceMetadata"), dict) else {}
+            if not trace_meta and isinstance(obs.get("trace_metadata"), dict):
+                trace_meta = obs.get("trace_metadata")
+            return meta.get("benchmark_run_id") or trace_meta.get("benchmark_run_id")
+
+        before = len(rows)
+        rows = [obs for obs in rows if _run_id(obs) == benchmark_run_id]
+        print(f"filtered benchmark_run_id={benchmark_run_id} -> {len(rows)}/{before}")
+
     print(f"fetched_generations={len(rows)}")
     if not rows:
         print("no generations found — run a few agent turns first, then re-run this script")

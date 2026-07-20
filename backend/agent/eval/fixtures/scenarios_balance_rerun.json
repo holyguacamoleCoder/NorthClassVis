@@ -1,0 +1,61 @@
+[
+  {
+    "id": "tools_query_with_class_filter",
+    "tags": ["tools"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "我想看 Class1 这个班的提交情况。",
+      "帮我查 20 条记录。",
+      "20 条够用了。"
+    ],
+    "expect_tools": [{"turn_index": 1, "names": ["query_data"]}],
+    "expect_args": [
+      {"tool": "query_data", "path": "limit", "eq": 20, "turn_index": 1},
+      {"tool": "query_data", "path": "class", "eq": "Class1", "turn_index": 1}
+    ],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "tools_inspect_schema_before_query",
+    "tags": ["tools"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 提交记录里都有哪些字段？我不太确定列名。",
+      "字段搞清楚后，帮我查 5 条提交看看样子。",
+      "先小样本看一下。"
+    ],
+    "expect_tools": [
+      {"turn_index": 0, "names": ["inspect_schema"]},
+      {"turn_index": 1, "names": ["query_data"]}
+    ],
+    "expect_args": [
+      {"tool": "inspect_schema", "path": "resource", "eq": "submit_record", "turn_index": 0},
+      {"tool": "query_data", "path": "limit", "eq": 5, "turn_index": 1}
+    ],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "task_class_mean_score",
+    "tags": ["task", "numeric"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 这次作业，我想看全班整体表现。",
+      "把全班所有人的提交都纳入统计。",
+      "最后告诉我：一共多少条提交？平均得分是多少？"
+    ],
+    "expect_aggregates": [{"turn_index": 2, "expect": "broad"}],
+    "expect_task": {
+      "asserts": [
+        {"kind": "status_ok"},
+        {"kind": "tool_succeeded", "tool": "aggregate_data", "turn_index": 2},
+        {"kind": "aggregate_has_metric", "metric_op": "mean", "field": "score", "turn_index": 2},
+        {"kind": "numeric_in_tool_result", "tool": "aggregate_data", "path": "rows.0.0", "op": "gt", "value": 0, "turn_index": 2}
+      ]
+    },
+    "expect_max_tool_calls": 8,
+    "expect_max_turns": 3
+  }
+]

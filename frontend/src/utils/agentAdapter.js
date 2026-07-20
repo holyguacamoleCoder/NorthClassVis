@@ -27,6 +27,10 @@ export function isInternalUserContent(text) {
   if (!t) return false
   if (t.startsWith(COMPACT_USER_MESSAGE_PREAMBLE)) return true
   if (t.startsWith(OUTPUT_CONTINUATION_PREFIX)) return true
+  // Standalone turn-scope hints (no merged teacher question payload)
+  if (/^\[系统[·・.\-]?(?:本轮范围|附件上下文)\]/.test(t) && !t.includes('教师本轮问题')) {
+    return true
+  }
   return false
 }
 
@@ -252,6 +256,15 @@ export function stripRunModifyBlock(text) {
   let out = String(text || '')
   out = out.replace(/\[run_modify\][\s\S]*?\[\/run_modify\]\s*/g, '')
   out = out.replace(/^这是对上一轮数据计算的修改：[\s\S]*?(?:\n\n|$)/, '')
+  // Merged LLM user turn: keep only the teacher question after the marker
+  out = out.replace(
+    /^\s*\[系统[·・.\-]?(?:本轮范围|附件上下文)\][\s\S]*?\r?\n---\r?\n教师本轮问题：\r?\n/i,
+    '',
+  )
+  // Legacy standalone scope hint (should already be filtered; belt-and-suspenders)
+  if (/^\s*\[系统[·・.\-]?(?:本轮范围|附件上下文)\]/.test(out) && !out.includes('教师本轮问题')) {
+    return ''
+  }
   out = out.replace(/\n*\s*\[系统[·・.]?UI\s*同步\][\s\S]*$/i, '')
   out = out.replace(/<reminder>[\s\S]*?<\/reminder>/gi, '')
   return out.trim()
@@ -274,7 +287,10 @@ export function sessionMessagesToUi(messages) {
     if (!turn.length) return
     const firstUser = turn.find((m) => m.role === 'user')
     if (firstUser) {
-      ui.push(userMessage(firstUser.content, firstUser.ui_scope || null))
+      const bubble = userMessage(firstUser.content, firstUser.ui_scope || null)
+      if (bubble.text || bubble.scopeAttachment) {
+        ui.push(bubble)
+      }
     }
     const assistantParts = turn.filter((m) => m.role !== 'user')
     if (assistantParts.length) {

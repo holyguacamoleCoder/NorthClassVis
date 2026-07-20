@@ -20,6 +20,8 @@ data/*.docx
 # Eval run outputs and local report artifacts (fixtures live under backend/agent/eval/fixtures/)
 data/eval/*.json
 data/eval/*.csv
+data/eval/*.jsonl
+data/eval/runs/
 data/reports/
 
 # Cursor / local session scratch

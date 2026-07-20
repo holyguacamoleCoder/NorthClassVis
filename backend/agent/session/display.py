@@ -14,7 +14,11 @@ _UI_SCOPE_BLOCK_RE = re.compile(
     re.IGNORECASE,
 )
 _TURN_SCOPE_PREFIX_RE = re.compile(
-    r"^\s*\[系统[·・.]?(?:本轮范围|附件上下文)\][\s\S]*?\n---\n教师本轮问题：\n",
+    r"^\s*\[系统[·・.\-]?(?:本轮范围|附件上下文)\][\s\S]*?\r?\n---\r?\n教师本轮问题：\r?\n",
+    re.IGNORECASE,
+)
+_STANDALONE_TURN_SCOPE_RE = re.compile(
+    r"^\s*\[系统[·・.\-]?(?:本轮范围|附件上下文)\]",
     re.IGNORECASE,
 )
 _REMINDER_RE = re.compile(r"<reminder>[\s\S]*?</reminder>", re.IGNORECASE)
@@ -26,7 +30,11 @@ def clean_user_content_for_display(content: str) -> str:
     text = _REMINDER_RE.sub("", text)
     text = _TURN_SCOPE_PREFIX_RE.sub("", text)
     text = _UI_SCOPE_BLOCK_RE.sub("", text)
-    return text.strip()
+    text = text.strip()
+    # Legacy standalone scope-hint messages have no teacher question payload.
+    if text and _STANDALONE_TURN_SCOPE_RE.match(text):
+        return ""
+    return text
 
 
 def _copy_message_for_ui(msg: dict[str, Any]) -> dict[str, Any]:

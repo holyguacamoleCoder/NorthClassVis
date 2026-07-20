@@ -161,6 +161,31 @@ def test_drop_previous_ui_scope_hints_keeps_other_messages():
     assert kept[-1]["content"] == "答2"
 
 
+def test_drop_previous_keeps_merged_teacher_turns():
+    """Merged compose_llm_user_content turns must not be deleted as 'hints'."""
+    from skills.message_meta import drop_previous_ui_scope_hints, is_ui_hidden_message
+    from session.ui_scope import compose_llm_user_content
+
+    hint = "[系统·本轮范围] Class1\n\n--- 本轮分析范围 ---\n- 班级: Class1"
+    merged1 = compose_llm_user_content("第一问平均分", hint)
+    merged2 = compose_llm_user_content("不用重新查数据", hint)
+    msgs = [
+        {"role": "user", "content": merged1},
+        {"role": "assistant", "content": "答1"},
+        {"role": "user", "content": "[系统·本轮范围] 仅提示无教师问题"},
+        {"role": "user", "content": merged2},
+        {"role": "assistant", "content": "答2"},
+    ]
+    kept = drop_previous_ui_scope_hints(msgs)
+    assert len(kept) == 4
+    assert kept[0]["content"] == merged1
+    assert kept[2]["content"] == merged2
+    assert not is_ui_hidden_message(kept[0])
+    assert is_ui_hidden_message(
+        {"role": "user", "content": "[系统·本轮范围] 仅提示无教师问题"}
+    )
+
+
 def test_clean_display_hides_ui_scope_from_legacy_text():
     from session.display import clean_user_content_for_display
 

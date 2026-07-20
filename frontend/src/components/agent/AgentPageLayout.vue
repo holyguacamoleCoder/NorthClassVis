@@ -116,20 +116,6 @@
             @remove-view="removeComposerScopeView"
             @remove-report="removeComposerScopeReport"
           />
-          <div v-if="canAttachCurrentView || canAttachLatestReport" class="agent-scope-attach-actions">
-            <button
-              v-if="canAttachCurrentView"
-              type="button"
-              class="agent-scope-attach-action"
-              @click="attachCurrentViewSnapshot"
-            >{{ ui.scopeAttachAddView }}</button>
-            <button
-              v-if="canAttachLatestReport"
-              type="button"
-              class="agent-scope-attach-action"
-              @click="attachLatestReport"
-            >{{ ui.scopeAttachAddReport }}</button>
-          </div>
           <p v-if="composerScopeAttachment" class="agent-scope-attach-hint">{{ ui.scopeAttachHint }}</p>
           <div class="agent-composer-inner">
             <textarea
@@ -156,7 +142,23 @@
               @click="send"
             >{{ ui.send }}</button>
           </div>
-          <div class="agent-composer-hint">{{ ui.composerHint }}</div>
+          <div class="agent-composer-footer">
+            <div v-if="canAttachCurrentView || canAttachLatestReport" class="agent-scope-attach-actions">
+              <button
+                v-if="canAttachCurrentView"
+                type="button"
+                class="agent-scope-attach-action"
+                @click="attachCurrentViewSnapshot"
+              >{{ ui.scopeAttachAddView }}</button>
+              <button
+                v-if="canAttachLatestReport"
+                type="button"
+                class="agent-scope-attach-action"
+                @click="attachLatestReport"
+              >{{ ui.scopeAttachAddReport }}</button>
+            </div>
+            <div class="agent-composer-hint">{{ ui.composerHint }}</div>
+          </div>
         </div>
       </div>
     </div>

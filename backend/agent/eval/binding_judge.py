@@ -254,12 +254,26 @@ def judge_aggregate(
         is_error = _is_guard_error(content)
 
     if expect == "reject_cross_turn":
+        # Product policy: prefer list_datasets + explicit dataset_id aggregate.
+        # Guard Error remains acceptable; silent auto-reuse without explicit id fails.
         if is_error:
             return True, _guard_reason(content)
+        ds = _explicit_dataset_id(merged_meta, tool_input)
+        if ds:
+            rec = _catalog_record(merged_meta, catalog, tool_input=tool_input)
+            if rec is not None:
+                if current_user_turn is not None and rec.user_turn >= current_user_turn:
+                    return (
+                        False,
+                        f"dataset user_turn={rec.user_turn} not prior to current={current_user_turn}",
+                    )
+                return True, f"cross_turn_explicit dataset_id={rec.dataset_id} prior_turn={rec.user_turn}"
+            # Explicit id present but catalog incomplete (offline/partial) — still credit intent.
+            return True, f"cross_turn_explicit dataset_id={ds}"
         rec = _catalog_record(meta, catalog, tool_input=tool_input)
         if rec and not is_error:
-            return False, "expected cross-turn reject but aggregate succeeded"
-        return False, "expected cross-turn Error but got success"
+            return False, "expected cross-turn reject or explicit dataset_id but silent aggregate succeeded"
+        return False, "expected cross-turn Error/explicit id but got success"
 
     if accept_guard_error and is_error:
         return True, "guard_cross_turn_reject"

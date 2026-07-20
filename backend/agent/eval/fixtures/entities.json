@@ -1,0 +1,19 @@
+{
+  "class": "Class1",
+  "student_ids": [
+    "e89cdaa3f159a0d3f55e",
+    "cd6355bf939a47577f6d",
+    "876aca2b8ce1958ea773"
+  ],
+  "knowledge_ids": [
+    "m3D1v",
+    "y9W5d"
+  ],
+  "knowledge_labels": [
+    "m3D1v",
+    "y9W5d"
+  ],
+  "report_path": "reports/eval/class1_week_draft.md",
+  "report_label": "班级周报草稿",
+  "source": "resolved_from_Class1_csv"
+}

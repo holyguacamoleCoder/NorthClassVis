@@ -1,0 +1,144 @@
+[
+  {
+    "id": "tools_query_limit_10",
+    "tags": ["tools"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 这次作业提交，我想先看一小部分。",
+      "按得分从低到高，先给我看 10 条就行，不用把全班都拉出来。",
+      "对，就 10 条预览，够我判断趋势了。"
+    ],
+    "expect_tools": [{"turn_index": 1, "names": ["query_data"]}],
+    "forbid_tools": ["write_report", "edit_report"],
+    "expect_args": [
+      {"tool": "query_data", "path": "limit", "eq": 10, "turn_index": 1}
+    ],
+    "expect_max_tool_calls": 6,
+    "expect_max_turns": 3
+  },
+  {
+    "id": "tools_forbid_report_on_simple_query",
+    "tags": ["tools"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 提交大概有多少条？帮我快速看一下。",
+      "不用写报告，也不用排版，有个数就行。",
+      "就查一下数据，简单告诉我。"
+    ],
+    "expect_tools": [{"turn_index": 0, "names": ["query_data"]}],
+    "forbid_tools": ["write_report", "edit_report", "review_report"],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "tools_list_datasets_after_query",
+    "tags": ["tools"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 分数最低的 10 条提交，先帮我查出来。",
+      "刚才查出来的那份数据，系统里登记好了吗？帮我确认一下。",
+      "确认无误后告诉我，我下一问还要用。"
+    ],
+    "expect_tools": [
+      {"turn_index": 0, "names": ["query_data"]},
+      {"turn_index": 1, "names": ["list_datasets"]}
+    ],
+    "expect_max_tool_calls": 8,
+    "expect_max_turns": 3
+  },
+  {
+    "id": "tools_enrich_then_aggregate",
+    "tags": ["tools"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 分数最低的 10 条提交，先帮我看一下。",
+      "我想知道每道题的满分是多少，再和学生的得分放在一起看。",
+      "最后帮我算一下这 10 条的平均得分。"
+    ],
+    "expect_tools": [
+      {"turn_index": 2, "names": ["query_data", "enrich_data", "aggregate_data"]}
+    ],
+    "expect_args": [
+      {"tool": "enrich_data", "path": "lookup", "eq": "title_info", "turn_index": 2},
+      {"tool": "enrich_data", "path": "on", "eq": "title_ID", "turn_index": 2}
+    ],
+    "expect_max_tool_calls": 10,
+    "expect_max_turns": 3
+  },
+  {
+    "id": "tools_inspect_schema_before_query",
+    "tags": ["tools"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 提交记录里都有哪些字段？我不太确定列名。",
+      "字段搞清楚后，帮我查 5 条提交看看样子。",
+      "先小样本看一下。"
+    ],
+    "expect_tools": [
+      {"turn_index": 0, "names": ["inspect_schema"]},
+      {"turn_index": 1, "names": ["query_data"]}
+    ],
+    "expect_args": [
+      {"tool": "inspect_schema", "path": "resource", "eq": "submit_record", "turn_index": 0},
+      {"tool": "query_data", "path": "limit", "eq": 5, "turn_index": 1}
+    ],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "tools_query_with_class_filter",
+    "tags": ["tools"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "我想看 Class1 这个班的提交情况。",
+      "帮我查 20 条记录。",
+      "20 条够用了。"
+    ],
+    "expect_tools": [{"turn_index": 1, "names": ["query_data"]}],
+    "expect_args": [
+      {"tool": "query_data", "path": "limit", "eq": 20, "turn_index": 1},
+      {"tool": "query_data", "path": "class", "eq": "Class1", "turn_index": 1}
+    ],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "tools_aggregate_requires_metrics",
+    "tags": ["tools", "task"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 全班这次作业的提交，我想看整体数据。",
+      "把全班所有人的提交都查出来。",
+      "帮我算两个数：一共多少条提交？平均得分是多少？"
+    ],
+    "expect_tools": [{"turn_index": 2, "names": ["query_data", "aggregate_data"]}],
+    "expect_task": {
+      "asserts": [
+        {"kind": "aggregate_has_metric", "metric_op": "count", "turn_index": 2},
+        {"kind": "aggregate_has_metric", "metric_op": "mean", "field": "score", "turn_index": 2}
+      ]
+    },
+    "expect_aggregates": [{"turn_index": 2, "expect": "broad"}],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "tools_no_compact_on_short_task",
+    "tags": ["tools", "efficiency"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 分数最低的 5 条提交，帮我快速看一下。",
+      "就查这 5 条，简单明了就行。",
+      "不用整理历史对话，直接给我结果。"
+    ],
+    "expect_tools": [{"turn_index": 0, "names": ["query_data"]}],
+    "forbid_tools": ["compact"],
+    "expect_args": [{"tool": "query_data", "path": "limit", "eq": 5, "turn_index": 0}],
+    "expect_max_tool_calls": 5,
+    "expect_max_turns": 3
+  }
+]

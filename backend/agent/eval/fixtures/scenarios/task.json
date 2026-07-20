@@ -1,0 +1,127 @@
+[
+  {
+    "id": "task_class_mean_score",
+    "tags": ["task", "numeric"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 这次作业，我想看全班整体表现。",
+      "把全班所有人的提交都纳入统计。",
+      "最后告诉我：一共多少条提交？平均得分是多少？"
+    ],
+    "expect_aggregates": [{"turn_index": 2, "expect": "broad"}],
+    "expect_task": {
+      "asserts": [
+        {"kind": "status_ok"},
+        {"kind": "tool_succeeded", "tool": "aggregate_data", "turn_index": 2},
+        {"kind": "aggregate_has_metric", "metric_op": "mean", "field": "score", "turn_index": 2},
+        {"kind": "numeric_in_tool_result", "tool": "aggregate_data", "path": "rows.0.0", "op": "gt", "value": 0, "turn_index": 2}
+      ]
+    },
+    "expect_max_tool_calls": 8,
+    "expect_max_turns": 3
+  },
+  {
+    "id": "task_slice_count",
+    "tags": ["task", "numeric", "binding"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 分数最低的 10 条提交，先帮我查出来。",
+      "就这 10 条，帮我汇总一下。",
+      "一共多少条？确认是刚才那 10 条，不是全班。"
+    ],
+    "expect_aggregates": [{"turn_index": 1, "expect": "slice"}],
+    "expect_task": {
+      "asserts": [
+        {"kind": "tool_succeeded", "tool": "query_data", "turn_index": 0},
+        {"kind": "tool_succeeded", "tool": "aggregate_data", "turn_index": 1},
+        {"kind": "aggregate_has_metric", "metric_op": "count", "turn_index": 1}
+      ]
+    },
+    "expect_max_turns": 3
+  },
+  {
+    "id": "task_two_step_query_agg",
+    "tags": ["task"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 我想先看一小部分：得分最低的 10 条提交。",
+      "就这 10 条做统计。",
+      "告诉我一共多少条、平均分多少。"
+    ],
+    "expect_tools": [{"turn_index": 1, "names": ["query_data", "aggregate_data"]}],
+    "expect_args": [{"tool": "query_data", "path": "limit", "eq": 10, "turn_index": 0}],
+    "expect_aggregates": [{"turn_index": 1, "expect": "slice"}],
+    "expect_task": {
+      "asserts": [
+        {"kind": "aggregate_has_metric", "metric_op": "count", "turn_index": 1},
+        {"kind": "aggregate_has_metric", "metric_op": "mean", "field": "score", "turn_index": 1}
+      ]
+    },
+    "expect_max_turns": 3
+  },
+  {
+    "id": "task_list_bind_agg_chain",
+    "tags": ["task", "binding", "tools"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 分数最低的 10 条提交，先帮我调出来。",
+      "我想接着用刚才那份数据做统计。",
+      "对那份数据帮我数一下，一共多少条？"
+    ],
+    "expect_tools": [
+      {"turn_index": 0, "names": ["query_data"]},
+      {"turn_index": 2, "names": ["list_datasets", "aggregate_data"]}
+    ],
+    "expect_aggregates": [{"turn_index": 2, "expect": "allow_cross_turn_explicit"}],
+    "expect_task": {
+      "asserts": [
+        {"kind": "tool_called", "tool": "list_datasets", "turn_index": 2},
+        {"kind": "tool_succeeded", "tool": "aggregate_data", "turn_index": 2}
+      ]
+    },
+    "expect_max_turns": 3
+  },
+  {
+    "id": "task_enrich_score_rate_path",
+    "tags": ["task", "tools"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 分数最低的 10 条提交，先看一下。",
+      "我想知道每道题满分多少，和学生得分放一起看。",
+      "最后算一下这 10 条的平均得分。"
+    ],
+    "expect_tools": [{"turn_index": 2, "names": ["query_data", "enrich_data", "aggregate_data"]}],
+    "expect_task": {
+      "asserts": [
+        {"kind": "tool_succeeded", "tool": "enrich_data", "turn_index": 2},
+        {"kind": "aggregate_has_metric", "metric_op": "mean", "field": "score", "turn_index": 2}
+      ]
+    },
+    "expect_max_turns": 3
+  },
+  {
+    "id": "task_status_and_no_forbidden",
+    "tags": ["task", "tools"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 全班这次作业，有多少不同的学生交过？",
+      "按全班口径统计，不要写报告。",
+      "给我个数就行，简单汇总一下。"
+    ],
+    "forbid_tools": ["write_report", "edit_report"],
+    "expect_aggregates": [{"turn_index": 1, "expect": "broad"}],
+    "expect_task": {
+      "asserts": [
+        {"kind": "status_ok"},
+        {"kind": "tool_succeeded", "tool": "aggregate_data", "turn_index": 1}
+      ]
+    },
+    "expect_max_turns": 3
+  }
+]

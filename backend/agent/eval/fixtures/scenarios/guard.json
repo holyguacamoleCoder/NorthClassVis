@@ -1,0 +1,77 @@
+[
+  {
+    "id": "guard_reject_cross_turn_silent",
+    "tags": ["guard", "binding"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 分数最低的 10 条提交，先帮我看一下。",
+      "直接帮我把平均分算出来。",
+      "不用重新查，就用上一问里已经查过的那批数据。"
+    ],
+    "expect_aggregates": [
+      {
+        "turn_index": 1,
+        "expect": "allow_cross_turn_explicit",
+        "accept_guard_error": true,
+        "ordinal": 1,
+        "note": "用上一问数据：list_datasets + 显式 dataset_id；或 guard 拒绝静默续用"
+      }
+    ],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "guard_consult_denies_query",
+    "tags": ["guard"],
+    "mode": "consult",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 全班提交的平均分是多少？我想直接查数据算出来。",
+      "能不能现在就帮我跑查询、把数算好？",
+      "如果当前模式查不了，请明确告诉我。"
+    ],
+    "expect_error": true,
+    "forbid_tools": ["write_report"],
+    "note": "consult 模式应拒绝或无法完成 analyze 数据工具链",
+    "expect_max_turns": 3
+  },
+  {
+    "id": "guard_cross_turn_accept_or_slice",
+    "tags": ["guard", "binding"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 分数最低的 10 条提交，先调出来。",
+      "对这 10 条算一下平均分。",
+      "如果上一问的数据还能用，就接着用；不行的话重新查这 10 条也行。"
+    ],
+    "expect_aggregates": [
+      {
+        "turn_index": 1,
+        "expect": "slice",
+        "accept_guard_error": true
+      }
+    ],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "guard_no_silent_reuse_after_broad",
+    "tags": ["guard", "binding"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 全班所有人的提交记录，完整查一遍，不要只取一部分。",
+      "下一问：直接帮我把全班 score 的平均分算出来。",
+      "不要重新查数据，也不要我指定是哪一份，就用刚才全班那份。"
+    ],
+    "expect_aggregates": [
+      {
+        "turn_index": 1,
+        "expect": "allow_cross_turn_explicit",
+        "accept_guard_error": true,
+        "note": "禁止静默续用上一轮全班数据；应 list_datasets 显式绑 dataset_id，或被 guard 拒绝"
+      }
+    ],
+    "expect_max_turns": 3
+  }
+]

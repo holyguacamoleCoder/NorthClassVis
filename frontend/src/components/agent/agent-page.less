@@ -195,11 +195,21 @@
   color: #688;
 }
 
+.agent-composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  min-height: 22px;
+}
+
 .agent-scope-attach-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 0 0 6px;
+  margin: 0;
+  flex-shrink: 0;
 }
 
 .agent-scope-attach-action {
@@ -231,8 +241,9 @@
 .agent-composer-hint {
   font-size: 11px;
   color: #aaa;
-  margin-top: 6px;
+  margin: 0;
   text-align: right;
+  margin-left: auto;
 }
 
 .agent-msg-bubble--user {

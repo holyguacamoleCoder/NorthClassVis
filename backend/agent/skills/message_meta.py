@@ -66,6 +66,9 @@ def is_ui_hidden_message(msg: dict[str, Any]) -> bool:
         return True
     if text.startswith(OUTPUT_CONTINUATION_MESSAGE[:40]):
         return True
+    # Standalone turn-scope hints (not merged teacher turns).
+    if is_ui_scope_hint_message(msg):
+        return True
     return False
 
 
@@ -81,17 +84,34 @@ def is_compact_summary_message(msg: dict[str, Any]) -> bool:
 
 
 def is_ui_scope_hint_message(msg: dict[str, Any]) -> bool:
+    """
+    Standalone synthetic scope hint (legacy separate user message).
+
+    Merged turns from ``compose_llm_user_content`` also start with
+    ``[系统·本轮范围]`` but include ``教师本轮问题`` — those are real teacher
+    turns and must NOT be treated as disposable hints.
+    """
     meta = msg.get("_agent_meta")
     if isinstance(meta, dict) and meta.get("content_kind") == CONTENT_KIND_UI_SCOPE_HINT:
         return True
     if msg.get("role") != "user":
         return False
     text = str(msg.get("content") or "").lstrip()
-    return text.startswith("[系统·本轮范围]") or text.startswith("[系统·附件上下文]")
+    if not (
+        text.startswith("[系统·本轮范围]")
+        or text.startswith("[系统·附件上下文]")
+        or text.startswith("[系统-本轮范围]")
+        or text.startswith("[系统-附件上下文]")
+    ):
+        return False
+    # Merged LLM user turn: keep it (only drop legacy standalone hints).
+    if "教师本轮问题" in text:
+        return False
+    return True
 
 
 def drop_previous_ui_scope_hints(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Keep at most the latest turn's scope hint in LLM context (avoid stacking)."""
+    """Drop legacy standalone scope-hint messages (not merged teacher turns)."""
     return [m for m in messages if not is_ui_scope_hint_message(m)]
 
 

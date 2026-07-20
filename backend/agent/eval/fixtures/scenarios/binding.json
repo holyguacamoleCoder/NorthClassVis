@@ -1,0 +1,199 @@
+[
+  {
+    "id": "chain_slice_two_turns",
+    "tags": ["binding"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 这次作业提交里，按得分从低到高，先帮我把最低的 10 条找出来。",
+      "就这 10 条，一共有多少条？平均分是多少？",
+      "请一定按刚才那 10 条来算，别换成全班数据。"
+    ],
+    "expect_aggregates": [{"turn_index": 1, "expect": "slice"}],
+    "expect_max_tool_calls": 10,
+    "expect_max_turns": 3
+  },
+  {
+    "id": "class_wide_after_slice_new_turn",
+    "tags": ["binding"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 班里分数最低的 10 条提交，先帮我看一下。",
+      "刚才那是小部分同学。我现在想知道整个 Class1 有多少个不同的学生交过作业？全班平均分多少？",
+      "要按全班所有人的口径算，不是刚才那 10 条。"
+    ],
+    "expect_aggregates": [
+      {
+        "turn_index": 1,
+        "expect": "broad",
+        "note": "第二问应重新查全班全量再汇总，或 aggregate 绑 broad"
+      }
+    ],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "single_turn_explicit_two_queries",
+    "tags": ["binding", "tools"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 我想做对比：先把得分最低的 10 条提交调出来。",
+      "再把全班所有人的提交都查一遍，不要只取前几条。",
+      "分别帮我算一下：那 10 条有多少条、平均分多少；全班有多少条、有多少不同学生、全班平均分多少。"
+    ],
+    "expect_aggregates": [
+      {"turn_index": 2, "expect": "slice", "ordinal": 1},
+      {"turn_index": 2, "expect": "broad", "ordinal": 2}
+    ],
+    "expect_tools": [{"turn_index": 2, "names": ["query_data", "aggregate_data"], "min_count": 4}],
+    "expect_max_tool_calls": 12,
+    "expect_max_turns": 3
+  },
+  {
+    "id": "wrong_ref_correction",
+    "tags": ["binding"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 帮我查两份数据：一份是最低 10 条提交，一份是全班全量。",
+      "「这些记录」指的是刚才最低的那 10 条，用它们算一下平均分。",
+      "确认一下，别误用全班那份数据。"
+    ],
+    "expect_aggregates": [
+      {"turn_index": 1, "expect": "slice", "note": "「这些记录」应纠正到 slice"}
+    ],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "cross_turn_reject",
+    "tags": ["binding", "guard"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 分数最低的 10 条提交，先帮我调出来。",
+      "对这 10 条算一下平均分。",
+      "就是上一问里那 10 条，不要重新查全班。"
+    ],
+    "expect_aggregates": [
+      {
+        "turn_index": 1,
+        "expect": "slice",
+        "accept_guard_error": true,
+        "note": "显式引用上一轮切片或同轮新查应 slice；静默跨轮续用旧数据应拒绝"
+      }
+    ],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "cross_turn_explicit_dataset",
+    "tags": ["binding", "tools"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 提交记录按得分从低到高，最低 10 条先帮我看一下。",
+      "我想接着用刚才那份最低 10 条的数据做分析。",
+      "对那份数据算一下 score 的平均分。"
+    ],
+    "expect_aggregates": [{"turn_index": 2, "expect": "allow_cross_turn_explicit"}],
+    "expect_tools": [{"turn_index": 2, "names": ["list_datasets", "aggregate_data"]}],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "semantic_class_wide_single_turn",
+    "tags": ["binding", "task"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 这次作业整体完成得怎么样？",
+      "我要看全班所有人，不是只看几个学生。",
+      "帮我统计：有多少不同的学生交过作业？全班 score 平均分是多少？"
+    ],
+    "expect_aggregates": [{"turn_index": 2, "expect": "broad"}],
+    "expect_task": {
+      "asserts": [
+        {"kind": "tool_succeeded", "tool": "aggregate_data", "turn_index": 2},
+        {"kind": "aggregate_has_metric", "metric_op": "mean", "field": "score", "turn_index": 2}
+      ]
+    },
+    "expect_max_turns": 3
+  },
+  {
+    "id": "fresh_after_slice_same_turn",
+    "tags": ["binding"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 分数最低的 10 条提交，先帮我查出来。",
+      "再帮我查一下全班所有人的提交记录。",
+      "这个班一共有多少不同的学生？要按全班口径算，不是刚才那 10 条。"
+    ],
+    "expect_aggregates": [{"turn_index": 2, "expect": "broad", "ordinal": 1}],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "reject_cross_turn_silent",
+    "tags": ["binding", "guard"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 最低 10 条提交，先帮我看一下。",
+      "直接帮我把平均分算出来。",
+      "不用重新查数据，就用上一问的结果。"
+    ],
+    "expect_aggregates": [
+      {
+        "turn_index": 1,
+        "expect": "allow_cross_turn_explicit",
+        "accept_guard_error": true,
+        "ordinal": 1,
+        "note": "应用上一问结果：list_datasets 后显式 dataset_id 聚合；静默跨轮拒也可"
+      }
+    ],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "explicit_dataset_id_same_turn",
+    "tags": ["binding", "tools"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 按得分从低到高，先看 10 条提交记录。",
+      "我接下来要在这 10 条上做统计。",
+      "帮我数一下，一共多少条？"
+    ],
+    "expect_aggregates": [{"turn_index": 2, "expect": "explicit_dataset_id"}],
+    "expect_tools": [{"turn_index": 2, "names": ["query_data", "list_datasets", "aggregate_data"]}],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "chain_slice_then_broad_switch",
+    "tags": ["binding"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 最低 10 条提交，先算这 10 条的平均分。",
+      "不对，我要整个班的：有多少不同学生、全班平均分是多少。",
+      "刚才那 10 条不要了，换全班口径重新算。"
+    ],
+    "expect_aggregates": [
+      {"turn_index": 0, "expect": "slice"},
+      {"turn_index": 1, "expect": "broad"}
+    ],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "two_turn_list_then_explicit_bind",
+    "tags": ["binding", "tools"],
+    "mode": "analyze",
+    "filter_context": {"classes": ["Class1"]},
+    "turns": [
+      "Class1 分数最低的 15 条提交，帮我调出来。",
+      "我想继续用刚才那份数据。",
+      "对那份数据帮我数一下，一共多少条？"
+    ],
+    "expect_aggregates": [{"turn_index": 2, "expect": "allow_cross_turn_explicit"}],
+    "expect_tools": [{"turn_index": 2, "names": ["list_datasets"]}],
+    "expect_max_turns": 3
+  }
+]

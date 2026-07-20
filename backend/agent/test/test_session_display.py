@@ -50,6 +50,12 @@ def test_clean_strips_ui_scope_and_reminder():
     )
     assert clean_user_content_for_display(merged) == "继续问链表"
 
+    standalone = (
+        "[系统·本轮范围] 以下仅适用于本轮\n\n"
+        "--- 本轮分析范围 ---\n- 班级: Class1"
+    )
+    assert clean_user_content_for_display(standalone) == ""
+
 
 def test_ui_transcript_survives_compaction_replacement():
     session = _session(

@@ -1,0 +1,389 @@
+[
+  {
+    "id": "scope_class_chip",
+    "tags": [
+      "scope"
+    ],
+    "mode": "analyze",
+    "filter_context": {
+      "classes": [
+        "Class1"
+      ]
+    },
+    "ui_scope": {
+      "classes": [
+        "Class1"
+      ]
+    },
+    "turns": [
+      "我界面上已经选了 Class1。",
+      "提交记录先给我看 10 条预览。",
+      "按当前选中的班级来查就行。"
+    ],
+    "expect_scope": {
+      "must_contain": [
+        "Class1"
+      ],
+      "hard": true
+    },
+    "expect_tools": [
+      {
+        "turn_index": 1,
+        "names": [
+          "query_data"
+        ]
+      }
+    ],
+    "expect_args": [
+      {
+        "tool": "query_data",
+        "path": "limit",
+        "eq": 10,
+        "turn_index": 1
+      }
+    ],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "scope_week_range",
+    "tags": [
+      "scope"
+    ],
+    "mode": "analyze",
+    "filter_context": {
+      "classes": [
+        "Class1"
+      ],
+      "week_range": [
+        3,
+        5
+      ]
+    },
+    "ui_scope": {
+      "classes": [
+        "Class1"
+      ],
+      "week_range": [
+        3,
+        5
+      ]
+    },
+    "turns": [
+      "我选的是 Class1，时间是第 3 到第 5 周。",
+      "这段时间里的提交，先给我看 15 条。",
+      "按界面上的周次和班级来查。"
+    ],
+    "expect_scope": {
+      "must_contain": [
+        "Class1"
+      ],
+      "hard": true
+    },
+    "expect_tools": [
+      {
+        "turn_index": 1,
+        "names": [
+          "query_data"
+        ]
+      }
+    ],
+    "expect_args": [
+      {
+        "tool": "query_data",
+        "path": "limit",
+        "eq": 15,
+        "turn_index": 1
+      }
+    ],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "scope_selected_students",
+    "tags": [
+      "scope",
+      "scope-extended"
+    ],
+    "mode": "analyze",
+    "filter_context": {
+      "classes": [
+        "Class1"
+      ]
+    },
+    "ui_scope": {
+      "classes": [
+        "Class1"
+      ],
+      "selected_student_ids": [
+        "$entity.student_ids"
+      ]
+    },
+    "turns": [
+      "我在页面上勾了几个学生，想单独看他们的提交。",
+      "先确认一下当前选中的是哪些学生、哪个班。",
+      "然后帮我查这 20 条左右的提交记录看看情况。"
+    ],
+    "expect_scope": {
+      "must_contain": [
+        "$entity.student_ids.0"
+      ],
+      "must_call_tools": [
+        "get_current_filter_context"
+      ]
+    },
+    "expect_tools": [
+      {
+        "turn_index": 1,
+        "names": [
+          "get_current_filter_context"
+        ]
+      },
+      {
+        "turn_index": 2,
+        "names": [
+          "query_data"
+        ]
+      }
+    ],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "scope_knowledge_attachment",
+    "tags": [
+      "scope",
+      "scope-extended"
+    ],
+    "mode": "analyze",
+    "filter_context": {
+      "classes": [
+        "Class1"
+      ]
+    },
+    "ui_scope": {
+      "classes": [
+        "Class1"
+      ],
+      "knowledge_ids": [
+        "$entity.knowledge_ids"
+      ]
+    },
+    "turns": [
+      "我这次分析带着「$entity.knowledge_labels.0」和「$entity.knowledge_labels.1」两个知识点。",
+      "Class1 班里，和这些知识点相关的提交，先看 10 条。",
+      "知识点和班级都按我附件里选的来。"
+    ],
+    "expect_scope": {
+      "must_contain": [
+        "知识点",
+        "$entity.knowledge_ids.0"
+      ]
+    },
+    "expect_tools": [
+      {
+        "turn_index": 1,
+        "names": [
+          "query_data"
+        ]
+      }
+    ],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "scope_view_and_report_attachment",
+    "tags": [
+      "scope",
+      "scope-extended"
+    ],
+    "mode": "analyze",
+    "filter_context": {
+      "classes": [
+        "Class1"
+      ]
+    },
+    "ui_scope": {
+      "classes": [
+        "Class1"
+      ],
+      "view_snapshot": {
+        "view": "WeekView",
+        "params": {
+          "week": 4
+        }
+      },
+      "report": {
+        "path": "$entity.report_path",
+        "label": "$entity.report_label"
+      }
+    },
+    "turns": [
+      "我附上了第 4 周的视图，还有一份班级周报草稿。",
+      "先确认一下当前分析范围是哪个班。",
+      "快速查 5 条提交，和草稿里的说法对一对。"
+    ],
+    "expect_scope": {
+      "must_contain": [
+        "视图快照",
+        "继续编辑报告"
+      ],
+      "must_call_tools": [
+        "get_current_filter_context"
+      ]
+    },
+    "expect_tools": [
+      {
+        "turn_index": 1,
+        "names": [
+          "get_current_filter_context"
+        ]
+      },
+      {
+        "turn_index": 2,
+        "names": [
+          "query_data"
+        ]
+      }
+    ],
+    "forbid_tools": [
+      "compact"
+    ],
+    "expect_max_turns": 3,
+    "note": "hint-injection smoke only; does not require successful report file reads"
+  },
+  {
+    "id": "tools_query_with_class_filter",
+    "tags": [
+      "tools"
+    ],
+    "mode": "analyze",
+    "filter_context": {
+      "classes": [
+        "Class1"
+      ]
+    },
+    "turns": [
+      "我想看 Class1 这个班的提交情况。",
+      "帮我查 20 条记录。",
+      "20 条够用了。"
+    ],
+    "expect_tools": [
+      {
+        "turn_index": 1,
+        "names": [
+          "query_data"
+        ]
+      }
+    ],
+    "expect_args": [
+      {
+        "tool": "query_data",
+        "path": "limit",
+        "eq": 20,
+        "turn_index": 1
+      },
+      {
+        "tool": "query_data",
+        "path": "class",
+        "eq": "Class1",
+        "turn_index": 1
+      }
+    ],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "tools_inspect_schema_before_query",
+    "tags": [
+      "tools"
+    ],
+    "mode": "analyze",
+    "filter_context": {
+      "classes": [
+        "Class1"
+      ]
+    },
+    "turns": [
+      "Class1 提交记录里都有哪些字段？我不太确定列名。",
+      "字段搞清楚后，帮我查 5 条提交看看样子。",
+      "先小样本看一下。"
+    ],
+    "expect_tools": [
+      {
+        "turn_index": 0,
+        "names": [
+          "inspect_schema"
+        ]
+      },
+      {
+        "turn_index": 1,
+        "names": [
+          "query_data"
+        ]
+      }
+    ],
+    "expect_args": [
+      {
+        "tool": "inspect_schema",
+        "path": "resource",
+        "eq": "submit_record",
+        "turn_index": 0
+      },
+      {
+        "tool": "query_data",
+        "path": "limit",
+        "eq": 5,
+        "turn_index": 1
+      }
+    ],
+    "expect_max_turns": 3
+  },
+  {
+    "id": "task_class_mean_score",
+    "tags": [
+      "task",
+      "numeric"
+    ],
+    "mode": "analyze",
+    "filter_context": {
+      "classes": [
+        "Class1"
+      ]
+    },
+    "turns": [
+      "Class1 这次作业，我想看全班整体表现。",
+      "把全班所有人的提交都纳入统计。",
+      "最后告诉我：一共多少条提交？平均得分是多少？"
+    ],
+    "expect_aggregates": [
+      {
+        "turn_index": 2,
+        "expect": "broad"
+      }
+    ],
+    "expect_task": {
+      "asserts": [
+        {
+          "kind": "status_ok"
+        },
+        {
+          "kind": "tool_succeeded",
+          "tool": "aggregate_data",
+          "turn_index": 2
+        },
+        {
+          "kind": "aggregate_has_metric",
+          "metric_op": "mean",
+          "field": "score",
+          "turn_index": 2
+        },
+        {
+          "kind": "numeric_in_tool_result",
+          "tool": "aggregate_data",
+          "path": "rows.0.0",
+          "op": "gt",
+          "value": 0,
+          "turn_index": 2
+        }
+      ]
+    },
+    "expect_max_tool_calls": 8,
+    "expect_max_turns": 3
+  }
+]
