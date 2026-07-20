@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from .tool_result import COMPACT_POLICY_PIN, CONTENT_KIND_REFERENCE, CONTENT_KIND_SKILL
+from .tool_result import (
+    COMPACT_POLICY_PIN,
+    CONTENT_KIND_COMPACT_SUMMARY,
+    CONTENT_KIND_REFERENCE,
+    CONTENT_KIND_SKILL,
+)
 
 
 def attach_pin_meta(
@@ -22,11 +27,56 @@ def attach_pin_meta(
     return out
 
 
+def attach_ui_hidden_meta(
+    msg: dict[str, Any],
+    *,
+    content_kind: str,
+) -> dict[str, Any]:
+    """Mark synthetic user/system injections that must not appear in the chat UI."""
+    out = dict(msg)
+    meta = dict(out.get("_agent_meta") or {})
+    meta["ui_visible"] = False
+    meta["content_kind"] = content_kind
+    out["_agent_meta"] = meta
+    return out
+
+
 def is_pinned_message(msg: dict[str, Any]) -> bool:
     meta = msg.get("_agent_meta")
     if isinstance(meta, dict) and meta.get("compact_policy") == COMPACT_POLICY_PIN:
         return True
     return False
+
+
+def is_ui_hidden_message(msg: dict[str, Any]) -> bool:
+    """True for synthetic context messages that should not render in the frontend."""
+    meta = msg.get("_agent_meta")
+    if isinstance(meta, dict) and meta.get("ui_visible") is False:
+        return True
+    if msg.get("role") != "user":
+        return False
+    text = str(msg.get("content") or "").lstrip()
+    if not text:
+        return False
+    # Legacy sessions: compact / continuation injected before meta existed.
+    from common.prompts import COMPACT_USER_MESSAGE_PREAMBLE, OUTPUT_CONTINUATION_MESSAGE
+
+    if text.startswith(COMPACT_USER_MESSAGE_PREAMBLE):
+        return True
+    if text.startswith(OUTPUT_CONTINUATION_MESSAGE[:40]):
+        return True
+    return False
+
+
+def is_compact_summary_message(msg: dict[str, Any]) -> bool:
+    meta = msg.get("_agent_meta")
+    if isinstance(meta, dict) and meta.get("content_kind") == CONTENT_KIND_COMPACT_SUMMARY:
+        return True
+    if msg.get("role") != "user":
+        return False
+    from common.prompts import COMPACT_USER_MESSAGE_PREAMBLE
+
+    return str(msg.get("content") or "").lstrip().startswith(COMPACT_USER_MESSAGE_PREAMBLE)
 
 
 def pin_meta_for_tool(tool_name: str, content: str) -> dict[str, Any] | None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from data.filter_context import FilterContext
 
@@ -24,27 +25,42 @@ def augment_user_message_with_ui_scope(
     fc: FilterContext | None,
 ) -> str:
     """
-    When the teacher refers to UI-selected students, attach explicit student_IDs
-    so the model does not ask for IDs again.
+    Legacy text injection disabled.
+
+    Scope is carried via HTTP ``filter_context`` / composer scope chip (``ui_scope``),
+    not appended into the teacher-visible user message.
     """
-    text = (content or "").strip()
-    if not text or fc is None or not fc.selected_student_ids:
-        return content
-    if not teacher_has_selection_intent(text):
-        return content
+    return content
 
-    ids = list(fc.selected_student_ids)
-    n = len(ids)
-    if n <= 5:
-        id_line = f"student_ID: {', '.join(ids)}（共 {n} 人）"
-    else:
-        id_line = (
-            f"Nav 已选 **{n} 人**（`query_data` 将自动应用 student_ids，勿索要学号；"
-            "需完整列表 → `get_current_filter_context(include_student_ids=true)`）"
-        )
 
-    return (
-        f"{text}\n\n"
-        "[系统·UI 同步] 教师已在可视化面板选中学生，请直接用于 query_data / 分析：\n"
-        f"{id_line}"
-    )
+def build_ui_scope_payload(context: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Normalize optional ui_scope from message context for the durable transcript.
+
+    Accepts any non-empty combination of students / classes / majors / week_range
+    so composer chips (week or class only) can persist without a student selection.
+    """
+    if not isinstance(context, dict):
+        return None
+    raw = context.get("ui_scope")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    out: dict[str, Any] = {}
+    ids = [str(x).strip() for x in (raw.get("selected_student_ids") or []) if str(x).strip()]
+    if ids:
+        out["selected_student_ids"] = ids
+    classes = [str(x).strip() for x in (raw.get("classes") or []) if str(x).strip()]
+    if classes:
+        out["classes"] = classes
+    majors = [str(x).strip() for x in (raw.get("majors") or []) if str(x).strip()]
+    if majors:
+        out["majors"] = majors
+    wr = raw.get("week_range")
+    if isinstance(wr, (list, tuple)) and len(wr) >= 2:
+        try:
+            out["week_range"] = [int(wr[0]), int(wr[1])]
+        except (TypeError, ValueError):
+            pass
+    return out or None
+

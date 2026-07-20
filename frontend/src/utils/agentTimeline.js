@@ -73,6 +73,172 @@ export function buildTurnTimeline(turnMsgs) {
   return timeline
 }
 
+/**
+ * @typedef {object} StepGroup
+ * @property {string} id
+ * @property {'plan'|'plan_update'|'process'} phase
+ * @property {number} [updateIndex]
+ * @property {string} text
+ * @property {Array<{kind:string, phase:string, text?:string, step?:object}>} tools
+ */
+
+/** Split interleaved timeline into plan / plan_update step groups with nested tools. */
+export function groupTimelineIntoSteps(timeline) {
+  if (!Array.isArray(timeline) || !timeline.length) return []
+
+  /** @type {StepGroup[]} */
+  const groups = []
+  /** @type {StepGroup|null} */
+  let current = null
+  let updateIndex = 0
+
+  const pushCurrent = () => {
+    if (!current) return
+    groups.push(current)
+    current = null
+  }
+
+  const startGroup = (phase, text) => {
+    pushCurrent()
+    if (phase === 'plan') {
+      current = { id: 'plan', phase: 'plan', text: text || '', tools: [] }
+      return
+    }
+    updateIndex += 1
+    current = {
+      id: `update-${updateIndex}`,
+      phase: 'plan_update',
+      updateIndex,
+      text: text || '',
+      tools: [],
+    }
+  }
+
+  const ensureGroup = () => {
+    if (!current) {
+      current = { id: 'plan', phase: 'plan', text: '', tools: [] }
+    }
+  }
+
+  for (const item of timeline) {
+    if (item.kind === 'narration') {
+      if (item.phase === 'plan') {
+        startGroup('plan', String(item.text || '').trim())
+      } else if (item.phase === 'plan_update') {
+        startGroup('plan_update', String(item.text || '').trim())
+      } else if (item.phase === 'conclusion') {
+        pushCurrent()
+      }
+      continue
+    }
+    if (item.kind === 'tool' || item.phase === 'process') {
+      ensureGroup()
+      current.tools.push(item)
+    }
+  }
+
+  pushCurrent()
+  return groups
+}
+
+/** Label for a step group header. */
+export function stepGroupLabel(group, ui) {
+  if (!group) return ''
+  if (group.phase === 'plan') return ui.sectionPlan
+  if (group.phase === 'plan_update') return ui.sectionPlanUpdate(group.updateIndex || 1)
+  return ui.sectionProcess
+}
+
+/** Affiliation badge on tool bubbles (plan / plan_update). */
+export function stepGroupAffiliationLabel(group, ui) {
+  if (!group || group.phase === 'process') return ''
+  return stepGroupLabel(group, ui)
+}
+
+export function stepGroupStats(group) {
+  const tools = group?.tools || []
+  const failed = tools.filter((i) =>
+    ['fail', 'denied', 'blocked'].includes(i.step?.status)
+  )
+  return { total: tools.length, failed: failed.length }
+}
+
+/** Whether message has interleaved timeline suitable for step grouping. */
+export function hasInterleavedTimeline(msg) {
+  const tl = msg?.timeline
+  if (!Array.isArray(tl) || !tl.length) return false
+  const hasPlanNarration = tl.some(
+    (item) => item.kind === 'narration' && (item.phase === 'plan' || item.phase === 'plan_update')
+  )
+  const hasTools = tl.some((item) => item.kind === 'tool')
+  return hasPlanNarration || hasTools
+}
+
+/** Build step groups from timeline, or synthesize from legacy fields. */
+export function buildStepGroupsFromMessage(msg) {
+  const tl = msg?.timeline
+  if (Array.isArray(tl) && tl.length) {
+    const groups = enrichStepGroupText(groupTimelineIntoSteps(tl), msg)
+    if (groups.length) return groups
+  }
+  return buildLegacyStepGroups(msg)
+}
+
+function enrichStepGroupText(groups, msg) {
+  if (!groups.length) return groups
+  return groups.map((g) => {
+    if (g.phase === 'plan' && !g.text.trim() && msg?.thinking) {
+      return { ...g, text: String(msg.thinking).trim() }
+    }
+    return g
+  })
+}
+
+function buildLegacyStepGroups(msg) {
+  /** @type {StepGroup[]} */
+  const groups = []
+  const thinking = String(msg?.thinking || '').trim()
+  if (thinking) {
+    groups.push({ id: 'plan', phase: 'plan', text: thinking, tools: [] })
+  }
+
+  const updates = Array.isArray(msg?.thinking_updates) ? msg.thinking_updates : []
+  updates.forEach((raw, i) => {
+    const text = String(raw || '').trim()
+    if (!text) return
+    groups.push({
+      id: `update-${i + 1}`,
+      phase: 'plan_update',
+      updateIndex: i + 1,
+      text,
+      tools: [],
+    })
+  })
+
+  const steps = msg?.trace?.steps || []
+  const toolItems = steps.map((step) => ({ kind: 'tool', phase: 'process', step }))
+  if (toolItems.length) {
+    if (groups.length) {
+      const last = groups[groups.length - 1]
+      groups[groups.length - 1] = { ...last, tools: [...last.tools, ...toolItems] }
+    } else {
+      groups.push({ id: 'process', phase: 'process', text: '', tools: toolItems })
+    }
+  }
+
+  return groups
+}
+
+/** Default expand: plan + latest group; also expand groups with failures or while streaming. */
+export function stepGroupDefaultExpanded(group, index, groups, msg) {
+  const isLast = index === groups.length - 1
+  if (msg?.streaming && isLast) return true
+  if (group.phase === 'plan') return true
+  const { failed } = stepGroupStats(group)
+  if (failed > 0) return true
+  return isLast
+}
+
 /** Process section: narration between tools + tool steps (excludes plan/conclusion). */
 export function processTimelineItems(msg) {
   const tl = msg?.timeline

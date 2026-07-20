@@ -5,6 +5,8 @@ from __future__ import annotations
 COMPACT_POLICY_PIN = "pin"
 CONTENT_KIND_SKILL = "skill_load"
 CONTENT_KIND_REFERENCE = "reference_load"
+CONTENT_KIND_COMPACT_SUMMARY = "compact_summary"
+CONTENT_KIND_OUTPUT_CONTINUATION = "output_continuation"
 
 
 def format_skill_load_result(

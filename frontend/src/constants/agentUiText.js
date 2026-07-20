@@ -21,6 +21,15 @@ export const AGENT_UI = {
 
   composerPlaceholder: '输入问题；/skill 列出技能，/skill analysis-class 加载技能',
   composerHint: 'Enter 发送 · Shift+Enter 换行 · /skill · /memories',
+  scopeAttachTitle: '分析范围',
+  scopeAttachStudents: (n) => `已选 ${n} 人`,
+  scopeAttachEmpty: '当前范围',
+  scopeAttachDismiss: '清除全部范围附件',
+  scopeAttachRemoveOne: '移出本次对话',
+  scopeAttachRemoveClass: '移出班级',
+  scopeAttachRemoveMajor: '移出专业',
+  scopeAttachRemoveWeek: '移出周次',
+  scopeAttachHint: '来自可视化范围 · 可逐项移除，或点 × 全部清除',
   skillSlashListing: '列出技能',
   skillSlashLoading: (name) => `加载技能 ${name}`,
   send: '发送',
@@ -128,7 +137,7 @@ export const AGENT_UI = {
 
   reportSection: '报告与导出',
   reportEvidenceSection: '数据依据验真',
-  reportEvidenceHint: '以下对照本会话查询结果核对报告 Evidence 中的引用标签（与上方执行过程分开）。',
+  reportEvidenceHint: '以下对照本会话查询结果核对报告 Evidence 中的引用标签（与上方工具步骤分开）。',
   reportEvidenceOk: '可核对',
   reportEvidenceFail: '无法核对',
   reportValidateSection: '报告交付检查未通过',
@@ -161,6 +170,10 @@ export const AGENT_UI = {
     `消息 ${messageCount} | 轮次 ${turnCount}`,
 
   toolParams: '参数',
+  toolResult: '结果',
+  toolRawResult: '原始返回',
+  toolRawResultShow: '展开原始返回',
+  toolRawResultHide: '收起原始返回',
   toolError: '错误',
   toolStatusOk: '成功',
   toolStatusFail: '失败',
@@ -168,10 +181,11 @@ export const AGENT_UI = {
   toolStatusBlocked: '拦截',
   toolStatusRunning: '执行中',
 
-  sectionPlan: '分析计划',
-  sectionPlanUpdate: (n) => `分析进展 ${n}`,
-  sectionProcess: '执行过程',
-  sectionConclusion: '分析结论',
+  // 气泡过程叙事（路径2）：真计划在侧栏 todo；此处仅思路/步骤/回答
+  sectionPlan: '思路',
+  sectionPlanUpdate: (n) => `步骤 ${n}`,
+  sectionProcess: '工具调用',
+  sectionConclusion: '回答',
 
   sampleQuestions: [
     '最近两周链表知识点表现如何？',

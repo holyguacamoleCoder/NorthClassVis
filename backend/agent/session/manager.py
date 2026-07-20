@@ -182,6 +182,7 @@ class SessionManager:
             return
         session = self._active
         session.messages = list(snapshot.get("messages") or [])
+        session.ui_messages = list(snapshot.get("ui_messages") or [])
         session.title = str(snapshot.get("title") or session.title)
         session.todo_items = list(snapshot.get("todo_items") or [])
         session.todo_round_since_update = int(snapshot.get("todo_round_since_update") or 0)
@@ -198,6 +199,7 @@ class SessionManager:
         session = self._active
         return {
             "messages": list(session.messages),
+            "ui_messages": list(session.ui_messages or []),
             "title": session.title,
             "todo_items": list(session.todo_items or []),
             "todo_round_since_update": session.todo_round_since_update,

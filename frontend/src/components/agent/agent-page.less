@@ -189,6 +189,25 @@
   &:hover:not(:disabled) { background: #a84d3d; }
 }
 
+.agent-scope-attach-hint {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: #688;
+}
+
+.agent-msg-user-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.agent-msg-user-stack :deep(.agent-scope-attach) {
+  align-self: flex-end;
+  max-width: min(100%, 420px);
+}
+
 .agent-composer-hint {
   font-size: 11px;
   color: #aaa;

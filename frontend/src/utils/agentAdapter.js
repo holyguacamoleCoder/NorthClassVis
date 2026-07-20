@@ -15,6 +15,45 @@ import {
 import { enrichToolStep, summarizeToolContent } from '@/utils/agentPlanUtils.js'
 import { buildTurnTimeline } from '@/utils/agentTimeline.js'
 
+/** Must match backend common.prompts.COMPACT_USER_MESSAGE_PREAMBLE */
+const COMPACT_USER_MESSAGE_PREAMBLE =
+  '以下内容为对话压缩摘要，请在此基础上继续 NorthClassVision 学业数据分析。'
+
+/** Prefix of backend OUTPUT_CONTINUATION_MESSAGE */
+const OUTPUT_CONTINUATION_PREFIX = '输出已达到长度上限。请从上次中断处直接继续'
+
+export function isInternalUserContent(text) {
+  const t = String(text || '').trimStart()
+  if (!t) return false
+  if (t.startsWith(COMPACT_USER_MESSAGE_PREAMBLE)) return true
+  if (t.startsWith(OUTPUT_CONTINUATION_PREFIX)) return true
+  return false
+}
+
+/** Strip model-echoed compact / continuation dumps from assistant narrative. */
+export function stripInternalLeakage(text) {
+  let out = String(text || '')
+  if (!out.trim()) return out
+  if (out.includes(COMPACT_USER_MESSAGE_PREAMBLE)) {
+    const idx = out.indexOf(COMPACT_USER_MESSAGE_PREAMBLE)
+    // Drop preamble and everything after it in this block if it dominates the message
+    const before = out.slice(0, idx).trim()
+    const after = out.slice(idx + COMPACT_USER_MESSAGE_PREAMBLE.length)
+    // If almost entire message is the dump, clear it; else keep pre-leak text
+    if (!before || before.length < 40) {
+      // Try to find a natural resume after the dump (blank line + short answer)
+      const resume = after.match(/\n\n(?![#*\-\[]|\*\*)([^\n]{10,})/)
+      out = resume ? resume[1].trim() : before
+    } else {
+      out = before
+    }
+  }
+  if (out.trimStart().startsWith(OUTPUT_CONTINUATION_PREFIX)) {
+    out = ''
+  }
+  return out.trim()
+}
+
 const MODE_LABELS = {
   consult: '咨询',
   analyze: '分析',
@@ -131,7 +170,7 @@ function buildAssistantUiFromTurn(turnMsgs) {
   const memory_saved = extractMemorySavedFromToolMessages(toolMessages)
   const timeline = buildTurnTimeline(turnMsgs)
 
-  return {
+  const assistant = {
     role: 'assistant',
     thinking: thinking.trim(),
     answer: stripAnswerMarkdown(answer, visual_links, report_links),
@@ -149,6 +188,8 @@ function buildAssistantUiFromTurn(turnMsgs) {
     revealPhase: 5,
     isHistory: true,
   }
+  sanitizeAssistantLeakage(assistant)
+  return assistant
 }
 
 export function legacyToAssistantMessage(res) {
@@ -165,7 +206,7 @@ export function legacyToAssistantMessage(res) {
   })
   const answer = stripAnswerMarkdown(res.answer || '', visual_links, report_links)
   const closing = stripAnswerMarkdown(res.closing || '', visual_links, report_links)
-  return {
+  const assistant = {
     role: 'assistant',
     thinking: (res.thinking || '').trim(),
     thinking_updates: Array.isArray(res.thinking_updates)
@@ -187,6 +228,8 @@ export function legacyToAssistantMessage(res) {
     continue_reason: res.continue_reason || null,
     revealPhase: 0,
   }
+  sanitizeAssistantLeakage(assistant)
+  return assistant
 }
 
 export function turnResultToAssistantMessage(result) {
@@ -209,11 +252,17 @@ export function stripRunModifyBlock(text) {
   let out = String(text || '')
   out = out.replace(/\[run_modify\][\s\S]*?\[\/run_modify\]\s*/g, '')
   out = out.replace(/^这是对上一轮数据计算的修改：[\s\S]*?(?:\n\n|$)/, '')
+  out = out.replace(/\n*\s*\[系统[·・.]?UI\s*同步\][\s\S]*$/i, '')
+  out = out.replace(/<reminder>[\s\S]*?<\/reminder>/gi, '')
   return out.trim()
 }
 
-export function userMessage(text) {
-  return { role: 'user', text: stripRunModifyBlock(text) }
+export function userMessage(text, scopeAttachment = null) {
+  const msg = { role: 'user', text: stripRunModifyBlock(text) }
+  if (scopeAttachment && typeof scopeAttachment === 'object') {
+    msg.scopeAttachment = scopeAttachment
+  }
+  return msg
 }
 
 export function sessionMessagesToUi(messages) {
@@ -224,10 +273,12 @@ export function sessionMessagesToUi(messages) {
   const flushTurn = () => {
     if (!turn.length) return
     const firstUser = turn.find((m) => m.role === 'user')
-    if (firstUser) ui.push(userMessage(firstUser.content))
-    const rest = turn.filter((m) => m.role !== 'user')
-    if (rest.length) {
-      const assistant = buildAssistantUiFromTurn(rest)
+    if (firstUser) {
+      ui.push(userMessage(firstUser.content, firstUser.ui_scope || null))
+    }
+    const assistantParts = turn.filter((m) => m.role !== 'user')
+    if (assistantParts.length) {
+      const assistant = buildAssistantUiFromTurn(assistantParts)
       if (
         assistant.thinking ||
         assistant.answer ||
@@ -242,6 +293,9 @@ export function sessionMessagesToUi(messages) {
 
   for (const msg of messages) {
     if (msg.role === 'user') {
+      if (isInternalUserContent(msg.content)) {
+        continue
+      }
       flushTurn()
       turn = [msg]
       continue
@@ -259,6 +313,30 @@ export function sessionMessagesToUi(messages) {
       (m.answer && m.answer.trim()) ||
       (m.closing && m.closing.trim()),
   )
+}
+
+function sanitizeAssistantLeakage(assistant) {
+  if (!assistant) return
+  if (assistant.thinking) assistant.thinking = stripInternalLeakage(assistant.thinking)
+  if (assistant.answer) assistant.answer = stripInternalLeakage(assistant.answer)
+  if (assistant.closing) assistant.closing = stripInternalLeakage(assistant.closing)
+  if (Array.isArray(assistant.thinking_updates)) {
+    assistant.thinking_updates = assistant.thinking_updates
+      .map((t) => stripInternalLeakage(t))
+      .filter((t) => String(t || '').trim())
+  }
+  if (Array.isArray(assistant.timeline)) {
+    assistant.timeline = assistant.timeline
+      .map((item) => {
+        if (item?.kind === 'narration' && item.text) {
+          const text = stripInternalLeakage(item.text)
+          if (!text) return null
+          return { ...item, text }
+        }
+        return item
+      })
+      .filter(Boolean)
+  }
 }
 
 function enrichStepWithRun(step, run) {
@@ -443,6 +521,7 @@ export function applyProgressToMessage(msg, job) {
   if (Array.isArray(progress.memory_saved) && progress.memory_saved.length) {
     msg.memory_saved = progress.memory_saved
   }
+  sanitizeAssistantLeakage(msg)
 }
 
 export function mergeRunMetaIntoPayload(payload, priorMsg) {

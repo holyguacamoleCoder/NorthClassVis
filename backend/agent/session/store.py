@@ -18,6 +18,7 @@ INDEX_FILE = "index.json"
 ACTIVE_FILE = "active.json"
 META_FILE = "meta.json"
 MESSAGES_FILE = "messages.jsonl"
+UI_MESSAGES_FILE = "ui_messages.jsonl"
 COMPACT_FILE = "compact.json"
 TODO_FILE = "todo.json"
 CONTEXT_FILE = "session_context.json"
@@ -107,6 +108,7 @@ class FileSessionStore:
             return None
 
         messages = self._load_messages(sdir / MESSAGES_FILE)
+        ui_messages = self._load_messages(sdir / UI_MESSAGES_FILE)
         compact = self._load_compact(sdir / COMPACT_FILE)
         session_context = self._load_context(sdir / CONTEXT_FILE)
         todo_items, todo_round = self._load_todo(sdir / TODO_FILE)
@@ -121,6 +123,7 @@ class FileSessionStore:
             updated_at=float(meta.get("updated_at") or 0),
             session_context=session_context,
             messages=messages,
+            ui_messages=ui_messages,
             compact=compact,
             todo_items=todo_items,
             todo_round_since_update=todo_round,
@@ -157,6 +160,7 @@ class FileSessionStore:
             encoding="utf-8",
         )
         self._save_messages(sdir / MESSAGES_FILE, session.messages)
+        self._save_messages(sdir / UI_MESSAGES_FILE, session.ui_messages)
         (sdir / COMPACT_FILE).write_text(
             json.dumps(
                 {

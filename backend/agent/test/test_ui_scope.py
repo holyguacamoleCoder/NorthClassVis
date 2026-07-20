@@ -28,20 +28,20 @@ def test_merge_http_context_keeps_selection_when_patch_only_classes():
     assert merged.week_range == (0, 15)
 
 
-def test_augment_user_message_injects_selected_ids():
+def test_augment_user_message_no_longer_injects_into_text():
+    """Scope is carried via filter_context / ui_scope chip, not user text."""
     fc = FilterContext(selected_student_ids=("a", "b", "c"), source="http_body")
-    out = augment_user_message_with_ui_scope("让我看看我选的这几个学生表现如何", fc)
-    assert "a, b, c" in out
-    assert "query_data" in out
+    q = "让我看看我选的这几个学生表现如何"
+    out = augment_user_message_with_ui_scope(q, fc)
+    assert out == q
+    assert "[系统·UI 同步]" not in out
 
 
-def test_augment_large_selection_omits_id_list():
+def test_augment_large_selection_no_text_injection():
     ids = tuple(f"s{i}" for i in range(50))
     fc = FilterContext(selected_student_ids=ids, source="http_body")
-    out = augment_user_message_with_ui_scope("分析我选的学生", fc)
-    assert "50 人" in out
-    assert "s0, s1" not in out
-    assert "include_student_ids" in out
+    q = "分析我选的学生"
+    assert augment_user_message_with_ui_scope(q, fc) == q
 
 
 def test_augment_skips_without_selection_intent():
@@ -50,10 +50,61 @@ def test_augment_skips_without_selection_intent():
     assert augment_user_message_with_ui_scope(q, fc) == q
 
 
-def test_augment_already_selected_phrase():
+def test_augment_already_selected_phrase_no_text_injection():
     fc = FilterContext(selected_student_ids=("s1", "s2", "s3"), source="http_body")
-    out = augment_user_message_with_ui_scope("我已经选择了三个学生了啊", fc)
-    assert "s1" in out
+    q = "我已经选择了三个学生了啊"
+    assert augment_user_message_with_ui_scope(q, fc) == q
+
+
+def test_build_ui_scope_payload():
+    from session.ui_scope import build_ui_scope_payload
+
+    payload = build_ui_scope_payload(
+        {
+            "ui_scope": {
+                "selected_student_ids": ["abc", ""],
+                "classes": ["Class2"],
+                "week_range": [10, 12],
+            }
+        }
+    )
+    assert payload == {
+        "selected_student_ids": ["abc"],
+        "classes": ["Class2"],
+        "week_range": [10, 12],
+    }
+
+
+def test_build_ui_scope_payload_week_and_class_without_students():
+    from session.ui_scope import build_ui_scope_payload
+
+    payload = build_ui_scope_payload(
+        {
+            "ui_scope": {
+                "selected_student_ids": [],
+                "classes": ["Class1"],
+                "week_range": [3, 8],
+            }
+        }
+    )
+    assert payload == {
+        "classes": ["Class1"],
+        "week_range": [3, 8],
+    }
+    assert build_ui_scope_payload({"ui_scope": {}}) is None
+    assert build_ui_scope_payload({"ui_scope": {"selected_student_ids": []}}) is None
+
+
+def test_clean_display_hides_ui_scope_from_legacy_text():
+    from session.display import clean_user_content_for_display
+
+    q = "只分析我选中的这些学生"
+    legacy = (
+        f"{q}\n\n"
+        "[系统·UI 同步] 教师已在可视化面板选中学生，请直接用于 query_data / 分析：\n"
+        "student_ID: a, b（共 2 人）"
+    )
+    assert clean_user_content_for_display(legacy) == q
 
 
 def test_resolve_params_for_resource_strips_majors_on_student_info():

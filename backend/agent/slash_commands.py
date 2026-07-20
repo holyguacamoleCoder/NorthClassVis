@@ -162,6 +162,16 @@ def execute_slash_command(
 
     session.messages.append({"role": "user", "content": user_line})
     session.messages.append({"role": "assistant", "content": answer})
+    from session.display import append_ui_turn, messages_for_ui
+
+    append_ui_turn(
+        session,
+        display_user_text=user_line,
+        turn_messages=[
+            {"role": "user", "content": user_line},
+            {"role": "assistant", "content": answer},
+        ],
+    )
     session.updated_at = time.time()
     session_manager.persist_active()
 
@@ -176,7 +186,7 @@ def execute_slash_command(
         "session_id": session.id,
         "session_title": session.title,
         "permission_mode": session.permission_mode,
-        "messages": serialize_messages(session.messages),
+        "messages": serialize_messages(messages_for_ui(session)),
         "todo_items": list(session.todo_items or []),
         "filter_context": session.filter_context,
         "loaded_skills": sorted(loaded_set),

@@ -64,7 +64,14 @@
             :class="['agent-msg', 'agent-msg--' + msg.role]"
           >
             <template v-if="msg.role === 'user'">
-              <div class="agent-msg-bubble agent-msg-bubble--user">{{ msg.text }}</div>
+              <div class="agent-msg-user-stack">
+                <AgentScopeAttachment
+                  v-if="msg.scopeAttachment"
+                  :scope="msg.scopeAttachment"
+                  :compact="true"
+                />
+                <div class="agent-msg-bubble agent-msg-bubble--user">{{ msg.text }}</div>
+              </div>
             </template>
             <template v-else>
               <AgentAssistantMessage
@@ -93,6 +100,17 @@
         </div>
 
         <div class="agent-composer-wrap">
+          <AgentScopeAttachment
+            v-if="composerScopeAttachment"
+            :scope="composerScopeAttachment"
+            :dismissible="true"
+            @dismiss="dismissComposerScopeAttachment"
+            @remove-student="removeComposerScopeStudent"
+            @remove-class="removeComposerScopeClass"
+            @remove-major="removeComposerScopeMajor"
+            @remove-week="removeComposerScopeWeek"
+          />
+          <p v-if="composerScopeAttachment" class="agent-scope-attach-hint">{{ ui.scopeAttachHint }}</p>
           <div class="agent-composer-inner">
             <textarea
               ref="composerEl"
@@ -182,6 +200,7 @@ import AgentContextRail from '@/components/agent/AgentContextRail.vue'
 import AgentAssistantMessage from '@/components/agent/AgentAssistantMessage.vue'
 import AgentMemoriesModal from '@/components/agent/AgentMemoriesModal.vue'
 import AgentReportPreviewModal from '@/components/agent/AgentReportPreviewModal.vue'
+import AgentScopeAttachment from '@/components/agent/AgentScopeAttachment.vue'
 import { AGENT_UI } from '@/constants/agentUiText.js'
 
 export default {
@@ -193,6 +212,7 @@ export default {
     AgentAssistantMessage,
     AgentMemoriesModal,
     AgentReportPreviewModal,
+    AgentScopeAttachment,
   },
   mixins: [agentChatCore],
   props: {

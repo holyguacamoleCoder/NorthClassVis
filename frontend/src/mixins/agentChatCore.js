@@ -32,6 +32,12 @@ import {
 } from '@/utils/agentAdapter.js'
 import { AGENT_UI } from '@/constants/agentUiText.js'
 import { isSkillSlashCommand, skillCommandLoadingText } from '@/utils/agentSlashCommands.js'
+import {
+  buildScopeAttachmentFromContext,
+  cloneScopeAttachment,
+  hasScopeContent,
+  scopeAttachmentKey,
+} from '@/utils/agentScopeAttachment.js'
 
 export default {
   data() {
@@ -58,6 +64,10 @@ export default {
       autoScrollLocked: false,
       sampleQuestions: AGENT_UI.sampleQuestions,
       catalogSkills: [],
+      scopeAttachmentDismissed: false,
+      /** null = follow panel; object = local editable draft */
+      scopeAttachmentDraft: null,
+      _scopeAttachmentWatchKey: '',
       reportPreview: {
         open: false,
         loading: false,
@@ -74,6 +84,27 @@ export default {
   computed: {
     messageCount() {
       return this.messages.length
+    },
+    composerScopeAttachment() {
+      if (this.scopeAttachmentDismissed) return null
+      if (this.scopeAttachmentDraft) {
+        return hasScopeContent(this.scopeAttachmentDraft) ? this.scopeAttachmentDraft : null
+      }
+      return buildScopeAttachmentFromContext(this.context)
+    },
+  },
+  watch: {
+    context: {
+      deep: true,
+      immediate: true,
+      handler(ctx) {
+        const next = scopeAttachmentKey(buildScopeAttachmentFromContext(ctx))
+        if (next !== this._scopeAttachmentWatchKey) {
+          this._scopeAttachmentWatchKey = next
+          this.scopeAttachmentDismissed = false
+          this.scopeAttachmentDraft = null
+        }
+      },
     },
   },
   beforeUnmount() {
@@ -151,6 +182,9 @@ export default {
         const userBubble = this.messages[idx - 1]
         if (lastUser && userBubble?.role === 'user') {
           userBubble.text = stripRunModifyBlock(lastUser.content || userBubble.text)
+          if (lastUser.ui_scope) {
+            userBubble.scopeAttachment = lastUser.ui_scope
+          }
         }
       }
       if (
@@ -531,7 +565,11 @@ export default {
       this.turnBaselineMsgCount = this.messages.length
       this.inputText = ''
       this.autoScrollLocked = false
-      this.messages.push(userMessage(text))
+      const scopeAttachment = this.composerScopeAttachment
+        ? { ...this.composerScopeAttachment }
+        : null
+      const sendContext = this.buildSendContext(scopeAttachment)
+      this.messages.push(userMessage(text, scopeAttachment))
       const streamIdx = this.messages.length
       this.messages.push(createStreamingAssistantMessage())
       this.streamingMsgIndex = streamIdx
@@ -541,7 +579,7 @@ export default {
         : '思考中'
       this.scrollToBottom()
       try {
-        const res = await postAgentMessage(this.sessionId, text, this.context, {
+        const res = await postAgentMessage(this.sessionId, text, sendContext, {
           onApproval: (approval) => this.waitForApproval(approval),
           onProgress: (job) => this.applyStreamingProgress(job),
           shouldAbort: () => this.jobAbort.isAborted(),
@@ -597,6 +635,91 @@ export default {
         this.loading = false
         this.loadingText = '思考中'
       }
+    },
+    buildSendContext(scopeAttachment) {
+      const base = { ...(this.context || {}) }
+      if (scopeAttachment && hasScopeContent(scopeAttachment)) {
+        base.selected_student_ids = [...(scopeAttachment.selected_student_ids || [])]
+        base.classes = [...(scopeAttachment.classes || [])]
+        base.majors = [...(scopeAttachment.majors || [])]
+        if (Array.isArray(scopeAttachment.week_range) && scopeAttachment.week_range.length >= 2) {
+          base.week_range = [...scopeAttachment.week_range]
+        } else {
+          base.week_range = undefined
+        }
+        base.ui_scope = { ...scopeAttachment }
+      } else {
+        base.selected_student_ids = []
+        base.classes = []
+        base.majors = []
+        base.week_range = undefined
+        base.ui_scope = null
+      }
+      return base
+    },
+    ensureScopeAttachmentDraft() {
+      if (this.scopeAttachmentDraft) return
+      const fromCtx = buildScopeAttachmentFromContext(this.context)
+      this.scopeAttachmentDraft = cloneScopeAttachment(fromCtx) || {
+        selected_student_ids: [],
+        classes: [],
+        majors: [],
+      }
+    },
+    pruneScopeAttachmentDraft() {
+      if (!this.scopeAttachmentDraft) return
+      if (!hasScopeContent(this.scopeAttachmentDraft)) {
+        this.scopeAttachmentDraft = null
+        this.scopeAttachmentDismissed = true
+      }
+    },
+    dismissComposerScopeAttachment() {
+      this.scopeAttachmentDismissed = true
+      this.scopeAttachmentDraft = {
+        selected_student_ids: [],
+        classes: [],
+        majors: [],
+      }
+    },
+    removeComposerScopeStudent(studentId) {
+      const sid = String(studentId || '').trim()
+      if (!sid) return
+      this.ensureScopeAttachmentDraft()
+      const ids = this.scopeAttachmentDraft.selected_student_ids || []
+      this.scopeAttachmentDraft = {
+        ...this.scopeAttachmentDraft,
+        selected_student_ids: ids.filter((id) => id !== sid),
+      }
+      this.pruneScopeAttachmentDraft()
+    },
+    removeComposerScopeClass(className) {
+      const name = String(className || '').trim()
+      if (!name) return
+      this.ensureScopeAttachmentDraft()
+      const classes = this.scopeAttachmentDraft.classes || []
+      this.scopeAttachmentDraft = {
+        ...this.scopeAttachmentDraft,
+        classes: classes.filter((c) => c !== name),
+      }
+      this.pruneScopeAttachmentDraft()
+    },
+    removeComposerScopeMajor(major) {
+      const name = String(major || '').trim()
+      if (!name) return
+      this.ensureScopeAttachmentDraft()
+      const majors = this.scopeAttachmentDraft.majors || []
+      this.scopeAttachmentDraft = {
+        ...this.scopeAttachmentDraft,
+        majors: majors.filter((m) => m !== name),
+      }
+      this.pruneScopeAttachmentDraft()
+    },
+    removeComposerScopeWeek() {
+      this.ensureScopeAttachmentDraft()
+      const next = { ...this.scopeAttachmentDraft }
+      delete next.week_range
+      this.scopeAttachmentDraft = next
+      this.pruneScopeAttachmentDraft()
     },
   },
 }

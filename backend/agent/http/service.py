@@ -63,6 +63,7 @@ class AgentJob:
     error: str | None = None
     progress: dict[str, Any] = field(default_factory=empty_job_progress)
     derive_context: dict[str, Any] | None = None
+    ui_scope: dict[str, Any] | None = None
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
 
@@ -235,8 +236,13 @@ class AgentHttpService:
         if not text:
             raise ValueError("message content is required")
         session = self._ensure_active(session_id)
-        if context:
-            self.session_manager.apply_http_context(context)
+        ctx = dict(context or {})
+        from session.ui_scope import build_ui_scope_payload
+
+        ui_scope = build_ui_scope_payload(ctx)
+        ctx.pop("ui_scope", None)
+        if ctx:
+            self.session_manager.apply_http_context(ctx)
 
         slash = parse_slash_command(text)
         if slash is not None:
@@ -246,12 +252,13 @@ class AgentHttpService:
             id=uuid4().hex,
             session_id=session.id,
             progress=seed_job_progress_from_session(session),
+            ui_scope=ui_scope,
         )
         derive_ctx: dict[str, Any] | None = None
-        if context and context.get("derive_from_run_id"):
+        if ctx.get("derive_from_run_id"):
             derive_ctx = {
-                "parent_run_id": str(context["derive_from_run_id"]),
-                "patch": dict(context.get("patch") or {}),
+                "parent_run_id": str(ctx["derive_from_run_id"]),
+                "patch": dict(ctx.get("patch") or {}),
                 "source": "explicit",
             }
             job.derive_context = derive_ctx
@@ -543,6 +550,15 @@ class AgentHttpService:
         should_cancel = self._job_cancel_checker(job_id)
 
         try:
+            from session.display import (
+                append_ui_turn,
+                ensure_ui_messages_seeded,
+                extract_latest_turn_messages,
+            )
+
+            # Preserve teacher-visible history before this turn may macro-compact.
+            ensure_ui_messages_seeded(self.session_manager.active)
+
             self.session_manager.maybe_set_title_from_message(content)
             perms = self._make_permission(self.session_manager.active.permission_mode)
             loop_state = self.session_manager.to_loop_state(perms)
@@ -599,6 +615,13 @@ class AgentHttpService:
             )
             loop_state.messages.append({"role": "user", "content": user_content})
 
+            ui_scope = None
+            if job_id:
+                with self._jobs_lock:
+                    job = self._jobs.get(job_id)
+                    if job is not None:
+                        ui_scope = job.ui_scope
+
             with user_turn_trace(
                 session_id=session_id,
                 job_id=job_id,
@@ -622,6 +645,15 @@ class AgentHttpService:
                 loaded_skills = set(loop_state.loaded_skills)
                 loaded_references = set(loop_state.loaded_references)
                 self.session_manager.sync_loop_state(loop_state)
+                append_ui_turn(
+                    self.session_manager.active,
+                    display_user_text=content,
+                    turn_messages=extract_latest_turn_messages(
+                        list(loop_state.messages),
+                        content,
+                    ),
+                    ui_scope=ui_scope,
+                )
                 self.session_manager.persist_active()
                 return continue_reason, loaded_skills, loaded_references
         except TurnCancelled:
@@ -644,14 +676,17 @@ class AgentHttpService:
         return self.session_manager.store.load(session_id)
 
     def _session_payload(self, session: ChatSession) -> dict[str, Any]:
+        from session.display import messages_for_ui
+
+        ui_msgs = messages_for_ui(session)
         return {
             "id": session.id,
             "title": session.title,
             "permission_mode": session.permission_mode,
             "created_at": session.created_at,
             "updated_at": session.updated_at,
-            "message_count": len(session.messages),
-            "messages": serialize_messages(session.messages),
+            "message_count": len(ui_msgs),
+            "messages": serialize_messages(ui_msgs),
             "todo_items": list(session.todo_items or []),
             "loaded_skills": list(session.loaded_skills or []),
             "loaded_references": list(session.loaded_references or []),

@@ -7,50 +7,19 @@
       {{ msg.statusHint }}
     </div>
 
-    <!-- ① 计划段（首轮思路，固定不覆盖） -->
-    <div v-if="showPlan(msg)" class="agent-plan-block">
-      <div class="agent-section-label">{{ ui.sectionPlan }}</div>
-      <AgentStreamingMarkdown
-        v-if="msg.streaming && msg.thinking && !hasThinkingUpdates(msg)"
-        :source="msg.thinking"
-        :active="true"
-        class="agent-thinking-md"
-      />
-      <AgentMarkdown
-        v-else-if="msg.thinking"
-        :source="msg.thinking"
-        class="agent-thinking-md"
-      />
-    </div>
-
-    <!-- ①b 后续思路（每轮独立一块，可见且不覆盖计划） -->
-    <div
-      v-for="(update, idx) in thinkingUpdates(msg)"
-      :key="'plan-update-' + idx"
-      class="agent-plan-block agent-plan-block--update agent-reveal"
-    >
-      <div class="agent-section-label">{{ ui.sectionPlanUpdate(idx + 1) }}</div>
-      <AgentStreamingMarkdown
-        v-if="msg.streaming && isLastThinkingUpdate(msg, idx)"
-        :source="update"
-        :active="true"
-        class="agent-thinking-md"
-      />
-      <AgentMarkdown
-        v-else
-        :source="update"
-        class="agent-thinking-md"
-      />
-    </div>
-
-    <!-- ② 过程段（timeline 穿插） -->
-    <AgentProcessTimeline
-      v-if="showProcess(msg)"
-      :items="processItems(msg)"
-      :running-tool="msg.streaming ? runningTool : null"
+    <!-- ① 步骤组：思路 / 步骤 N + 对应工具（真计划见侧栏 todo） -->
+    <AgentStepGroup
+      v-for="(group, idx) in visibleStepGroups(msg)"
+      :key="group.id"
+      :group="group"
       :streaming="!!msg.streaming"
-      :default-expanded="processDefaultExpanded(msg)"
+      :stream-narration="streamNarrationForGroup(msg, group, idx)"
+      :running-tool="stepGroupRunningTool(msg, idx)"
+      :default-expanded="stepGroupExpanded(msg, group, idx)"
       :run-actions-enabled="!loading || !!msg.streaming"
+      :primary-modify-run-id="primaryModifyRunId(msg)"
+      :show-modify-button="showModifyForGroup(msg, group, idx)"
+      class="agent-reveal"
       @cancel-run="$emit('cancel-run', $event)"
       @derive-run="$emit('derive-run', $event)"
     />
@@ -173,12 +142,16 @@
 <script>
 import AgentMarkdown from '@/components/agent/AgentMarkdown.vue'
 import AgentStreamingMarkdown from '@/components/agent/AgentStreamingMarkdown.vue'
-import AgentProcessTimeline from '@/components/agent/AgentProcessTimeline.vue'
+import AgentStepGroup from '@/components/agent/AgentStepGroup.vue'
 import AgentDeliverableLinks from '@/components/agent/AgentDeliverableLinks.vue'
 import AgentReportEvidence from '@/components/agent/AgentReportEvidence.vue'
 import AgentMemorySaved from '@/components/agent/AgentMemorySaved.vue'
 import { AGENT_UI } from '@/constants/agentUiText.js'
-import { processTimelineItems, processTimelineStats } from '@/utils/agentTimeline.js'
+import {
+  buildStepGroupsFromMessage,
+  pickPrimaryModifyRun,
+  stepGroupDefaultExpanded,
+} from '@/utils/agentTimeline.js'
 import { stripVisualLinkMarkdown, findVisualLinkFromMarkdownClick } from '@/utils/visualLinks.js'
 import { stripReportLinkMarkdown, findReportLinkFromMarkdownClick } from '@/utils/reportLinks.js'
 
@@ -187,7 +160,7 @@ export default {
   components: {
     AgentMarkdown,
     AgentStreamingMarkdown,
-    AgentProcessTimeline,
+    AgentStepGroup,
     AgentDeliverableLinks,
     AgentReportEvidence,
     AgentMemorySaved,
@@ -207,16 +180,87 @@ export default {
     return { ui: AGENT_UI }
   },
   methods: {
-    processItems(msg) {
-      return processTimelineItems(msg)
+    stepGroups(msg) {
+      return buildStepGroupsFromMessage(msg)
+    },
+    visibleStepGroups(msg) {
+      let groups = this.stepGroups(msg)
+      if (
+        !groups.length &&
+        msg.streaming &&
+        ((msg.thinking && msg.thinking.trim()) || this.runningTool)
+      ) {
+        groups = [{
+          id: 'plan',
+          phase: 'plan',
+          text: String(msg.thinking || '').trim(),
+          tools: [],
+        }]
+      }
+      if (msg.streaming) return groups
+      if (this.revealPhase(msg) >= 1) return groups
+      return []
+    },
+    stepGroupExpanded(msg, group, idx) {
+      return stepGroupDefaultExpanded(group, idx, this.stepGroups(msg), msg)
+    },
+    streamNarrationForGroup(msg, group, idx) {
+      if (!msg.streaming) return false
+      const groups = this.visibleStepGroups(msg)
+      if (group.phase === 'plan') {
+        return !this.hasThinkingUpdates(msg)
+      }
+      if (group.phase === 'plan_update') {
+        return idx === groups.length - 1
+      }
+      return false
+    },
+    stepGroupRunningTool(msg, idx) {
+      if (!msg.streaming || !this.runningTool) return null
+      const groups = this.visibleStepGroups(msg)
+      if (idx !== groups.length - 1) return null
+      return this.runningTool
+    },
+    allToolSteps(msg) {
+      const steps = []
+      for (const group of this.stepGroups(msg)) {
+        for (const item of group.tools || []) {
+          if (item.kind === 'tool' && item.step) steps.push(item.step)
+        }
+      }
+      if (msg.streaming && this.runningTool) {
+        steps.push({ tool: this.runningTool.tool, run_id: this.runningTool.run_id, status: 'running' })
+      }
+      return steps
+    },
+    primaryModifyRunId(msg) {
+      return pickPrimaryModifyRun(this.allToolSteps(msg))?.run_id || ''
+    },
+    showModifyForGroup(msg, group, idx) {
+      const primary = pickPrimaryModifyRun(this.allToolSteps(msg))
+      if (!primary) return false
+      const groupSteps = (group.tools || [])
+        .filter((item) => item.kind === 'tool' && item.step)
+        .map((item) => item.step)
+      const inGroup = groupSteps.some((s) => s.run_id && s.run_id === primary.run_id)
+      if (!inGroup) return false
+      const groups = this.stepGroups(msg)
+      for (let i = groups.length - 1; i >= 0; i -= 1) {
+        const gSteps = (groups[i].tools || [])
+          .filter((item) => item.kind === 'tool' && item.step)
+          .map((item) => item.step)
+        if (gSteps.some((s) => s.run_id && s.run_id === primary.run_id)) {
+          return i === idx
+        }
+      }
+      return false
     },
     hasAnyContent(msg) {
       return (
-        (msg.thinking && msg.thinking.trim()) ||
-        this.thinkingUpdates(msg).length > 0 ||
+        this.stepGroups(msg).some((g) => g.text.trim() || (g.tools && g.tools.length)) ||
         (msg.answer && msg.answer.trim()) ||
         (msg.closing && msg.closing.trim()) ||
-        this.processItems(msg).length > 0
+        (msg.streaming && this.runningTool)
       )
     },
     thinkingUpdates(msg) {
@@ -235,21 +279,6 @@ export default {
     isLastThinkingUpdate(msg, idx) {
       const list = this.thinkingUpdates(msg)
       return idx === list.length - 1
-    },
-    showPlan(msg) {
-      const text = (msg.thinking || '').trim()
-      if (!text) return false
-      if (msg.streaming) return true
-      return this.revealPhase(msg) >= 1
-    },
-    showProcess(msg) {
-      if (this.processItems(msg).length) return true
-      if (msg.streaming && this.runningTool) return true
-      return false
-    },
-    processDefaultExpanded(msg) {
-      const { failed } = processTimelineStats(this.processItems(msg))
-      return failed > 0 || !!msg.streaming
     },
     showConclusion(msg) {
       const has = (msg.answer && msg.answer.trim()) || (msg.closing && msg.closing.trim())

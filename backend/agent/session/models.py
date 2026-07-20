@@ -51,6 +51,8 @@ class ChatSession:
     updated_at: float
     session_context: list[str] = field(default_factory=list)
     messages: list[dict[str, Any]] = field(default_factory=list)
+    # Teacher-visible transcript (append-only). Never replaced by macro compaction.
+    ui_messages: list[dict[str, Any]] = field(default_factory=list)
     compact: CompactState = field(default_factory=CompactState)
     todo_items: list[dict[str, str]] = field(default_factory=list)
     todo_round_since_update: int = 0
