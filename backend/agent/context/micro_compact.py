@@ -1,4 +1,9 @@
+"""Replace older tool result bodies with a short placeholder (cache-aware)."""
+
+from __future__ import annotations
+
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from common.logger import get_logger, log_event
@@ -53,8 +58,16 @@ def micro_compact_messages(
     messages: list[dict[str, Any]],
     *,
     config: ContextCompactConfig = DEFAULT_CONFIG,
+    protect_prefix_count: int | None = None,
+    on_cache_bust: Callable[[str], None] | None = None,
 ) -> int:
-    """Replace older tool result bodies with a short placeholder. Returns count compacted."""
+    """Replace older tool result bodies with a short placeholder.
+
+    When ``protect_prefix_count`` is set, prefer compacting only messages at
+    index >= that count (tail not yet in the prior LLM request prefix). If
+    protected messages must still be compacted to free space, emit
+    ``cache_bust_reason=micro_compact``.
+    """
     if not config.enabled:
         return 0
 
@@ -65,7 +78,12 @@ def micro_compact_messages(
     to_compact = tool_indices[: -config.keep_recent_tool_results]
     tool_names = _tool_names_by_call_id(messages)
     compacted = 0
+    skipped_protected = 0
     for index in to_compact:
+        if protect_prefix_count is not None and index < protect_prefix_count:
+            # Leave cached prefix untouched; macro-compact frees space if needed.
+            skipped_protected += 1
+            continue
         msg = messages[index]
         if _should_skip_micro_compact(msg, tool_names):
             continue
@@ -79,6 +97,15 @@ def micro_compact_messages(
         msg["content"] = compact_tool_content(content)
         compacted += 1
 
+    if skipped_protected and protect_prefix_count is not None:
+        log_event(
+            _log,
+            logging.DEBUG,
+            "micro_compact_skip_protected",
+            skipped=skipped_protected,
+            protect_prefix_count=protect_prefix_count,
+        )
+
     if compacted:
         log_event(
             _log,
@@ -86,5 +113,7 @@ def micro_compact_messages(
             "micro_compact",
             compacted=compacted,
             kept_recent=config.keep_recent_tool_results,
+            protect_prefix_count=protect_prefix_count,
+            skipped_protected=skipped_protected,
         )
     return compacted

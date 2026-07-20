@@ -619,15 +619,31 @@ class AgentHttpService:
                     job = self._jobs.get(job_id)
                     if job is not None:
                         ui_scope = job.ui_scope
-            from session.ui_scope import compose_llm_user_content, format_turn_scope_hint
+            from hints.report_continue import latest_report_path
+            from session.turn_hints import (
+                build_turn_agent_hint,
+                optional_session_catalog_for_turn,
+            )
+            from session.ui_scope import compose_llm_user_content
             from skills.message_meta import drop_previous_ui_scope_hints
+            from tools.handlers.todo_write import export_todo_snapshot
 
             # Drop legacy standalone scope-hint messages (older builds). Do not
             # rewrite earlier merged user turns — that would bust prefix cache.
             loop_state.messages = drop_previous_ui_scope_hints(list(loop_state.messages))
-            hint = format_turn_scope_hint(
+            todo_items, _ = export_todo_snapshot()
+            catalog = optional_session_catalog_for_turn(
+                loop_state.session_id,
+                messages_before_turn=loop_state.messages,
+            )
+            hint = build_turn_agent_hint(
                 ui_scope=ui_scope,
                 filter_context=loop_state.filter_context,
+                modify_context=loop_state.modify_context,
+                todo_items=todo_items,
+                report_continue_path=latest_report_path(loop_state.messages),
+                datasets_catalog_text=catalog,
+                teacher_message=content,
             )
             loop_state.messages.append(
                 {

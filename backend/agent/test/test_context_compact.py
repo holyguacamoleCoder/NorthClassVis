@@ -66,6 +66,31 @@ def test_micro_compact_keeps_recent_tool_messages(compact_config):
     assert "Earlier tool result compacted" in messages[0]["content"]
 
 
+def test_micro_compact_skips_protected_prefix(compact_config):
+    messages = [
+        {"role": "tool", "tool_call_id": f"id-{i}", "content": "o" * 200}
+        for i in range(5)
+    ]
+    originals = [m["content"] for m in messages]
+    # Protect first 3 indices; only index 3 is compactable among non-recent
+    # (keep_recent=2 → candidates 0,1,2; all protected → 0 compacted).
+    n = micro_compact_messages(
+        messages, config=compact_config, protect_prefix_count=3
+    )
+    assert n == 0
+    assert [m["content"] for m in messages] == originals
+
+    # Protect only index 0; candidates 0,1,2 → compact 1 and 2.
+    n2 = micro_compact_messages(
+        messages, config=compact_config, protect_prefix_count=1
+    )
+    assert n2 == 2
+    assert messages[0]["content"] == originals[0]
+    assert "Earlier tool result compacted" in messages[1]["content"]
+    assert "Earlier tool result compacted" in messages[2]["content"]
+    assert messages[-1]["content"] == originals[-1]
+
+
 def test_track_recent_file_max_five():
     state = CompactState()
     for i in range(7):

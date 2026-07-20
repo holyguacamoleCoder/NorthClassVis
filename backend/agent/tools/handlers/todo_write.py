@@ -139,7 +139,12 @@ def run_todo_write(items: list | None = None) -> str:
         )
     try:
         body = todo_manager.update(items)
-        return f"{_plan_progress_header()}\n{body}"
+        from common.prompts import format_session_plan_section
+
+        items_snap, _ = export_todo_snapshot()
+        plan = format_session_plan_section(items_snap)
+        snap = f"\n\n---\n[session_snapshot]\n{plan}" if plan else ""
+        return f"{_plan_progress_header()}\n{body}{snap}"
     except ValueError as exc:
         return (
             f"Error: {exc} | Next: fix items—max {MAX_ITEMS}, one in_progress, "

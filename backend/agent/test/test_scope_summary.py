@@ -155,5 +155,6 @@ def test_format_datasets_catalog_section_and_prompt(tmp_path, monkeypatch):
     prompt = SystemPromptBuilder().build(
         SystemPromptContext(permission_mode="analyze", session_id="sess1"),
     )
-    assert SECTION_DATASETS_CATALOG in prompt
-    assert "ds_aaa111bbb222" in prompt
+    # Datasets stay out of system (prefix cache); catalog is turn/tool snapshot.
+    assert SECTION_DATASETS_CATALOG not in prompt
+    assert "ds_aaa111bbb222" not in prompt

@@ -1,7 +1,6 @@
-"""System prompt pinning for loaded skills and session todo plan."""
+"""Loaded-skill / todo pinning: bodies stay in tool results; names/plans are turn hints."""
 
 import sys
-import tempfile
 from pathlib import Path
 
 AGENT_ROOT = Path(__file__).resolve().parents[1]
@@ -14,13 +13,15 @@ from common.system_prompt import SystemPromptBuilder, SystemPromptContext
 from context.config import ContextCompactConfig
 from context.macro_compact import build_compacted_messages, extract_pinned_messages
 from context.micro_compact import micro_compact_messages
+from session.turn_hints import build_turn_agent_hint
 from skills import SkillRegistry
 from skills.message_meta import attach_pin_meta
 from skills.tool_result import CONTENT_KIND_SKILL
 from tools.handlers.todo_write import reset_todo_state, run_todo_write
 
 
-def test_system_prompt_lists_loaded_skill_name_not_body(tmp_path):
+def test_system_prompt_omits_loaded_skill_names(tmp_path):
+    """Loaded names are turn/tool snapshots, not system (prefix cache)."""
     skill_dir = tmp_path / "skills"
     skill_dir.mkdir(parents=True)
     (skill_dir / "plan-a").mkdir()
@@ -37,31 +38,35 @@ def test_system_prompt_lists_loaded_skill_name_not_body(tmp_path):
             include_memory_guidance=False,
         )
     )
-    assert SECTION_LOADED_NAMES in prompt
-    assert "plan-a" in prompt
+    assert SECTION_LOADED_NAMES not in prompt
     assert "Do scope first." not in prompt
+    # Catalog still lists available skills.
+    assert "plan-a" in prompt
 
 
-def test_system_prompt_includes_todo_plan():
+def test_todo_plan_lives_in_turn_hint_not_system():
     reset_todo_state()
+    items = [
+        {
+            "content": "query Class1 majors",
+            "status": "in_progress",
+            "acceptance": "count_distinct by major",
+        },
+        {"content": "write report", "status": "pending"},
+    ]
     prompt = SystemPromptBuilder().build(
         SystemPromptContext(
             permission_mode="analyze",
-            todo_items=[
-                {
-                    "content": "query Class1 majors",
-                    "status": "in_progress",
-                    "acceptance": "count_distinct by major",
-                },
-                {"content": "write report", "status": "pending"},
-            ],
+            todo_items=items,
             include_memory_guidance=False,
         )
     )
-    assert SECTION_SESSION_PLAN in prompt
-    assert "query Class1 majors" in prompt
-    assert "count_distinct by major" in prompt
-    assert "Completed: 0/2" in prompt
+    assert SECTION_SESSION_PLAN not in prompt
+    hint = build_turn_agent_hint(todo_items=items)
+    assert hint and SECTION_SESSION_PLAN in hint
+    assert "query Class1 majors" in hint
+    assert "count_distinct by major" in hint
+    assert "Completed: 0/2" in hint
 
 
 def test_micro_compact_skips_pinned_load_skill_messages():

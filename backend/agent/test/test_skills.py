@@ -138,7 +138,8 @@ def test_load_reference_tool_marks_loaded(tmp_path):
             os.environ["AGENT_SKILLS_DIR"] = old_env
 
 
-def test_produce_system_prompt_lists_report_writing_name():
+def test_produce_system_prompt_lists_report_writing_in_catalog():
+    """Produce mode mentions report-writing via skills catalog / base prompt, not loaded-names section."""
     registry = SkillRegistry(skills_dir=REPO_ROOT / "skills")
     if not registry.documents.get("report-writing"):
         return
@@ -152,9 +153,7 @@ def test_produce_system_prompt_lists_report_writing_name():
     assert "report-writing" in prompt
     from common.prompts import SECTION_LOADED_NAMES
 
-    assert SECTION_LOADED_NAMES in prompt
-    # Full SKILL body is in tool result, not system prompt
-    assert "report-chart" not in prompt or "skills: report-writing" in prompt
+    assert SECTION_LOADED_NAMES not in prompt
 
 
 def test_list_skills_payload_excludes_aliases():
@@ -211,6 +210,6 @@ if __name__ == "__main__":
         test_load_skill_tool_with_registry(Path(tmp))
     test_load_skill_in_mode_allowlists()
     test_filter_tools_includes_load_skill_in_analyze()
-    test_produce_system_prompt_pins_report_writing()
+    test_produce_system_prompt_lists_report_writing_in_catalog()
     test_builtin_skills_present()
     print("test_skills: ok")

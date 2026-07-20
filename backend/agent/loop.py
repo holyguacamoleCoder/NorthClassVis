@@ -69,7 +69,6 @@ from hints.data_chain_guard import (
 from hints.turn_stop_summary import build_turn_stop_summary
 from hints.report_validate_guard import collect_report_tool_signatures
 from hints.report_continue import (
-    inject_report_continue_reminder,
     messages_since_last_user,
     latest_report_path,
     report_false_completion_guard_text,
@@ -128,6 +127,7 @@ class AgentLoop:
         self.permission = permission or loop_state.permission or PermissionManager()
         self.hooks = hooks if hooks is not None else loop_state.hooks
         self._prompt_builder = SystemPromptBuilder()
+        self._cache_protect_prefix_count: int | None = None
         self._recovery = RecoveryHandler(
             self._active_main_client(),
             config=recovery_config,
@@ -193,10 +193,14 @@ class AgentLoop:
         )
 
     def _apply_pre_turn_compaction(self) -> None:
-        # 每轮自动压缩context
+        # 每轮自动压缩context（优先只压未进入上一 LLM 请求前缀的尾部）
         if not self.compact_config.enabled:
             return
-        micro_compact_messages(self.loop_state.messages, config=self.compact_config)
+        micro_compact_messages(
+            self.loop_state.messages,
+            config=self.compact_config,
+            protect_prefix_count=self._cache_protect_prefix_count,
+        )
         if estimate_context_size(self.loop_state.messages) <= self.compact_config.context_limit:
             return
         self.loop_state.messages = compact_history(
@@ -206,6 +210,8 @@ class AgentLoop:
             config=self.compact_config,
             reason="auto",
         )
+        # Macro rewrite resets the conversation prefix; drop protect fence.
+        self._cache_protect_prefix_count = None
 
     def _apply_manual_compaction(self, focus: str | None) -> dict[str, Any]:
         if not self.compact_config.enabled:
@@ -352,10 +358,8 @@ class AgentLoop:
                 filter_context=self.loop_state.filter_context,
                 loaded_skills=self.loop_state.loaded_skills,
             )
-        inject_report_continue_reminder(
-            self.loop_state.messages,
-            self.loop_state.analysis_context.current_user_message,
-        )
+        # Report-continue guidance is merged into the *new* user turn via
+        # session.turn_hints (HTTP/eval). Do not rewrite older user messages.
         self._apply_pre_turn_compaction()
 
         log_event(
@@ -375,6 +379,7 @@ class AgentLoop:
                     self._emit_progress({"type": "thinking_delta", "delta": delta})
 
         visible_tools = filter_tools(TOOLS, self.permission.mode)
+        messages_at_request = len(self.loop_state.messages)
         raw_response, failure_reason = self._recovery.request_completion(
             system_prompt=self._system_prompt(),
             messages=self.loop_state.messages,
@@ -384,6 +389,8 @@ class AgentLoop:
             compact_fn=self._apply_recovery_compaction,
             on_content_delta=on_content_delta,
         )
+        # Fence: next micro_compact must not rewrite messages already sent above.
+        self._cache_protect_prefix_count = messages_at_request
         self._check_cancelled()
         if not raw_response or not getattr(raw_response, "choices", None):
             self.loop_state.continue_reason = failure_reason or "llm_no_response"

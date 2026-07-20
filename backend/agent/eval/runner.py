@@ -75,8 +75,13 @@ from session.store import FileSessionStore  # noqa: E402
 from session.ui_scope import (  # noqa: E402
     augment_user_message_with_ui_scope,
     compose_llm_user_content,
-    format_turn_scope_hint,
 )
+from session.turn_hints import (  # noqa: E402
+    build_turn_agent_hint,
+    optional_session_catalog_for_turn,
+)
+from hints.report_continue import latest_report_path  # noqa: E402
+from tools.handlers.todo_write import export_todo_snapshot  # noqa: E402
 from skills import get_registry  # noqa: E402
 from skills.message_meta import drop_previous_ui_scope_hints  # noqa: E402
 
@@ -197,9 +202,19 @@ def _execute_turn(
 
     user_content = augment_user_message_with_ui_scope(content, loop_state.filter_context)
     loop_state.messages = drop_previous_ui_scope_hints(list(loop_state.messages))
-    hint = format_turn_scope_hint(
+    todo_items, _ = export_todo_snapshot()
+    catalog = optional_session_catalog_for_turn(
+        loop_state.session_id,
+        messages_before_turn=loop_state.messages,
+    )
+    hint = build_turn_agent_hint(
         ui_scope=ui_scope,
         filter_context=loop_state.filter_context,
+        modify_context=getattr(loop_state, "modify_context", None),
+        todo_items=todo_items,
+        report_continue_path=latest_report_path(loop_state.messages),
+        datasets_catalog_text=catalog,
+        teacher_message=content,
     )
     loop_state.messages.append(
         {
@@ -388,7 +403,7 @@ def _dry_run_tool_payload(
 def build_dry_run_messages(scenario: Scenario) -> list[dict[str, Any]]:
     """Synthetic transcript that satisfies declared expectations for --dry-run."""
     messages: list[dict[str, Any]] = []
-    hint = format_turn_scope_hint(
+    hint = build_turn_agent_hint(
         ui_scope=scenario.ui_scope,
         filter_context=_filter_context_from_dict(scenario.filter_context),
     )

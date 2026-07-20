@@ -67,7 +67,8 @@ def test_prompt_templates_are_complete():
     assert "produce" in format_permission_mode("produce")
     assert "report-chart" in build_base_agent_prompt("produce")
     assert "不可用" in build_base_agent_prompt("consult")
-    assert "report-chart" not in build_base_agent_prompt("consult")
+    # consult base still mentions build_visual_links / report-chart in the load_skill table
+    assert "build_visual_links" in build_base_agent_prompt("consult")
 
 
 def test_base_prompt_mode_slices_differ():

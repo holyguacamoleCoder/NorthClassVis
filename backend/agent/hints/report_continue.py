@@ -56,35 +56,32 @@ def turn_has_report_validate_ok(turn_messages: list[dict[str, Any]]) -> bool:
     return False
 
 
-def inject_report_continue_reminder(
-    messages: list[dict[str, Any]],
-    user_message: str | None,
-) -> bool:
-    """Prepend guidance when teacher asks to continue an in-progress report."""
+def should_attach_report_continue_hint(user_message: str | None) -> bool:
     text = (user_message or "").strip()
-    if not text or not _CONTINUE_USER_PAT.search(text):
-        return False
-    path = latest_report_path(messages)
-    if not path:
-        return False
-    reminder = (
+    return bool(text and _CONTINUE_USER_PAT.search(text))
+
+
+def format_report_continue_hint(path: str) -> str:
+    """Pure hint text for the *current* user turn (do not rewrite history)."""
+    return (
         "<reminder>教师要求继续完成报告。"
         f"目标文件：{path}。"
         "必须先 read_file 该路径；edit_file 的 old_text 首行用 ## <章节> 即可整节替换；"
         "若章节尚不存在也会自动追加。"
         "未出现 [Report validate: OK] 前禁止向教师口头宣称报告已完成。</reminder>"
     )
-    for idx in range(len(messages) - 1, -1, -1):
-        if messages[idx].get("role") != "user":
-            continue
-        body = str(messages[idx].get("content") or "")
-        if reminder in body:
-            return False
-        messages[idx] = {
-            **messages[idx],
-            "content": f"{body.rstrip()}\n\n{reminder}",
-        }
-        return True
+
+
+def inject_report_continue_reminder(
+    messages: list[dict[str, Any]],
+    user_message: str | None,
+) -> bool:
+    """Deprecated: rewriting history busts prefix cache.
+
+    Prefer ``format_report_continue_hint`` + ``build_turn_agent_hint`` on the
+    new user turn only. This no-op remains for old call sites/tests.
+    """
+    _ = messages, user_message
     return False
 
 
