@@ -41,6 +41,34 @@ export function skillNameFromStep(step) {
   return String(params.name || params.skill_name || params.skill || '').trim()
 }
 
+/** Format tool raw_content for UI preview (pretty JSON when possible, truncated). */
+export function formatToolResultPreview(content, maxLen = 4000) {
+  const text = String(content || '').trim()
+  if (!text) return ''
+  let pretty = text
+  try {
+    const parsed = JSON.parse(text)
+    pretty = JSON.stringify(parsed, null, 2)
+  } catch (e) {
+    /* keep raw text */
+  }
+  if (pretty.length > maxLen) {
+    return `${pretty.slice(0, maxLen)}\n…（已截断，共 ${pretty.length} 字符）`
+  }
+  return pretty
+}
+
+/** Short result body for expanded tool bubble (prefer summary; avoid duplicating error). */
+export function toolResultSummaryText(step) {
+  if (!step) return ''
+  if (['fail', 'denied', 'blocked'].includes(step.status)) return ''
+  const summary = String(step.summary || '').trim()
+  if (summary) return summary
+  const raw = String(step.raw_content || '').trim()
+  if (!raw) return ''
+  return summarizeToolContent(step.tool, raw)
+}
+
 export function summarizeToolContent(name, content) {
   const text = String(content || '').trim()
   const tool = name || 'tool'

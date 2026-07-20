@@ -118,8 +118,14 @@ class RecoveryHandler:
                 finish_reason=finish_reason,
             )
             _append_assistant_from_response(messages, response)
+            from skills.message_meta import attach_ui_hidden_meta
+            from skills.tool_result import CONTENT_KIND_OUTPUT_CONTINUATION
+
             messages.append(
-                {"role": "user", "content": self.config.continuation_message}
+                attach_ui_hidden_meta(
+                    {"role": "user", "content": self.config.continuation_message},
+                    content_kind=CONTENT_KIND_OUTPUT_CONTINUATION,
+                )
             )
 
     def _call_with_transport_recovery(

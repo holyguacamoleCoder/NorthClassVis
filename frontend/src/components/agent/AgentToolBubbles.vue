@@ -23,6 +23,7 @@
     >
       <button type="button" class="agent-tool-bubble-header" @click="toggle(i)">
         <span class="agent-tool-bubble-icon">{{ toolIcon(step) }}</span>
+        <span v-if="affiliationLabel" class="agent-tool-bubble-affiliation">{{ affiliationLabel }}</span>
         <span class="agent-tool-bubble-name">{{ step.tool }}</span>
         <span v-if="step.resource" class="agent-tool-bubble-resource">{{ step.resource }}</span>
         <span v-if="lineageLabel(step)" class="agent-tool-run-lineage">{{ lineageLabel(step) }}</span>
@@ -41,10 +42,21 @@
             @click.stop="$emit('derive-run', step)"
           >{{ modifyLabel(step) }}</button>
         </span>
+        <span v-if="showAttach(step)" class="agent-tool-run-inline">
+          <button
+            type="button"
+            class="agent-tool-run-link agent-tool-run-link--attach"
+            @click.stop="$emit('attach-run', step)"
+          >{{ ui.runAttachQuery }}</button>
+        </span>
         <span class="agent-tool-bubble-status">{{ statusLabel(step.status) }}</span>
         <span class="agent-tool-bubble-chevron">{{ expanded[i] ? chevronDown : chevronRight }}</span>
       </button>
       <div v-show="expanded[i]" class="agent-tool-bubble-body">
+        <div v-if="resultText(step)" class="agent-tool-bubble-row">
+          <span class="agent-tool-bubble-label">{{ ui.toolResult }}</span>
+          <div class="agent-tool-bubble-result">{{ resultText(step) }}</div>
+        </div>
         <div v-if="step.params && Object.keys(step.params).length" class="agent-tool-bubble-row">
           <span class="agent-tool-bubble-label">{{ ui.toolParams }}</span>
           <pre class="agent-tool-bubble-pre">{{ formatParams(step.params) }}</pre>
@@ -52,6 +64,14 @@
         <div v-if="step.error" class="agent-tool-bubble-row agent-tool-bubble-row--error">
           <span class="agent-tool-bubble-label">{{ ui.toolError }}</span>
           <pre class="agent-tool-bubble-pre agent-tool-bubble-pre--error">{{ step.error }}</pre>
+        </div>
+        <div v-if="hasRawResult(step)" class="agent-tool-bubble-row agent-tool-bubble-row--raw">
+          <button
+            type="button"
+            class="agent-tool-raw-toggle"
+            @click.stop="toggleRaw(i)"
+          >{{ rawExpanded[i] ? ui.toolRawResultHide : ui.toolRawResultShow }}</button>
+          <pre v-show="rawExpanded[i]" class="agent-tool-bubble-pre agent-tool-bubble-pre--raw">{{ rawPreview(step) }}</pre>
         </div>
       </div>
     </div>
@@ -62,6 +82,10 @@
 <script>
 import { AGENT_UI } from '@/constants/agentUiText.js'
 import { isModifiableRunStep } from '@/utils/agentTimeline.js'
+import {
+  formatToolResultPreview,
+  toolResultSummaryText,
+} from '@/utils/agentPlanUtils.js'
 import AgentTodoStepCard from '@/components/agent/AgentTodoStepCard.vue'
 import AgentSkillStepChip from '@/components/agent/AgentSkillStepChip.vue'
 
@@ -74,12 +98,14 @@ export default {
     runActionsEnabled: { type: Boolean, default: true },
     primaryModifyRunId: { type: String, default: '' },
     headerModifyOnly: { type: Boolean, default: false },
+    affiliationLabel: { type: String, default: '' },
   },
-  emits: ['cancel-run', 'derive-run'],
+  emits: ['cancel-run', 'derive-run', 'attach-run'],
   data() {
     return {
       ui: AGENT_UI,
       expanded: {},
+      rawExpanded: {},
       chevronDown: '\u25BC',
       chevronRight: '\u25B6',
     }
@@ -89,6 +115,7 @@ export default {
       immediate: true,
       handler(steps) {
         const next = { ...this.expanded }
+        const rawNext = { ...this.rawExpanded }
         ;(steps || []).forEach((step, i) => {
           const failed = ['fail', 'denied', 'blocked'].includes(step?.status)
           if (!(i in next)) {
@@ -96,11 +123,16 @@ export default {
           } else if (failed) {
             next[i] = true
           }
+          if (!(i in rawNext)) rawNext[i] = false
         })
         Object.keys(next).forEach((k) => {
           if (Number(k) >= (steps || []).length) delete next[k]
         })
+        Object.keys(rawNext).forEach((k) => {
+          if (Number(k) >= (steps || []).length) delete rawNext[k]
+        })
         this.expanded = next
+        this.rawExpanded = rawNext
       },
     },
   },
@@ -132,6 +164,26 @@ export default {
     toggle(i) {
       this.expanded[i] = !this.expanded[i]
     },
+    toggleRaw(i) {
+      this.rawExpanded[i] = !this.rawExpanded[i]
+    },
+    resultText(step) {
+      return toolResultSummaryText(step)
+    },
+    hasRawResult(step) {
+      if (!step || step.status === 'running') return false
+      const raw = String(step.raw_content || '').trim()
+      if (!raw) return false
+      // Failed steps already show error; still allow raw if it adds more than error text
+      if (['fail', 'denied', 'blocked'].includes(step.status)) {
+        const err = String(step.error || '').trim()
+        return raw !== err && raw.length > (err.length || 0)
+      }
+      return true
+    },
+    rawPreview(step) {
+      return formatToolResultPreview(step?.raw_content || '')
+    },
     formatParams(params) {
       try {
         return JSON.stringify(params, null, 2)
@@ -161,6 +213,12 @@ export default {
       if (!isModifiableRunStep(step)) return false
       const primaryId = this.primaryModifyRunId
       if (primaryId) return step.run_id === primaryId
+      return true
+    },
+    showAttach(step) {
+      if (!this.runActionsEnabled || this.stepKind(step) !== 'data') return false
+      if (!step?.run_id) return false
+      if (['fail', 'denied', 'blocked', 'running', 'pending'].includes(step.status)) return false
       return true
     },
     modifyLabel(step) {
@@ -239,6 +297,19 @@ export default {
   background: #e8f4fc;
   color: #1a5a8a;
   flex-shrink: 0;
+}
+
+.agent-tool-bubble-affiliation {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(55, 126, 184, 0.12);
+  color: #377eb8;
+  flex-shrink: 0;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-tool-bubble--fail .agent-tool-bubble-resource {
@@ -354,6 +425,36 @@ export default {
   font-weight: 600;
   color: #666;
   margin-bottom: 4px;
+}
+
+.agent-tool-bubble-result {
+  padding: 8px 10px;
+  background: #f0f6fc;
+  border-radius: 4px;
+  color: #1a5a8a;
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.agent-tool-raw-toggle {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #377eb8;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  &:hover { opacity: 0.85; }
+}
+
+.agent-tool-bubble-pre--raw {
+  margin-top: 6px;
+  max-height: 240px;
+  overflow: auto;
+  background: #f8fafc;
+  color: #334155;
 }
 
 .agent-tool-bubble-pre {

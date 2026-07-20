@@ -812,18 +812,25 @@ def _friendly_tool_failure(step: dict[str, Any]) -> str:
 
 def serialize_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Lightweight message list for frontend rendering."""
-    from runs.apply import strip_run_modify_from_user_content
+    from session.display import clean_user_content_for_display
+    from skills.message_meta import is_ui_hidden_message
 
     call_names: dict[str, str] = {}
     serialized: list[dict[str, Any]] = []
     for msg in messages:
+        if is_ui_hidden_message(msg):
+            continue
         role = msg.get("role")
         if role == "user":
             raw = str(msg.get("content") or "")
-            serialized.append({
+            item: dict[str, Any] = {
                 "role": "user",
-                "content": strip_run_modify_from_user_content(raw),
-            })
+                "content": clean_user_content_for_display(raw),
+            }
+            scope = msg.get("ui_scope")
+            if isinstance(scope, dict) and scope:
+                item["ui_scope"] = scope
+            serialized.append(item)
             continue
         if role == "assistant":
             item: dict[str, Any] = {
@@ -872,6 +879,8 @@ def adapt_turn_response(
     run_registry: Any | None = None,
     job_id: str | None = None,
 ) -> dict[str, Any]:
+    from session.display import messages_for_ui
+
     legacy = adapt_legacy_query_response(
         session.messages,
         continue_reason=continue_reason,
@@ -891,7 +900,7 @@ def adapt_turn_response(
         "session_id": session.id,
         "session_title": session.title,
         "permission_mode": session.permission_mode,
-        "messages": serialize_messages(session.messages),
+        "messages": serialize_messages(messages_for_ui(session)),
         "todo_items": list(session.todo_items or []),
         "filter_context": session.filter_context,
         "loaded_skills": sorted(loaded_skills or []),

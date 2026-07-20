@@ -112,6 +112,24 @@ def test_build_compacted_messages_includes_focus_and_recent_files():
     assert "sum" in text
     assert "finish tests" in text
     assert "a.py" in text
+    assert msgs[0].get("_agent_meta", {}).get("ui_visible") is False
+    assert msgs[0]["_agent_meta"]["content_kind"] == "compact_summary"
+
+
+def test_compact_history_marks_summary_ui_hidden(compact_config):
+    llm = MagicMock()
+    llm.chat_text.return_value = "summary text"
+    state = CompactState()
+    messages = [{"role": "user", "content": "goal"}]
+    new_messages = compact_history(
+        messages,
+        llm,
+        state,
+        config=compact_config,
+        reason="auto",
+    )
+    assert new_messages[0]["_agent_meta"]["ui_visible"] is False
+    assert COMPACT_USER_MESSAGE_PREAMBLE in new_messages[0]["content"]
 
 
 def test_execute_tool_calls_persists_large_output(compact_config, monkeypatch):

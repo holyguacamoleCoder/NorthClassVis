@@ -10,7 +10,6 @@ from common.prompts import (
     MEMORY_GUIDANCE,
     build_base_agent_prompt,
     format_datasets_catalog_section,
-    format_filter_context_section,
     format_loaded_skill_names_section,
     format_permission_mode,
     format_session_deliverables_section,
@@ -67,8 +66,10 @@ class SystemPromptBuilder:
         if ctx.modify_context:
             parts.append(format_run_modify_section(ctx.modify_context))
 
-        if ctx.filter_context is not None:
-            parts.append(format_filter_context_section(ctx.filter_context.to_summary_dict()))
+        # filter_context is intentionally NOT in the system prompt: it changes every
+        # turn (hurts prefix cache) and would rewrite "current scope" over older
+        # history. Per-turn scope is injected as a ui-hidden user message instead;
+        # tools still bind session filter_context via LoopState / get_current_filter_context.
 
         datasets_block = format_datasets_catalog_section(
             _format_datasets_catalog_prompt(ctx.session_id)

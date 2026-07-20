@@ -217,6 +217,8 @@ class LLMClient:
             gen_name = langfuse_name or ("main_loop" if tools else "llm_text")
             if on_content_delta:
                 request_kwargs["stream"] = True
+                # Needed so final stream chunk carries usage (incl. cache tokens).
+                request_kwargs["stream_options"] = {"include_usage": True}
                 return self._create_completion_stream(
                     client,
                     request_kwargs,
@@ -294,8 +296,12 @@ class LLMClient:
                 reasoning_parts: list[str] = []
                 tool_calls_acc: dict[int, dict[str, str]] = {}
                 finish_reason = None
+                stream_usage = None
 
                 for chunk in stream:
+                    chunk_usage = getattr(chunk, "usage", None)
+                    if chunk_usage is not None:
+                        stream_usage = chunk_usage
                     if not chunk.choices:
                         continue
                     choice = chunk.choices[0]
@@ -330,6 +336,7 @@ class LLMClient:
                     reasoning_content="".join(reasoning_parts) or None,
                     tool_calls_acc=tool_calls_acc,
                     finish_reason=finish_reason,
+                    usage=stream_usage,
                 )
                 end_llm_generation(gen, resp=resp)
                 return resp
@@ -344,6 +351,7 @@ class LLMClient:
         reasoning_content: str | None = None,
         tool_calls_acc: dict,
         finish_reason,
+        usage=None,
     ):
         class _Fn:
             def __init__(self, name, arguments):
@@ -367,8 +375,9 @@ class LLMClient:
                 self.finish_reason = finish_reason
 
         class _Response:
-            def __init__(self, choices):
+            def __init__(self, choices, usage=None):
                 self.choices = choices
+                self.usage = usage
 
         tool_calls = None
         if tool_calls_acc:
@@ -388,7 +397,7 @@ class LLMClient:
             finish_reason = "tool_calls"
         if not tool_calls and finish_reason is None:
             finish_reason = "stop"
-        return _Response([_Choice(message, finish_reason)])
+        return _Response([_Choice(message, finish_reason)], usage=usage)
 
     @staticmethod
     def extract_tool_calls(response: Any) -> List[Dict[str, Any]]:

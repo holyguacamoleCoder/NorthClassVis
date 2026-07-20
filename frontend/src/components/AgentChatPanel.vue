@@ -106,7 +106,14 @@
             :class="['agent-msg', 'agent-msg--' + msg.role]"
           >
             <template v-if="msg.role === 'user'">
-              <div class="agent-msg-bubble agent-msg-bubble--user">{{ msg.text }}</div>
+              <div class="agent-msg-user-stack">
+                <AgentScopeAttachment
+                  v-if="msg.scopeAttachment"
+                  :scope="msg.scopeAttachment"
+                  :compact="true"
+                />
+                <div class="agent-msg-bubble agent-msg-bubble--user">{{ msg.text }}</div>
+              </div>
             </template>
             <template v-else>
               <AgentAssistantMessage
@@ -123,6 +130,7 @@
                 @report-download="downloadReport"
                 @cancel-run="onCancelToolRun"
                 @derive-run="onDeriveToolRun"
+                @attach-run="onAttachDatasetRun"
               />
             </template>
           </div>
@@ -136,28 +144,60 @@
         <div v-if="getAgentJumpFeedback" class="agent-jump-feedback">
           {{ getAgentJumpFeedback }}
         </div>
-        <div class="agent-input-row">
-          <input
-            v-model="inputText"
-            type="text"
-            class="agent-input"
-            placeholder="输入问题，如：最近两周链表知识点表现如何？"
-            @keydown.enter.prevent="send"
+        <div class="agent-input-col">
+          <AgentScopeAttachment
+            v-if="composerScopeAttachment"
+            :scope="composerScopeAttachment"
+            :dismissible="true"
+            :compact="true"
+            @dismiss="dismissComposerScopeAttachment"
+            @remove-student="removeComposerScopeStudent"
+            @remove-class="removeComposerScopeClass"
+            @remove-major="removeComposerScopeMajor"
+            @remove-week="removeComposerScopeWeek"
+            @remove-knowledge="removeComposerScopeKnowledge"
+            @remove-title="removeComposerScopeTitle"
+            @remove-dataset="removeComposerScopeDataset"
+            @remove-view="removeComposerScopeView"
+            @remove-report="removeComposerScopeReport"
           />
-          <button
-            v-if="loading"
-            type="button"
-            class="agent-send agent-send--stop"
-            :disabled="!sessionId"
-            @click="stopTurn"
-          >{{ ui.stop }}</button>
-          <button
-            v-else
-            type="button"
-            class="agent-send"
-            :disabled="!sessionId"
-            @click="send"
-          >{{ ui.send }}</button>
+          <div v-if="canAttachCurrentView || canAttachLatestReport" class="agent-scope-attach-actions">
+            <button
+              v-if="canAttachCurrentView"
+              type="button"
+              class="agent-scope-attach-action"
+              @click="attachCurrentViewSnapshot"
+            >{{ ui.scopeAttachAddView }}</button>
+            <button
+              v-if="canAttachLatestReport"
+              type="button"
+              class="agent-scope-attach-action"
+              @click="attachLatestReport"
+            >{{ ui.scopeAttachAddReport }}</button>
+          </div>
+          <div class="agent-input-row">
+            <input
+              v-model="inputText"
+              type="text"
+              class="agent-input"
+              placeholder="输入问题，如：最近两周链表知识点表现如何？"
+              @keydown.enter.prevent="send"
+            />
+            <button
+              v-if="loading"
+              type="button"
+              class="agent-send agent-send--stop"
+              :disabled="!sessionId"
+              @click="stopTurn"
+            >{{ ui.stop }}</button>
+            <button
+              v-else
+              type="button"
+              class="agent-send"
+              :disabled="!sessionId"
+              @click="send"
+            >{{ ui.send }}</button>
+          </div>
         </div>
       </div>
 
@@ -205,6 +245,7 @@ import AgentAssistantMessage from '@/components/agent/AgentAssistantMessage.vue'
 import AgentSidebar from '@/components/agent/AgentSidebar.vue'
 import AgentMemoriesModal from '@/components/agent/AgentMemoriesModal.vue'
 import AgentReportPreviewModal from '@/components/agent/AgentReportPreviewModal.vue'
+import AgentScopeAttachment from '@/components/agent/AgentScopeAttachment.vue'
 import agentChatCore from '@/mixins/agentChatCore.js'
 import { modeLabel } from '@/utils/agentAdapter.js'
 import { planProgress, planProgressLabel } from '@/utils/agentPlanUtils.js'
@@ -220,6 +261,7 @@ export default {
     AgentSidebar,
     AgentMemoriesModal,
     AgentReportPreviewModal,
+    AgentScopeAttachment,
   },
   mixins: [agentChatCore],
   props: {
@@ -869,6 +911,57 @@ export default {
   background: #e8f4f8;
   border-top: 1px solid #c5e3ed;
 }
+.agent-input-col {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 14px 0;
+  border-top: 1px solid #eee;
+  background: #fff;
+}
+
+.agent-input-col .agent-input-row {
+  border-top: none;
+  padding: 8px 0 12px;
+}
+
+.agent-input-col :deep(.agent-scope-attach) {
+  margin-bottom: 4px;
+}
+
+.agent-scope-attach-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 4px;
+}
+
+.agent-scope-attach-action {
+  border: 1px dashed #9bb8d0;
+  background: #f7fbff;
+  color: #1a5a8a;
+  border-radius: 6px;
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.agent-scope-attach-action:hover {
+  background: #eaf3fb;
+}
+
+.agent-msg-user-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.agent-msg-user-stack :deep(.agent-scope-attach) {
+  align-self: flex-end;
+  max-width: min(100%, 360px);
+}
+
 .agent-input-row {
   display: flex;
   gap: 10px;

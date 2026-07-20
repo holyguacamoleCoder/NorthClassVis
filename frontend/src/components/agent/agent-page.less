@@ -189,6 +189,45 @@
   &:hover:not(:disabled) { background: #a84d3d; }
 }
 
+.agent-scope-attach-hint {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: #688;
+}
+
+.agent-scope-attach-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+
+.agent-scope-attach-action {
+  border: 1px dashed #9bb8d0;
+  background: #f7fbff;
+  color: #1a5a8a;
+  border-radius: 6px;
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+  &:hover {
+    background: #eaf3fb;
+  }
+}
+
+.agent-msg-user-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.agent-msg-user-stack :deep(.agent-scope-attach) {
+  align-self: flex-end;
+  max-width: min(100%, 420px);
+}
+
 .agent-composer-hint {
   font-size: 11px;
   color: #aaa;

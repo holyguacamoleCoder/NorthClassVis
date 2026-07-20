@@ -6,7 +6,13 @@ from typing import Any
 
 
 def count_user_turns(messages: list[dict[str, Any]]) -> int:
-    return sum(1 for message in messages if message.get("role") == "user")
+    from skills.message_meta import is_ui_hidden_message
+
+    return sum(
+        1
+        for message in messages
+        if message.get("role") == "user" and not is_ui_hidden_message(message)
+    )
 
 
 def resolve_loop_turn_count(

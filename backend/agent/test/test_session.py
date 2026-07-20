@@ -32,6 +32,10 @@ def test_store_roundtrip(store):
         updated_at=1001.0,
         session_context=["catalog block"],
         messages=[{"role": "user", "content": "hello"}],
+        ui_messages=[
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
+        ],
         compact=CompactState(has_compacted=True, last_summary="sum", recent_files=["reports/a.md"]),
         todo_items=[{"content": "step1", "status": "pending"}],
         todo_round_since_update=2,
@@ -41,6 +45,7 @@ def test_store_roundtrip(store):
     assert loaded is not None
     assert loaded.title == "测试会话"
     assert loaded.messages == session.messages
+    assert loaded.ui_messages == session.ui_messages
     assert loaded.compact.has_compacted is True
     assert loaded.compact.recent_files == ["reports/a.md"]
     assert loaded.todo_items == session.todo_items

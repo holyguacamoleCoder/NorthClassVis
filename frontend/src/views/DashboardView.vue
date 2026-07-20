@@ -75,16 +75,23 @@ export default {
       'getNavSelectedClasses',
       'getNavSelectedMajors',
       'getNavWeekRange',
+      'getAgentChatAttachments',
     ]),
     studentClusterInfo() {
       return this.getStudentClusterInfo
     },
     agentContext() {
+      const extras = this.getAgentChatAttachments || {}
       return {
         classes: this.getNavSelectedClasses || [],
         majors: this.getNavSelectedMajors || [],
         week_range: this.getNavWeekRange || undefined,
         selected_student_ids: this.getSelectedIds || [],
+        knowledge_ids: extras.knowledge_ids || [],
+        title_ids: extras.title_ids || [],
+        dataset: extras.dataset || null,
+        view_snapshot: extras.view_snapshot || null,
+        report: extras.report || null,
       }
     },
   },

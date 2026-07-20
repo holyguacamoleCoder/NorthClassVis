@@ -211,6 +211,33 @@ def _usage_details(resp: Any) -> dict[str, int] | None:
         details["input"] = int(prompt)
     if completion is not None:
         details["output"] = int(completion)
+
+    cached = getattr(usage, "prompt_cache_hit_tokens", None)
+    if cached is None:
+        cached = getattr(usage, "cache_read_input_tokens", None)
+    if cached is None:
+        # OpenAI-style nested details
+        for attr in ("prompt_tokens_details", "input_tokens_details"):
+            nested = getattr(usage, attr, None)
+            if nested is None and isinstance(usage, dict):
+                nested = usage.get(attr)
+            if nested is None:
+                continue
+            cached = getattr(nested, "cached_tokens", None)
+            if cached is None and isinstance(nested, dict):
+                cached = nested.get("cached_tokens") or nested.get("cache_read_tokens")
+            if cached is not None:
+                break
+    if cached is None and isinstance(usage, dict):
+        cached = (
+            usage.get("prompt_cache_hit_tokens")
+            or usage.get("cache_read_input_tokens")
+            or usage.get("input_cached_tokens")
+        )
+    if cached is not None:
+        details["input_cached_tokens"] = int(cached)
+        # Langfuse / some UIs also look for this alias
+        details["cache_read_input_tokens"] = int(cached)
     return details or None
 
 
@@ -440,14 +467,24 @@ def end_llm_generation(
     usage = _usage_details(resp) if resp is not None else None
     try:
         if usage:
-            gen.update(output=output, usage_details=usage)
+            try:
+                gen.update(output=output, usage_details=usage)
+            except TypeError:
+                # Older / alternate Langfuse SDK signatures
+                gen.update(output=output, usage=usage)
         else:
             gen.update(output=output)
     except Exception:
         try:
-            gen.end(output=output, usage=usage)
+            if usage:
+                gen.end(output=output, usage_details=usage)
+            else:
+                gen.end(output=output)
         except Exception:
-            pass
+            try:
+                gen.end(output=output, usage=usage)
+            except Exception:
+                pass
 
 
 @contextmanager

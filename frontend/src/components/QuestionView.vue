@@ -3,6 +3,13 @@
     <div v-if="!embedded" class="title">
       <span>Question View</span>
       <span v-if="isAgentTarget" class="agent-target-badge">来自 Agent 推荐</span>
+      <button
+        v-if="canAddScopeToChat"
+        type="button"
+        class="question-add-to-chat"
+        :title="ui.scopeAttachAddToChat"
+        @click="addScopeToChat"
+      >{{ ui.scopeAttachAddToChat }}</button>
       <!-- 困难度排序按钮 -->
       <div class="filter difficulty" @click="toggleSortOrder">Difficulty Order:{{ this.sortAscending ? " ↑" : " ↓" }}</div>
       <!-- 下拉菜单筛选知识点 -->
@@ -74,11 +81,12 @@
 
 <script>
 import { getQuestions } from '@/api/QuestionView'
-import { mapState, mapGetters } from 'vuex'
+import { mapState, mapGetters, mapActions } from 'vuex'
 import Simplebar from 'simplebar-vue'
 import 'simplebar-vue/dist/simplebar.min.css'
 import { Dropdown, DropdownContent } from 'v-dropdown'
 import LoadingSpinner from './LoadingSpinner.vue'
+import { AGENT_UI } from '@/constants/agentUiText.js'
 
 export default {
   name: 'QuestionView',
@@ -113,6 +121,7 @@ export default {
       /** 非空时仅渲染这些 title_id（报告锚定题目） */
       titleIdFilter: null,
       paramResolveNote: '',
+      ui: AGENT_UI,
     };
   },
   async mounted() {
@@ -157,8 +166,27 @@ export default {
       }
       return Math.max(1, filtered.length)
     },
+    selectedKnowledgeIds() {
+      if (this.selectAllKnowledge) return []
+      return Object.keys(this.selectedKnowledge).filter((k) => this.selectedKnowledge[k])
+    },
+    selectedTitleIds() {
+      if (!this.titleIdFilter?.size) return []
+      return [...this.titleIdFilter].map(String).filter(Boolean)
+    },
+    canAddScopeToChat() {
+      if (this.embedded) return false
+      return this.selectedKnowledgeIds.length > 0 || this.selectedTitleIds.length > 0
+    },
   },
   methods: {
+    ...mapActions(['attachQuestionScopeToChat']),
+    addScopeToChat() {
+      this.attachQuestionScopeToChat({
+        knowledge_ids: this.selectedKnowledgeIds,
+        title_ids: this.selectedTitleIds,
+      })
+    },
     vizSel() {
       return `#${this.containerId}`
     },
@@ -734,6 +762,20 @@ export default {
     color: #0a7ea4;
     margin-left: 10px;
     font-weight: normal;
+  }
+  .question-add-to-chat {
+    margin-left: 10px;
+    vertical-align: middle;
+    border: 1px solid #0a7ea4;
+    background: #e8f6fb;
+    color: #0a7ea4;
+    border-radius: 6px;
+    font-size: 12px;
+    padding: 2px 8px;
+    cursor: pointer;
+    &:hover {
+      background: #d2eef8;
+    }
   }
   .title {
     border-bottom: 1px solid #ccc; 

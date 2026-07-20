@@ -124,8 +124,11 @@ def build_compacted_messages(
     pinned: list[dict[str, Any]] | None = None,
     tail: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
+    from skills.message_meta import attach_ui_hidden_meta
+    from skills.tool_result import CONTENT_KIND_COMPACT_SUMMARY
+
     recent = list(compact_state.recent_files) if compact_state and compact_state.recent_files else None
-    compacted = [
+    summary_msg = attach_ui_hidden_meta(
         {
             "role": "user",
             "content": format_compact_user_message(
@@ -133,8 +136,10 @@ def build_compacted_messages(
                 focus=focus,
                 recent_files=recent,
             ),
-        }
-    ]
+        },
+        content_kind=CONTENT_KIND_COMPACT_SUMMARY,
+    )
+    compacted = [summary_msg]
     if pinned:
         compacted.extend(pinned)
     if tail:
